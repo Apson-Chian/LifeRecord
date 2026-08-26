@@ -38,6 +38,15 @@ enum AIProvider: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var keychainID: String {
+        switch self {
+        case .deepSeek: "deepseek"
+        case .dots: "dots"
+        case .glm: "glm"
+        case .custom: "custom"
+        }
+    }
+
     var endpoint: String {
         switch self {
         case .deepSeek: "https://api.deepseek.com/chat/completions"
@@ -50,7 +59,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
     var model: String {
         switch self {
         case .deepSeek: "deepseek-v4-flash"
-        case .dots: "dots.llm1.inst"
+        case .dots: "dots3-note-prev"
         case .glm: "glm-4.5v"
         case .custom: "vision-model-name"
         }
@@ -135,9 +144,15 @@ final class AppSettings {
         displayName = defaults.string(forKey: Key.displayName) ?? ""
 
         let savedProvider = AIProvider(rawValue: defaults.string(forKey: Key.provider) ?? "") ?? .glm
+        let savedModel = defaults.string(forKey: Key.model)
         provider = savedProvider
         endpoint = defaults.string(forKey: Key.endpoint) ?? savedProvider.endpoint
-        model = defaults.string(forKey: Key.model) ?? savedProvider.model
+        if savedProvider == .dots && savedModel == "dots.llm1.inst" {
+            // 修复旧版 Dots 预设：开源权重名并不是开放平台的托管模型名。
+            model = savedProvider.model
+        } else {
+            model = savedModel ?? savedProvider.model
+        }
         authStyle = AIAuthStyle(rawValue: defaults.string(forKey: Key.authStyle) ?? "") ?? savedProvider.authStyle
         customHeaderName = defaults.string(forKey: Key.customHeaderName) ?? "Authorization"
         supportsVision = defaults.object(forKey: Key.supportsVision) as? Bool ?? savedProvider.supportsVisionByDefault

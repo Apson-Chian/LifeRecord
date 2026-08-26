@@ -3,19 +3,41 @@ import Security
 
 enum KeychainStore {
     private static let service = "com.aotelei.LifeRecord"
-    private static let account = "ai-api-key"
+    private static let legacyAccount = "ai-api-key"
 
-    static func saveAPIKey(_ key: String) throws {
+    static func saveAPIKey(_ key: String, for provider: AIProvider) throws {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw KeychainError.emptyKey }
-        let data = Data(trimmed.utf8)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
+        try upsert(Data(trimmed.utf8), account: account(for: provider))
+    }
 
-        let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+    static func loadAPIKey(for provider: AIProvider) -> String {
+        if let key = load(account: account(for: provider)) { return key }
+        // 旧版本只有一个密钥槽，默认服务商是 GLM；仅在 GLM 下兼容读取，
+        // 防止切换到 Dots/DeepSeek 时误发其他服务商的密钥。
+        if provider == .glm, let legacy = load(account: legacyAccount) { return legacy }
+        return ""
+    }
+
+    static func hasAPIKey(for provider: AIProvider) -> Bool {
+        !loadAPIKey(for: provider).isEmpty
+    }
+
+    static func deleteAPIKey(for provider: AIProvider) throws {
+        try delete(account: account(for: provider))
+        if provider == .glm { try delete(account: legacyAccount) }
+    }
+
+    private static func account(for provider: AIProvider) -> String {
+        "ai-api-key.\(provider.keychainID)"
+    }
+
+    private static func upsert(_ data: Data, account: String) throws {
+        let query = baseQuery(account: account)
+        let updateStatus = SecItemUpdate(
+            query as CFDictionary,
+            [kSecValueData as String: data] as CFDictionary
+        )
         if updateStatus == errSecSuccess { return }
         guard updateStatus == errSecItemNotFound else { throw KeychainError.status(updateStatus) }
 
@@ -26,35 +48,35 @@ enum KeychainStore {
         guard status == errSecSuccess else { throw KeychainError.status(status) }
     }
 
-    static func loadAPIKey() -> String {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
+    private static func load(account: String) -> String? {
+        var query = baseQuery(account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return "" }
+              let data = result as? Data else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 
-    static var hasAPIKey: Bool { !loadAPIKey().isEmpty }
+    private static func delete(account: String) throws {
+        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.status(status)
+        }
+    }
 
-    static func deleteAPIKey() throws {
-        let query: [String: Any] = [
+    private static func baseQuery(account: String) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError.status(status) }
     }
 
     enum KeychainError: LocalizedError {
         case emptyKey
         case status(OSStatus)
+
         var errorDescription: String? {
             switch self {
             case .emptyKey:

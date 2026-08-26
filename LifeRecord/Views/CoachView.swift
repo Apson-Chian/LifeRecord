@@ -98,11 +98,19 @@ struct CoachView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(spacing: 12) {
-                    Image(systemName: "sparkles")
-                        .font(.title2)
+                    Image(systemName: "wand.and.sparkles")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.title2.weight(.semibold))
                         .foregroundStyle(AppTheme.accent)
                         .frame(width: 46, height: 46)
-                        .background(AppTheme.accent.opacity(0.13), in: Circle())
+                        .background(
+                            LinearGradient(
+                                colors: [AppTheme.accent.opacity(0.23), AppTheme.accentSoft.opacity(0.08)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            in: Circle()
+                        )
                     VStack(alignment: .leading, spacing: 3) {
                         Text(settings.aiCanWrite ? "能回答，也能替你记录" : "只读分析模式")
                             .font(.headline)

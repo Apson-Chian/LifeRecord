@@ -5,7 +5,7 @@ struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
 
     @State private var showsAPIKeyEditor = false
-    @State private var hasAPIKey = KeychainStore.hasAPIKey
+    @State private var hasAPIKey = false
     @State private var isTesting = false
     @State private var connectionMessage: String?
     @FocusState private var focusedField: Field?
@@ -79,7 +79,7 @@ struct SettingsView: View {
                         showsAPIKeyEditor = true
                     } label: {
                         HStack {
-                            Label("API Key", systemImage: "key.horizontal")
+                            Label("\(settings.provider.rawValue) API Key", systemImage: "key.horizontal.fill")
                             Spacer()
                             Text(hasAPIKey ? "已安全保存" : "未设置")
                                 .foregroundStyle(hasAPIKey ? AppTheme.success : .secondary)
@@ -110,7 +110,7 @@ struct SettingsView: View {
                 } header: {
                     Text("AI 接口")
                 } footer: {
-                    Text("兼容 OpenAI Chat Completions 格式。API Key 只保存在本机钥匙串，不会写入项目或 GitHub。")
+                    Text("兼容 OpenAI Chat Completions 格式。每个服务商的 API Key 分开保存在本机钥匙串，不会写入项目或 GitHub。Dots 托管模型应使用 dots3-note-prev。")
                 }
 
                 Section {
@@ -154,9 +154,16 @@ struct SettingsView: View {
                 }
             }
             .sheet(isPresented: $showsAPIKeyEditor, onDismiss: {
-                hasAPIKey = KeychainStore.hasAPIKey
+                hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider)
             }) {
                 APIKeyEditorView(settings: settings)
+            }
+            .onAppear {
+                hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider)
+            }
+            .onChange(of: settings.provider) { _, provider in
+                hasAPIKey = KeychainStore.hasAPIKey(for: provider)
+                connectionMessage = nil
             }
         }
     }
@@ -203,7 +210,7 @@ private struct APIKeyEditorView: View {
     @Environment(\.dismiss) private var dismiss
     let settings: AppSettings
 
-    @State private var apiKey = KeychainStore.loadAPIKey()
+    @State private var apiKey: String
     @State private var revealsKey = false
     @State private var isSaving = false
     @State private var statusMessage: String?
@@ -212,6 +219,11 @@ private struct APIKeyEditorView: View {
 
     private var trimmedKey: String {
         apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    init(settings: AppSettings) {
+        self.settings = settings
+        _apiKey = State(initialValue: KeychainStore.loadAPIKey(for: settings.provider))
     }
 
     var body: some View {
@@ -240,7 +252,7 @@ private struct APIKeyEditorView: View {
                 } header: {
                     Text("\(settings.provider.rawValue) 密钥")
                 } footer: {
-                    Text("保存会先写入 iOS 钥匙串，再使用当前接口与模型发起一次最小请求。切换服务商后请确认密钥与认证方式匹配。")
+                    Text("保存会先写入 iOS 钥匙串，再使用当前接口与模型发起一次最小请求。该密钥仅属于 \(settings.provider.rawValue)，不会与其他服务商共用。")
                 }
 
                 if let statusMessage {
@@ -252,7 +264,7 @@ private struct APIKeyEditorView: View {
                     }
                 }
 
-                if KeychainStore.hasAPIKey {
+                if KeychainStore.hasAPIKey(for: settings.provider) {
                     Section {
                         Button("删除本机密钥", systemImage: "trash", role: .destructive) {
                             showsDeleteConfirmation = true
@@ -297,7 +309,7 @@ private struct APIKeyEditorView: View {
         statusMessage = nil
         defer { isSaving = false }
         do {
-            try KeychainStore.saveAPIKey(trimmedKey)
+            try KeychainStore.saveAPIKey(trimmedKey, for: settings.provider)
         } catch {
             statusMessage = "保存失败：\(error.localizedDescription)"
             UINotificationFeedbackGenerator().notificationOccurred(.error)
@@ -316,7 +328,7 @@ private struct APIKeyEditorView: View {
 
     private func deleteKey() {
         do {
-            try KeychainStore.deleteAPIKey()
+            try KeychainStore.deleteAPIKey(for: settings.provider)
             apiKey = ""
             statusMessage = "API Key 已从本机删除。"
         } catch {

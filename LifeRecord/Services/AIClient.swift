@@ -151,7 +151,7 @@ struct AIClient {
         apiKeyOverride: String? = nil
     ) async throws -> String {
         let override = apiKeyOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let apiKey = override.isEmpty ? KeychainStore.loadAPIKey() : override
+        let apiKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider) : override
         guard !apiKey.isEmpty else { throw AIClientError.missingKey }
         guard let url = URL(string: settings.endpoint), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
             throw AIClientError.invalidEndpoint
@@ -193,7 +193,11 @@ struct AIClient {
             "temperature": settings.temperature,
             "max_tokens": settings.maxTokens
         ]
-        if wantsJSON { body["response_format"] = ["type": "json_object"] }
+        // Dots 的托管接口当前没有在公开文档中声明 response_format；
+        // 依靠提示词返回 JSON，避免连接正常却因未知参数被 400 拒绝。
+        if wantsJSON && settings.provider != .dots {
+            body["response_format"] = ["type": "json_object"]
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -203,6 +207,8 @@ struct AIClient {
             let error = payload?["error"] as? [String: Any]
             let message = error?["message"] as? String
                 ?? payload?["message"] as? String
+                ?? payload?["detail"] as? String
+                ?? payload?["title"] as? String
                 ?? String(data: data, encoding: .utf8)
                 ?? "未知错误"
             throw AIClientError.server("接口错误 \(http.statusCode)：\(message.prefix(360))")

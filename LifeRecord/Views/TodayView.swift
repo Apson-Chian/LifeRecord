@@ -53,7 +53,8 @@ struct TodayView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { activeSheet = .meal } label: {
-                        Image(systemName: "plus")
+                        Image(systemName: "plus.circle.fill")
+                            .symbolRenderingMode(.hierarchical)
                     }
                     .accessibilityLabel("添加记录")
                 }
@@ -149,13 +150,13 @@ struct TodayView: View {
 
     private var quickActions: some View {
         HStack(spacing: 10) {
-            ActionTile(title: "记一餐", subtitle: "多图/配料表", symbol: "camera.viewfinder", tint: AppTheme.accent) {
+            ActionTile(title: "记一餐", subtitle: "多图/配料表", symbol: "fork.knife.circle.fill", tint: AppTheme.accent) {
                 activeSheet = .meal
             }
-            ActionTile(title: "记体重", subtitle: "追踪趋势", symbol: "scalemass", tint: AppTheme.protein) {
+            ActionTile(title: "记体重", subtitle: "追踪趋势", symbol: "scalemass.fill", tint: AppTheme.protein) {
                 activeSheet = .weight
             }
-            ActionTile(title: "喝水", subtitle: "+250 ml", symbol: "drop", tint: AppTheme.water) {
+            ActionTile(title: "喝水", subtitle: "+250 ml", symbol: "drop.fill", tint: AppTheme.water) {
                 let entry = WaterEntry(date: selectedDate, milliliters: 250)
                 modelContext.insert(entry)
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -207,7 +208,8 @@ struct TodayView: View {
     private var insightCard: some View {
         GlassCard {
             HStack(alignment: .top, spacing: 13) {
-                Image(systemName: "sparkles")
+                Image(systemName: "wand.and.sparkles")
+                    .symbolRenderingMode(.hierarchical)
                     .font(.title3)
                     .foregroundStyle(AppTheme.accent)
                     .frame(width: 38, height: 38)

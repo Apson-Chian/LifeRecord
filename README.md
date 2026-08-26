@@ -16,6 +16,14 @@
 - 视觉：遵循原生 iOS 层级、材质和动效，使用蓝紫主题并适配深浅色模式
 - 隐私：健康记录保存在本机 SwiftData，API Key 保存在 iOS Keychain
 
+## Dots 配置
+
+Dots 开放平台使用托管模型 `dots3-note-prev`，接口地址为
+`https://note3-prev-api.askdiandian.com/v1/chat/completions`，认证方式选择
+`api-key 请求头`。`dots.llm1.inst` 是开源权重名称，不能作为该托管接口的模型名。
+
+DeepSeek、Dots、GLM 与自定义服务的 API Key 会分别保存在钥匙串中；切换服务商不会把上一家的密钥发送给当前接口。
+
 ## 运行
 
 1. 使用 Xcode 26 或更新版本打开 `LifeRecord.xcodeproj`。

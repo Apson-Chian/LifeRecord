@@ -83,10 +83,24 @@ struct ActionTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: symbol)
-                    .font(.title3.weight(.semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(tint)
-                    .frame(width: 38, height: 38)
-                    .background(tint.opacity(0.13), in: Circle())
+                    .frame(width: 44, height: 44)
+                    .background {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [tint.opacity(0.24), tint.opacity(0.08)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .overlay {
+                                Circle().stroke(.white.opacity(0.24), lineWidth: 0.5)
+                            }
+                            .shadow(color: tint.opacity(0.17), radius: 8, y: 4)
+                    }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
                     Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
