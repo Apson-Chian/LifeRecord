@@ -40,6 +40,7 @@ final class MealEntry {
     var createdAt: Date
     // Declaration-site defaults make newly added fields lightweight-migratable.
     var isDemo: Bool = false
+    var updatedAt: Date = Date.now
 
     init(
         id: UUID = UUID(),
@@ -68,6 +69,7 @@ final class MealEntry {
         self.sourceRaw = source.rawValue
         self.createdAt = .now
         self.isDemo = isDemo
+        self.updatedAt = .now
     }
 
     var kind: MealKind { MealKind(rawValue: kindRaw) ?? .snack }
@@ -83,6 +85,7 @@ final class BodyMetric {
     var waist: Double?
     var note: String
     var isDemo: Bool = false
+    var updatedAt: Date = Date.now
 
     init(
         id: UUID = UUID(),
@@ -100,6 +103,7 @@ final class BodyMetric {
         self.waist = waist
         self.note = note
         self.isDemo = isDemo
+        self.updatedAt = .now
     }
 }
 
@@ -111,12 +115,31 @@ final class WaterEntry {
     var date: Date
     var milliliters: Double
     var isDemo: Bool = false
+    var note: String = ""
+    var updatedAt: Date = Date.now
 
-    init(id: UUID = UUID(), date: Date = .now, milliliters: Double, isDemo: Bool = false) {
+    init(id: UUID = UUID(), date: Date = .now, milliliters: Double, isDemo: Bool = false, note: String = "") {
         self.id = id
         self.date = date
         self.milliliters = milliliters
         self.isDemo = isDemo
+        self.note = note
+        self.updatedAt = .now
+    }
+}
+
+@Model
+final class SyncTombstone {
+    @Attribute(.unique) var key: String
+    var recordID: UUID
+    var recordType: String
+    var deletedAt: Date
+
+    init(recordID: UUID, recordType: String, deletedAt: Date = .now) {
+        self.key = "\(recordType):\(recordID.uuidString.lowercased())"
+        self.recordID = recordID
+        self.recordType = recordType
+        self.deletedAt = deletedAt
     }
 }
 
@@ -170,6 +193,7 @@ struct MealDraft: Codable {
     var carbs = 0.0
     var fat = 0.0
     var fiber = 0.0
+    var waterML = 0.0
     var note = ""
 }
 

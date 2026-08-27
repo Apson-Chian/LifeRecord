@@ -17,11 +17,14 @@
         <span class="brand-mark">L</span>
         <span><strong>LifeRecord</strong><small>生活记录</small></span>
       </a>
-      <button class="date-button" id="dateButton" type="button" aria-haspopup="dialog">
-        <span class="date-icon" aria-hidden="true">▦</span>
-        <span id="dateLabel"></span>
-        <span aria-hidden="true">⌄</span>
-      </button>
+      <div class="top-actions">
+        <span class="sync-pill" id="syncStatus"><i></i>正在连接</span>
+        <button class="date-button" id="dateButton" type="button" aria-haspopup="dialog">
+          <span class="date-icon" aria-hidden="true">▦</span>
+          <span id="dateLabel"></span>
+          <span aria-hidden="true">⌄</span>
+        </button>
+      </div>
     </header>
 
     <section class="hero-grid">
@@ -32,15 +35,15 @@
         </div>
         <div class="activity-content">
           <div class="rings" role="img" id="rings" aria-label="今日营养进度">
-            <div class="ring ring-meals"></div>
-            <div class="ring ring-carbs"></div>
             <div class="ring ring-protein"></div>
+            <div class="ring ring-carbs"></div>
+            <div class="ring ring-meals"></div>
             <div class="ring-center"><strong id="mealCount">0</strong><span>餐</span></div>
           </div>
           <div class="ring-legend">
-            <div><i class="dot meals"></i><span>用餐<small id="mealLegend">0 / 4 次</small></span></div>
-            <div><i class="dot carbs"></i><span>碳水<small id="carbsLegend">0 / 340 g</small></span></div>
             <div><i class="dot protein"></i><span>蛋白质<small id="proteinLegend">0 / 130 g</small></span></div>
+            <div><i class="dot carbs"></i><span>碳水<small id="carbsLegend">0 / 340 g</small></span></div>
+            <div><i class="dot water"></i><span>饮水<small id="waterLegend">0 / 2800 ml</small></span></div>
           </div>
         </div>
         <p class="calorie-line"><span class="flame">◆</span><span id="calorieStatus">还差 2600 千卡</span></p>
@@ -72,10 +75,40 @@
           <div><span><i class="dot fat"></i>脂肪</span><strong id="fatSummary">0 g</strong></div>
           <div><span><i class="dot calories"></i>热量</span><strong id="calorieSummary">0 kcal</strong></div>
         </div>
-        <p class="privacy-note">数据只保存在当前浏览器中，不会自动上传。</p>
+        <p class="privacy-note">数据已通过私有密钥与 LifeRecord App 双向同步。</p>
+      </aside>
+    </section>
+
+    <section class="content-grid health-grid">
+      <article class="card meal-card">
+        <div class="section-heading compact">
+          <div><span class="eyebrow">身体记录</span><h2>体重与体脂</h2></div>
+          <button class="secondary-button" id="addWeightButton" type="button">＋ 记体重</button>
+        </div>
+        <div class="metric-list" id="metricList"></div>
+      </article>
+      <aside class="card summary-card">
+        <div class="section-heading compact"><div><span class="eyebrow">个人计划</span><h2>每日目标</h2></div><button class="text-button" id="editGoalsButton" type="button">编辑</button></div>
+        <div class="summary-list goals-list">
+          <div><span>热量</span><strong id="goalCalories">2600 kcal</strong></div>
+          <div><span>蛋白质</span><strong id="goalProtein">130 g</strong></div>
+          <div><span>碳水</span><strong id="goalCarbs">340 g</strong></div>
+          <div><span>饮水</span><strong id="goalWater">2800 ml</strong></div>
+        </div>
+        <button class="export-button" id="exportButton" type="button">导出全部记录 JSON</button>
       </aside>
     </section>
   </main>
+
+  <dialog id="authDialog" class="modal auth-modal">
+    <form id="authForm" class="modal-sheet">
+      <div class="auth-mark">L</div><span class="eyebrow">PRIVATE SYNC</span><h2>连接你的 LifeRecord</h2>
+      <p class="auth-copy">输入与 iPhone App“设置 → App 与浏览器同步”中相同的同步密钥。</p>
+      <label>同步密钥<input name="token" type="password" autocomplete="current-password" required placeholder="粘贴私有同步密钥"></label>
+      <p class="form-error" id="authError"></p>
+      <button class="primary-button submit-button" type="submit">安全连接</button>
+    </form>
+  </dialog>
 
   <dialog id="calendarDialog" class="modal calendar-modal">
     <form method="dialog" class="modal-sheet">
@@ -99,6 +132,31 @@
         <label>脂肪 g<input name="fat" required type="number" min="0" step="1" value="15"></label>
       </div>
       <button class="primary-button submit-button" type="submit">保存记录</button>
+    </form>
+  </dialog>
+
+  <dialog id="weightDialog" class="modal">
+    <form id="weightForm" class="modal-sheet">
+      <div class="modal-top"><div><span class="eyebrow">身体记录</span><h2>记录体重</h2></div><button class="icon-button" id="closeWeight" type="button" aria-label="关闭">×</button></div>
+      <label>体重 kg<input name="weight" required type="number" min="20" max="400" step="0.1" placeholder="64.0"></label>
+      <label>体脂率 %（可选）<input name="bodyFat" type="number" min="1" max="80" step="0.1"></label>
+      <label>备注<input name="note" placeholder="例如：晨起空腹"></label>
+      <button class="primary-button submit-button" type="submit">保存身体数据</button>
+    </form>
+  </dialog>
+
+  <dialog id="goalsDialog" class="modal">
+    <form id="goalsForm" class="modal-sheet">
+      <div class="modal-top"><div><span class="eyebrow">个人计划</span><h2>编辑每日目标</h2></div><button class="icon-button" id="closeGoals" type="button" aria-label="关闭">×</button></div>
+      <div class="form-grid">
+        <label>热量 kcal<input name="calorieGoal" required type="number" min="500" max="10000"></label>
+        <label>蛋白质 g<input name="proteinGoal" required type="number" min="1" max="600"></label>
+        <label>碳水 g<input name="carbsGoal" required type="number" min="1" max="1200"></label>
+        <label>脂肪 g<input name="fatGoal" required type="number" min="1" max="500"></label>
+        <label>饮水 ml<input name="waterGoal" required type="number" min="500" max="10000"></label>
+        <label>目标体重 kg<input name="targetWeight" required type="number" min="20" max="400" step="0.1"></label>
+      </div>
+      <button class="primary-button submit-button" type="submit">保存并同步</button>
     </form>
   </dialog>
 

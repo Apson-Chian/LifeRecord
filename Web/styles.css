@@ -26,6 +26,11 @@ button { cursor: pointer; }
 .ambient-b { width: 42vw; height: 42vw; left: -16vw; bottom: -24vw; background: radial-gradient(circle, rgba(32, 185, 219, .15), transparent 68%); }
 .app-shell { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 30px 0 64px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+.top-actions { display: flex; align-items: center; gap: 10px; }
+.sync-pill { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.sync-pill i { width: 7px; height: 7px; border-radius: 50%; background: #efad34; box-shadow: 0 0 8px rgba(239,173,52,.45); }
+.sync-pill.synced i { background: var(--recorded); box-shadow: 0 0 8px rgba(40,173,94,.45); }
+.sync-pill.error i { background: #ef5360; }
 .brand { display: flex; gap: 11px; color: inherit; text-decoration: none; align-items: center; }
 .brand-mark { display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; color: white; font-size: 22px; font-weight: 800; background: linear-gradient(145deg, #8277ff, #4e45dd); box-shadow: 0 10px 22px rgba(92, 82, 240, .25); }
 .brand strong, .brand small { display: block; }
@@ -43,12 +48,12 @@ h1, h2, p { margin: 0; }
 h1 { margin-top: 5px; font-size: clamp(23px, 3vw, 34px); letter-spacing: -.04em; }
 h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .goal-chip { white-space: nowrap; padding: 7px 11px; border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-size: 12px; font-weight: 700; }
-.activity-content { display: flex; align-items: center; gap: clamp(35px, 7vw, 82px); margin: 24px 0 12px; padding-left: 16px; }
-.rings { position: relative; flex: 0 0 184px; height: 184px; }
+.activity-content { display: flex; align-items: center; gap: clamp(30px, 6vw, 66px); margin: 24px 0 12px; padding-left: 16px; }
+.rings { position: relative; flex: 0 0 158px; height: 158px; }
 .ring { position: absolute; border-radius: 50%; background: conic-gradient(var(--color) calc(var(--progress, 0) * 1turn), color-mix(in srgb, var(--color) 13%, transparent) 0); transform: rotate(-90deg); transition: background .45s ease; mask: radial-gradient(farthest-side, transparent calc(100% - var(--width)), #000 calc(100% - var(--width) + 1px)); }
-.ring-meals { inset: 0; --color: var(--meals); --width: 16px; }
-.ring-carbs { inset: 25px; --color: var(--carbs); --width: 15px; }
-.ring-protein { inset: 49px; --color: var(--protein); --width: 14px; }
+.ring-protein { inset: 0; --color: var(--protein); --width: 13px; }
+.ring-carbs { inset: 20px; --color: var(--carbs); --width: 12px; }
+.ring-meals { inset: 39px; --color: var(--meals); --width: 11px; }
 .ring-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .ring-center strong { font-size: 28px; line-height: 1; }
 .ring-center span { margin-top: 3px; color: var(--muted); font-size: 12px; }
@@ -57,7 +62,7 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .ring-legend span { font-size: 13px; font-weight: 700; }
 .ring-legend small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 9px currentColor; }
-.dot.meals { color: var(--meals); } .dot.carbs { color: var(--carbs); } .dot.protein { color: var(--protein); } .dot.fat { color: var(--fat); } .dot.calories { color: var(--accent); }
+.dot.meals { color: var(--meals); } .dot.carbs { color: var(--carbs); } .dot.protein { color: var(--protein); } .dot.fat { color: var(--fat); } .dot.calories { color: var(--accent); } .dot.water { color: var(--water); }
 .calorie-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
 .flame { color: #fb714f; }
 .water-card { color: #f7fdff; background: linear-gradient(150deg, #25b8d5, #247fd3); border: 0; }
@@ -73,6 +78,8 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .water-options button { border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 10px 4px; color: #fff; background: rgba(255,255,255,.12); font-size: 12px; font-weight: 700; transition: .15s ease; }
 .water-options button:hover { transform: translateY(-2px); background: rgba(255,255,255,.22); }
 .primary-button { border: 0; border-radius: 14px; padding: 11px 15px; color: white; background: var(--accent); font-size: 13px; font-weight: 750; box-shadow: 0 10px 22px rgba(92,82,240,.2); }
+.secondary-button { border: 0; border-radius: 14px; padding: 11px 15px; color: var(--accent); background: var(--accent-soft); font-size: 13px; font-weight: 750; }
+.text-button { border: 0; color: var(--accent); background: transparent; font-size: 13px; font-weight: 750; }
 .meal-list { display: grid; gap: 11px; margin-top: 21px; }
 .meal-item { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 18px; background: rgba(248,248,253,.7); }
 .meal-symbol { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: var(--accent-soft); }
@@ -90,6 +97,20 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .summary-list span { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
 .summary-list strong { font-size: 13px; font-variant-numeric: tabular-nums; }
 .privacy-note { margin-top: 18px; padding: 12px; border-radius: 14px; color: var(--muted); background: #f4f4fa; font-size: 11px; line-height: 1.6; }
+.health-grid { margin-top: 18px; }
+.metric-list { display: grid; gap: 10px; margin-top: 20px; }
+.metric-item { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center; padding: 13px 4px; border-bottom: 1px solid var(--line); }
+.metric-item:last-child { border-bottom: 0; }
+.metric-item strong { font-size: 15px; }
+.metric-item small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+.metric-value { font-variant-numeric: tabular-nums; font-weight: 800; }
+.export-button { width: 100%; margin-top: 17px; border: 1px solid var(--line); border-radius: 13px; padding: 11px; color: var(--muted); background: #f8f8fb; font-size: 12px; font-weight: 700; }
+.auth-modal { width: min(410px, calc(100% - 28px)); }
+.auth-modal .modal-sheet { padding: 30px; text-align: center; }
+.auth-modal label { text-align: left; }
+.auth-mark { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 17px; border-radius: 18px; color: #fff; background: linear-gradient(145deg, #8277ff, #4e45dd); font-size: 28px; font-weight: 850; box-shadow: 0 12px 28px rgba(92,82,240,.25); }
+.auth-copy { margin: 12px 0 18px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.form-error { min-height: 17px; margin-top: 8px; color: #d83f4c; font-size: 11px; text-align: left; }
 .modal { width: min(460px, calc(100% - 28px)); border: 0; padding: 0; border-radius: 26px; color: var(--text); background: transparent; box-shadow: 0 28px 100px rgba(20,20,45,.28); }
 .modal::backdrop { background: rgba(22,22,35,.35); backdrop-filter: blur(8px); }
 .modal-sheet { padding: 24px; background: #fff; }
@@ -123,17 +144,18 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
   .date-button { padding: 9px 12px; font-size: 12px; }
   .card { border-radius: 23px; padding: 20px; }
   .activity-content { justify-content: center; gap: 25px; padding-left: 0; }
-  .rings { flex-basis: 150px; height: 150px; }
-  .ring-carbs { inset: 21px; } .ring-protein { inset: 42px; }
+  .rings { flex-basis: 142px; height: 142px; }
+  .ring-carbs { inset: 18px; } .ring-meals { inset: 35px; }
 }
 
 @media (max-width: 450px) {
   .activity-content { align-items: center; gap: 20px; }
-  .rings { flex-basis: 132px; height: 132px; }
-  .ring-meals { --width: 13px; } .ring-carbs { inset: 19px; --width: 12px; } .ring-protein { inset: 37px; --width: 11px; }
+  .rings { flex-basis: 128px; height: 128px; }
+  .ring-protein { --width: 11px; } .ring-carbs { inset: 17px; --width: 10px; } .ring-meals { inset: 33px; --width: 9px; }
   .ring-legend { gap: 12px; }
   .section-heading.compact { align-items: start; }
   .form-grid { grid-template-columns: 1fr; }
+  .sync-pill { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

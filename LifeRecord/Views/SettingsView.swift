@@ -3,6 +3,7 @@ import UIKit
 
 struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var syncCoordinator
     @Environment(\.modelContext) private var modelContext
 
     @State private var showsAPIKeyEditor = false
@@ -11,6 +12,7 @@ struct SettingsView: View {
     @State private var connectionMessage: String?
     @State private var showsLifeTrackUnavailable = false
     @State private var showsOnboarding = false
+    @State private var showsSyncKeyEditor = false
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
@@ -155,8 +157,62 @@ struct SettingsView: View {
                     .foregroundStyle(.red)
                 }
 
+                Section {
+                    Button {
+                        showsSyncKeyEditor = true
+                    } label: {
+                        HStack {
+                            Label("同步密钥", systemImage: "key.viewfinder")
+                            Spacer()
+                            Text(syncCoordinator.isConfigured ? "已配置" : "未配置")
+                                .foregroundStyle(syncCoordinator.isConfigured ? AppTheme.recorded : .secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+
+                    Button {
+                        Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
+                    } label: {
+                        HStack {
+                            Label("立即同步", systemImage: "arrow.triangle.2.circlepath")
+                            Spacer()
+                            if syncCoordinator.isSyncing { ProgressView().controlSize(.small) }
+                        }
+                    }
+                    .disabled(!syncCoordinator.isConfigured || syncCoordinator.isSyncing)
+
+                    Link(destination: URL(string: "https://apsonchian.ltd/liferecord/")!) {
+                        Label("打开网页版", systemImage: "safari")
+                    }
+
+                    HStack(spacing: 8) {
+                        Image(systemName: syncCoordinator.lastError == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(syncCoordinator.statusMessage)
+                            if let date = syncCoordinator.lastSyncedAt {
+                                Text(date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else if let error = syncCoordinator.lastError {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(syncCoordinator.lastError == nil ? AppTheme.recorded : .orange)
+                } header: {
+                    Text("App 与浏览器同步")
+                } footer: {
+                    Text("餐食、身体数据、饮水记录和每日目标通过你的私有服务器双向同步。同步密钥只保存在 iOS 钥匙串中。")
+                }
+
                 Section("隐私") {
-                    Label("健康数据默认只保存在本机", systemImage: "lock.shield")
+                    Label(syncCoordinator.isConfigured ? "健康数据仅在本机和你的服务器间同步" : "健康数据默认只保存在本机", systemImage: "lock.shield")
                     Label("仅在使用 AI 时发送相关文字与所选图片", systemImage: "arrow.up.forward.app")
                 }
 
@@ -198,8 +254,14 @@ struct SettingsView: View {
             }) {
                 APIKeyEditorView(settings: settings)
             }
+            .sheet(isPresented: $showsSyncKeyEditor, onDismiss: {
+                syncCoordinator.refreshConfiguration()
+            }) {
+                SyncKeyEditorView()
+            }
             .onAppear {
                 hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider)
+                syncCoordinator.refreshConfiguration()
             }
             .onChange(of: settings.provider) { _, provider in
                 hasAPIKey = KeychainStore.hasAPIKey(for: provider)
@@ -250,6 +312,129 @@ struct SettingsView: View {
         } catch {
             connectionMessage = error.localizedDescription
             UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+}
+
+private struct SyncKeyEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var syncCoordinator
+
+    @State private var syncKey = KeychainStore.loadSyncKey()
+    @State private var revealsKey = false
+    @State private var isSaving = false
+    @State private var statusMessage: String?
+    @State private var showsDeleteConfirmation = false
+    @FocusState private var isFocused: Bool
+
+    private var trimmedKey: String {
+        syncKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Group {
+                        if revealsKey {
+                            TextField("粘贴同步密钥", text: $syncKey)
+                        } else {
+                            SecureField("粘贴同步密钥", text: $syncKey)
+                        }
+                    }
+                    .textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($isFocused)
+
+                    Toggle("显示内容", isOn: $revealsKey)
+                    Button("从剪贴板粘贴", systemImage: "doc.on.clipboard") {
+                        if let value = UIPasteboard.general.string {
+                            syncKey = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                    }
+                } header: {
+                    Text("私有同步密钥")
+                } footer: {
+                    Text("网页版首次打开时也填写同一密钥。验证成功后，浏览器会使用安全 Cookie，不会把密钥保存在网页脚本中。")
+                }
+
+                if let statusMessage {
+                    Section {
+                        Text(statusMessage)
+                            .font(.subheadline)
+                            .foregroundStyle(statusMessage.hasPrefix("保存并同步成功") ? AppTheme.recorded : .red)
+                    }
+                }
+
+                if KeychainStore.hasSyncKey {
+                    Section {
+                        Button("移除本机同步密钥", systemImage: "trash", role: .destructive) {
+                            showsDeleteConfirmation = true
+                        }
+                    }
+                }
+            }
+            .navigationTitle("跨设备同步")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSaving ? "同步中…" : "保存并同步") {
+                        Task { await saveAndSync() }
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(isSaving || trimmedKey.isEmpty)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("收起键盘") { isFocused = false }.fontWeight(.semibold)
+                }
+            }
+            .confirmationDialog("移除同步密钥？", isPresented: $showsDeleteConfirmation, titleVisibility: .visible) {
+                Button("移除", role: .destructive) { removeKey() }
+                Button("取消", role: .cancel) { }
+            } message: {
+                Text("本机数据不会删除，但之后不会继续与浏览器同步。")
+            }
+            .onAppear { isFocused = syncKey.isEmpty }
+        }
+    }
+
+    @MainActor
+    private func saveAndSync() async {
+        isFocused = false
+        isSaving = true
+        statusMessage = nil
+        defer { isSaving = false }
+        do {
+            try KeychainStore.saveSyncKey(trimmedKey)
+            syncCoordinator.refreshConfiguration()
+            await syncCoordinator.sync(context: modelContext, settings: settings)
+            if let error = syncCoordinator.lastError {
+                statusMessage = "密钥已保存，但同步失败：\(error)"
+            } else {
+                statusMessage = "保存并同步成功"
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        } catch {
+            statusMessage = error.localizedDescription
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+
+    private func removeKey() {
+        do {
+            try KeychainStore.deleteSyncKey()
+            syncKey = ""
+            syncCoordinator.refreshConfiguration()
+            statusMessage = "同步密钥已从本机移除。"
+        } catch {
+            statusMessage = error.localizedDescription
         }
     }
 }

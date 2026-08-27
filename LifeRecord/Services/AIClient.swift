@@ -96,8 +96,8 @@ struct AIClient {
         用户补充：\(description.isEmpty ? "无" : description)
 
         只输出 JSON，不要 Markdown：
-        {"name":"简短餐食名称","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"note":"识别依据、每份/总份量、配料或不确定性"}
-        单位：热量 kcal，其余均为 g。所有数字按用户实际摄入的整份估算。无法判断时给合理范围的中位估计，并在 note 中说明。
+        {"name":"简短餐食名称","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"waterML":0,"note":"识别依据、每份/总份量、配料或不确定性"}
+        单位：热量 kcal，waterML 为 ml，其余均为 g。所有数字按用户实际摄入的整份估算。若画面包含饮料，waterML 要估算其中可计入日常饮水的液体量：白水按实际容量；无糖茶、咖啡、牛奶可按主要液体量；奶茶、含糖饮料按实际液体量谨慎折算，通常为杯体积的 70%–90%；酒精饮料记 0。固体食物记 0。无法判断时给合理范围的中位估计，并在 note 中说明。
         """
         let response = try await complete(
             system: "你负责生成可供用户复核的结构化营养估算。不要提供医疗诊断。",
@@ -128,7 +128,7 @@ struct AIClient {
         当前本地时间：\(currentTime)
         只输出 JSON：
         {"answer":"给用户的自然语言回答","actions":[{"type":"add_meal|add_weight|add_water|update_goals","date":"ISO8601 可选","mealKind":"早餐|午餐|晚餐|加餐","name":"可选","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"weight":0,"bodyFat":0,"waterML":0,"targetWeight":0,"calorieGoal":0,"proteinGoal":0,"carbsGoal":0,"fatGoal":0,"note":"可选"}]}
-        只有用户明确要求修改或记录数据时才生成 actions。普通问答 actions 必须为空。不得生成删除动作。answer 只能说明计划或结果含义，绝不能声称“已记录”“已更新”或“执行成功”；App 会在数据库保存成功后自行给出核验回执。图片可能是食物、营养表、配料表、训练截图或用户希望你分析的任何内容。
+        只有用户明确要求修改或记录数据时才生成 actions。普通问答 actions 必须为空。不得生成删除动作。answer 只能说明计划或结果含义，绝不能声称“已记录”“已更新”或“执行成功”；App 会在数据库保存成功后自行给出核验回执。图片可能是食物、饮料、营养表、配料表、训练截图或用户希望你分析的任何内容。若新增餐食中含白水、茶、咖啡、牛奶、奶茶或其他饮料，应在同一个 add_meal action 的 waterML 中给出可计入饮水的估算量；酒精记 0。
         """
         let response = try await complete(
             system: system,

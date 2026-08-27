@@ -568,6 +568,9 @@ struct CoachView: View {
                     note: action.note ?? "由 AI 助手按要求记录",
                     source: .ai
                 ))
+                if let waterML = action.waterML, waterML > 0, waterML <= 10_000 {
+                    modelContext.insert(WaterEntry(date: date, milliliters: waterML, note: "来自 AI 识别：\(name)"))
+                }
                 receipts.append("新增\(kind.rawValue)：\(name)，\(Int(calories)) kcal")
             case "add_weight", "record_weight", "log_weight":
                 guard let weight = action.weight, (20...400).contains(weight) else {

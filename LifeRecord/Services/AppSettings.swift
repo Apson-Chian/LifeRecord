@@ -95,19 +95,22 @@ final class AppSettings {
         static let maxTokens = "maxTokens"
         static let customInstructions = "customInstructions"
         static let aiCanWrite = "aiCanWrite"
+        static let profileUpdatedAt = "sync.profileUpdatedAt"
     }
 
-    var calorieGoal: Double { didSet { save(calorieGoal, Key.calorieGoal); publishSharedProfile() } }
-    var proteinGoal: Double { didSet { save(proteinGoal, Key.proteinGoal); publishSharedProfile() } }
-    var carbsGoal: Double { didSet { save(carbsGoal, Key.carbsGoal); publishSharedProfile() } }
-    var fatGoal: Double { didSet { save(fatGoal, Key.fatGoal); publishSharedProfile() } }
-    var waterGoal: Double { didSet { save(waterGoal, Key.waterGoal); publishSharedProfile() } }
-    var targetWeight: Double { didSet { save(targetWeight, Key.targetWeight); publishSharedProfile() } }
-    var height: Double { didSet { save(height, Key.height); publishSharedProfile() } }
-    var baselineWeight: Double { didSet { save(baselineWeight, Key.baselineWeight); publishSharedProfile() } }
-    var weeklyWeightTarget: Double { didSet { save(weeklyWeightTarget, Key.weeklyWeightTarget) } }
-    var fitnessGoal: FitnessGoal { didSet { save(fitnessGoal.rawValue, Key.fitnessGoal); publishSharedProfile() } }
-    var displayName: String { didSet { save(displayName, Key.displayName) } }
+    var calorieGoal: Double { didSet { save(calorieGoal, Key.calorieGoal); publishSharedProfile(); markProfileChanged() } }
+    var proteinGoal: Double { didSet { save(proteinGoal, Key.proteinGoal); publishSharedProfile(); markProfileChanged() } }
+    var carbsGoal: Double { didSet { save(carbsGoal, Key.carbsGoal); publishSharedProfile(); markProfileChanged() } }
+    var fatGoal: Double { didSet { save(fatGoal, Key.fatGoal); publishSharedProfile(); markProfileChanged() } }
+    var waterGoal: Double { didSet { save(waterGoal, Key.waterGoal); publishSharedProfile(); markProfileChanged() } }
+    var targetWeight: Double { didSet { save(targetWeight, Key.targetWeight); publishSharedProfile(); markProfileChanged() } }
+    var height: Double { didSet { save(height, Key.height); publishSharedProfile(); markProfileChanged() } }
+    var baselineWeight: Double { didSet { save(baselineWeight, Key.baselineWeight); publishSharedProfile(); markProfileChanged() } }
+    var weeklyWeightTarget: Double { didSet { save(weeklyWeightTarget, Key.weeklyWeightTarget); markProfileChanged() } }
+    var fitnessGoal: FitnessGoal { didSet { save(fitnessGoal.rawValue, Key.fitnessGoal); publishSharedProfile(); markProfileChanged() } }
+    var displayName: String { didSet { save(displayName, Key.displayName); markProfileChanged() } }
+    private(set) var profileUpdatedAt: Date
+    private var isApplyingSyncedProfile = false
     var provider: AIProvider {
         didSet {
             save(provider.rawValue, Key.provider)
@@ -142,6 +145,8 @@ final class AppSettings {
         weeklyWeightTarget = defaults.object(forKey: Key.weeklyWeightTarget) as? Double ?? 0.25
         fitnessGoal = FitnessGoal(rawValue: defaults.string(forKey: Key.fitnessGoal) ?? "") ?? .gainMuscle
         displayName = defaults.string(forKey: Key.displayName) ?? ""
+        let savedProfileTimestamp = defaults.double(forKey: Key.profileUpdatedAt)
+        profileUpdatedAt = savedProfileTimestamp > 0 ? Date(timeIntervalSince1970: savedProfileTimestamp) : .now
 
         let savedProvider = AIProvider(rawValue: defaults.string(forKey: Key.provider) ?? "") ?? .glm
         let savedModel = defaults.string(forKey: Key.model)
@@ -178,6 +183,32 @@ final class AppSettings {
 
     private func publishSharedProfile() {
         SharedProfileStore.publish(self)
+    }
+
+    func applySyncedProfile(_ profile: SyncedProfile, updatedAt: Date) {
+        guard updatedAt > profileUpdatedAt else { return }
+        isApplyingSyncedProfile = true
+        displayName = profile.displayName
+        fitnessGoal = FitnessGoal(rawValue: profile.fitnessGoal) ?? fitnessGoal
+        height = profile.height
+        baselineWeight = profile.baselineWeight
+        targetWeight = profile.targetWeight
+        weeklyWeightTarget = profile.weeklyWeightTarget
+        calorieGoal = profile.calorieGoal
+        proteinGoal = profile.proteinGoal
+        carbsGoal = profile.carbsGoal
+        fatGoal = profile.fatGoal
+        waterGoal = profile.waterGoal
+        isApplyingSyncedProfile = false
+        profileUpdatedAt = updatedAt
+        save(updatedAt.timeIntervalSince1970, Key.profileUpdatedAt)
+        publishSharedProfile()
+    }
+
+    private func markProfileChanged() {
+        guard !isApplyingSyncedProfile else { return }
+        profileUpdatedAt = .now
+        save(profileUpdatedAt.timeIntervalSince1970, Key.profileUpdatedAt)
     }
 
     private func save(_ value: Any, _ key: String) {

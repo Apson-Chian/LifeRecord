@@ -4,6 +4,23 @@ import Security
 enum KeychainStore {
     private static let service = "com.aotelei.LifeRecord"
     private static let legacyAccount = "ai-api-key"
+    private static let syncAccount = "liferecord-sync-key"
+
+    static func saveSyncKey(_ key: String) throws {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw KeychainError.emptySyncKey }
+        try upsert(Data(trimmed.utf8), account: syncAccount)
+    }
+
+    static func loadSyncKey() -> String {
+        load(account: syncAccount) ?? ""
+    }
+
+    static var hasSyncKey: Bool { !loadSyncKey().isEmpty }
+
+    static func deleteSyncKey() throws {
+        try delete(account: syncAccount)
+    }
 
     static func saveAPIKey(_ key: String, for provider: AIProvider) throws {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -75,12 +92,15 @@ enum KeychainStore {
 
     enum KeychainError: LocalizedError {
         case emptyKey
+        case emptySyncKey
         case status(OSStatus)
 
         var errorDescription: String? {
             switch self {
             case .emptyKey:
                 return "API Key 不能为空。"
+            case .emptySyncKey:
+                return "同步密钥不能为空。"
             case .status(let status):
                 let detail = SecCopyErrorMessageString(status, nil) as String? ?? "未知系统错误"
                 return "API Key 保存失败：\(detail)（\(status)）"

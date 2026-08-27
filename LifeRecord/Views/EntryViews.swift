@@ -89,6 +89,12 @@ struct AddMealView: View {
                     numberField("碳水", value: $draft.carbs, unit: "g")
                     numberField("脂肪", value: $draft.fat, unit: "g")
                     numberField("膳食纤维", value: $draft.fiber, unit: "g")
+                    numberField("计入饮水", value: $draft.waterML, unit: "ml")
+                    if draft.waterML > 0 {
+                        Label("保存后会同时增加一条饮水记录", systemImage: "drop.fill")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.water)
+                    }
                 }
 
                 Section("备注") {
@@ -202,31 +208,48 @@ struct AddMealView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
             return
         }
-        guard draft.calories > 0 else {
-            errorMessage = "请填写热量；也可以先点“用 AI 估算营养”，复核结果后再保存。"
+        let hasNutrition = draft.calories > 0 || draft.protein > 0 || draft.carbs > 0 || draft.fat > 0
+        let hasWater = draft.waterML > 0
+        guard hasNutrition || hasWater else {
+            errorMessage = "请填写营养或饮水数据；也可以先点“用 AI 估算营养”，复核结果后再保存。"
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
             return
         }
 
-        let entry = MealEntry(
-            date: date,
-            kind: kind,
-            name: name,
-            calories: draft.calories,
-            protein: draft.protein,
-            carbs: draft.carbs,
-            fat: draft.fat,
-            fiber: draft.fiber,
-            note: draft.note,
-            source: wasAIAnalyzed ? .ai : .manual
-        )
-        modelContext.insert(entry)
+        var mealEntry: MealEntry?
+        var waterEntry: WaterEntry?
+        if hasNutrition {
+            let entry = MealEntry(
+                date: date,
+                kind: kind,
+                name: name,
+                calories: draft.calories,
+                protein: draft.protein,
+                carbs: draft.carbs,
+                fat: draft.fat,
+                fiber: draft.fiber,
+                note: draft.note,
+                source: wasAIAnalyzed ? .ai : .manual
+            )
+            mealEntry = entry
+            modelContext.insert(entry)
+        }
+        if hasWater {
+            let entry = WaterEntry(
+                date: date,
+                milliliters: min(draft.waterML, 10_000),
+                note: "来自\(wasAIAnalyzed ? " AI 识别" : "餐食记录")：\(name)"
+            )
+            waterEntry = entry
+            modelContext.insert(entry)
+        }
         do {
             try modelContext.save()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
         } catch {
-            modelContext.delete(entry)
+            if let mealEntry { modelContext.delete(mealEntry) }
+            if let waterEntry { modelContext.delete(waterEntry) }
             errorMessage = "餐食保存失败：\(error.localizedDescription)"
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }

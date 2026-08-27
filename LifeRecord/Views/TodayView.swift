@@ -5,6 +5,7 @@ struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var syncCoordinator
     @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
     @Query(sort: \BodyMetric.date, order: .reverse) private var bodyMetrics: [BodyMetric]
     @Query(sort: \WaterEntry.date, order: .reverse) private var waterEntries: [WaterEntry]
@@ -61,6 +62,9 @@ struct TodayView: View {
                 }
                 .scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
+                .refreshable {
+                    await syncCoordinator.sync(context: modelContext, settings: settings)
+                }
             }
             .navigationTitle(greeting)
             .toolbar {
@@ -181,19 +185,23 @@ struct TodayView: View {
                         carbs: nutrition.carbs,
                         carbsGoal: settings.carbsGoal
                     )
-                    .frame(width: 132, height: 132)
+                    .frame(width: 116, height: 116)
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        RingLegend(title: "用餐", value: "\(selectedMeals.count) / 4 次", color: AppTheme.meals)
+                    VStack(alignment: .leading, spacing: 10) {
+                        RingLegend(
+                            title: "蛋白质",
+                            value: "\(Int(nutrition.protein)) / \(Int(settings.proteinGoal)) g",
+                            color: AppTheme.protein
+                        )
                         RingLegend(
                             title: "碳水",
                             value: "\(Int(nutrition.carbs)) / \(Int(settings.carbsGoal)) g",
                             color: AppTheme.carbs
                         )
                         RingLegend(
-                            title: "蛋白质",
-                            value: "\(Int(nutrition.protein)) / \(Int(settings.proteinGoal)) g",
-                            color: AppTheme.protein
+                            title: "饮水",
+                            value: "\(Int(water)) / \(Int(settings.waterGoal)) ml",
+                            color: AppTheme.water
                         )
                     }
                 }
@@ -427,12 +435,12 @@ private struct NutritionActivityRings: View {
 
     var body: some View {
         ZStack {
-            ActivityRing(progress: Double(mealCount) / 4, color: AppTheme.meals, lineWidth: 12)
-                .padding(2)
-            ActivityRing(progress: carbs / max(carbsGoal, 1), color: AppTheme.carbs, lineWidth: 11)
-                .padding(19)
             ActivityRing(progress: protein / max(proteinGoal, 1), color: AppTheme.protein, lineWidth: 10)
-                .padding(35)
+                .padding(1)
+            ActivityRing(progress: carbs / max(carbsGoal, 1), color: AppTheme.carbs, lineWidth: 9)
+                .padding(16)
+            ActivityRing(progress: Double(mealCount) / 4, color: AppTheme.meals, lineWidth: 8)
+                .padding(30)
             VStack(spacing: 0) {
                 Text("\(mealCount)")
                     .font(.title3.bold().monospacedDigit())
@@ -663,7 +671,7 @@ private struct MealSection: View {
                     .buttonStyle(.plain)
                     .contextMenu {
                         Button("删除", systemImage: "trash", role: .destructive) {
-                            modelContext.delete(meal)
+                            SyncDeletion.delete(meal, context: modelContext)
                             try? modelContext.save()
                         }
                     }

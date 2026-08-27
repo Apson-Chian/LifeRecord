@@ -1,10 +1,22 @@
 import SwiftUI
+import SwiftData
 
 struct RootView: View {
     @SceneStorage("selectedTab") private var selectedTab = 0
     @StateObject private var coachTaskCenter = CoachTaskCenter()
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var syncCoordinator
+    @Query private var meals: [MealEntry]
+    @Query private var bodyMetrics: [BodyMetric]
+    @Query private var waterEntries: [WaterEntry]
+    @Query private var tombstones: [SyncTombstone]
     @State private var showsOnboarding = !OnboardingState.hasSeenOnboarding
+
+    private var syncFingerprint: Int {
+        meals.count &* 31 &+ bodyMetrics.count &* 17 &+ waterEntries.count &* 13 &+ tombstones.count
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -58,6 +70,18 @@ struct RootView: View {
         }
         .task {
             DemoDataService.installIfNeeded(context: modelContext)
+            await syncCoordinator.sync(context: modelContext, settings: settings)
+        }
+        .onChange(of: syncFingerprint) { _, _ in
+            Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
+        }
+        .onChange(of: settings.profileUpdatedAt) { _, _ in
+            Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
+            }
         }
         .fullScreenCover(isPresented: $showsOnboarding) {
             OnboardingView()

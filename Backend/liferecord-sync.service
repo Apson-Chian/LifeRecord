@@ -1,0 +1,20 @@
+[Unit]
+Description=LifeRecord authenticated sync API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+EnvironmentFile=/etc/liferecord-sync.env
+ExecStart=/usr/bin/python3 /opt/liferecord-sync/server.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/liferecord-sync
+
+[Install]
+WantedBy=multi-user.target

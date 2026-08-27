@@ -5,3 +5,5 @@ xcuserdata/
 *.moved-aside
 *.xccheckout
 *.xcscmblueprint
+__pycache__/
+*.py[cod]

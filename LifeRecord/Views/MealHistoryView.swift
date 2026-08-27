@@ -52,7 +52,7 @@ struct MealHistoryView: View {
     }
 
     private func delete(_ meal: MealEntry) {
-        modelContext.delete(meal)
+        SyncDeletion.delete(meal, context: modelContext)
         do {
             try modelContext.save()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -155,7 +155,7 @@ struct MealDetailView: View {
     }
 
     private func deleteMeal() {
-        modelContext.delete(meal)
+        SyncDeletion.delete(meal, context: modelContext)
         do {
             try modelContext.save()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
