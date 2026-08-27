@@ -38,6 +38,8 @@ final class MealEntry {
     var note: String
     var sourceRaw: String
     var createdAt: Date
+    // Declaration-site defaults make newly added fields lightweight-migratable.
+    var isDemo: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -50,7 +52,8 @@ final class MealEntry {
         fat: Double,
         fiber: Double = 0,
         note: String = "",
-        source: EntrySource = .manual
+        source: EntrySource = .manual,
+        isDemo: Bool = false
     ) {
         self.id = id
         self.date = date
@@ -64,6 +67,7 @@ final class MealEntry {
         self.note = note
         self.sourceRaw = source.rawValue
         self.createdAt = .now
+        self.isDemo = isDemo
     }
 
     var kind: MealKind { MealKind(rawValue: kindRaw) ?? .snack }
@@ -78,6 +82,7 @@ final class BodyMetric {
     var bodyFat: Double?
     var waist: Double?
     var note: String
+    var isDemo: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -85,7 +90,8 @@ final class BodyMetric {
         weight: Double,
         bodyFat: Double? = nil,
         waist: Double? = nil,
-        note: String = ""
+        note: String = "",
+        isDemo: Bool = false
     ) {
         self.id = id
         self.date = date
@@ -93,19 +99,51 @@ final class BodyMetric {
         self.bodyFat = bodyFat
         self.waist = waist
         self.note = note
+        self.isDemo = isDemo
     }
 }
 
 @Model
 final class WaterEntry {
+    static let commonAmounts: [Double] = [200, 250, 330, 500, 750]
+
     @Attribute(.unique) var id: UUID
     var date: Date
     var milliliters: Double
+    var isDemo: Bool = false
 
-    init(id: UUID = UUID(), date: Date = .now, milliliters: Double) {
+    init(id: UUID = UUID(), date: Date = .now, milliliters: Double, isDemo: Bool = false) {
         self.id = id
         self.date = date
         self.milliliters = milliliters
+        self.isDemo = isDemo
+    }
+}
+
+@Model
+final class CoachConversation {
+    @Attribute(.unique) var id: UUID
+    var title: String
+    var createdAt: Date
+    var updatedAt: Date
+    var isDemo: Bool = false
+    @Relationship(deleteRule: .cascade, inverse: \CoachMessage.conversation)
+    var messages: [CoachMessage]
+
+    init(
+        id: UUID = UUID(),
+        title: String = "新对话",
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        messages: [CoachMessage] = [],
+        isDemo: Bool = false
+    ) {
+        self.id = id
+        self.title = title
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.messages = messages
+        self.isDemo = isDemo
     }
 }
 
@@ -115,6 +153,7 @@ final class CoachMessage {
     var date: Date
     var role: String
     var content: String
+    var conversation: CoachConversation?
 
     init(id: UUID = UUID(), date: Date = .now, role: String, content: String) {
         self.id = id

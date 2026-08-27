@@ -7,6 +7,8 @@ enum AppTheme {
     static let carbs = Color(red: 0.95, green: 0.64, blue: 0.22)
     static let fat = Color(red: 0.88, green: 0.35, blue: 0.67)
     static let water = Color.cyan
+    static let meals = Color(red: 0.94, green: 0.25, blue: 0.35)
+    static let recorded = Color(red: 0.16, green: 0.68, blue: 0.37)
     static let success = Color(red: 0.20, green: 0.52, blue: 0.88)
 }
 

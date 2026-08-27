@@ -3,11 +3,14 @@ import UIKit
 
 struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(\.modelContext) private var modelContext
 
     @State private var showsAPIKeyEditor = false
     @State private var hasAPIKey = false
     @State private var isTesting = false
     @State private var connectionMessage: String?
+    @State private var showsLifeTrackUnavailable = false
+    @State private var showsOnboarding = false
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
@@ -139,9 +142,46 @@ struct SettingsView: View {
                          : "AI 目前只能读取摘要并回答，不会修改任何记录。")
                 }
 
+                Section("引导") {
+                    Button("重新查看使用引导", systemImage: "book") {
+                        showsOnboarding = true
+                    }
+                    Button("重新写入完整示例数据", systemImage: "arrow.counterclockwise") {
+                        DemoDataService.reinstall(context: modelContext)
+                    }
+                    Button("清除示例数据", systemImage: "trash") {
+                        DemoDataService.clear(context: modelContext)
+                    }
+                    .foregroundStyle(.red)
+                }
+
                 Section("隐私") {
                     Label("健康数据默认只保存在本机", systemImage: "lock.shield")
                     Label("仅在使用 AI 时发送相关文字与所选图片", systemImage: "arrow.up.forward.app")
+                }
+
+                Section {
+                    if let lastSync = SharedProfileStore.lastPublishedAt {
+                        Label("身体档案已同步", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(AppTheme.success)
+                        Text("最近同步：\(lastSync.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Label("尚未同步到 LifeTrack", systemImage: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(.secondary)
+                    }
+                    Button {
+                        if !LifeLink.openLifeTrack() {
+                            showsLifeTrackUnavailable = true
+                        }
+                    } label: {
+                        Label("打开 LifeTrack", systemImage: "arrow.up.right.square")
+                    }
+                } header: {
+                    Text("与 LifeTrack 联动")
+                } footer: {
+                    Text("身高、体重与每日目标会通过 App Group 同步给 LifeTrack；若无法跨 App 同步，请在 Apple 开发者后台注册 group.com.aotelei.liferecord。")
                 }
             }
             .scrollDismissesKeyboard(.interactively)
@@ -164,6 +204,14 @@ struct SettingsView: View {
             .onChange(of: settings.provider) { _, provider in
                 hasAPIKey = KeychainStore.hasAPIKey(for: provider)
                 connectionMessage = nil
+            }
+            .fullScreenCover(isPresented: $showsOnboarding) {
+                OnboardingView()
+            }
+            .alert("未安装 LifeTrack", isPresented: $showsLifeTrackUnavailable) {
+                Button("好") { }
+            } message: {
+                Text("请先安装 LifeTrack，或确认两个 App 使用相同的开发者签名。")
             }
         }
     }

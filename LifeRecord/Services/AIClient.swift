@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 struct AIChatMessage: Codable {
     let role: String
@@ -102,7 +103,9 @@ struct AIClient {
             system: "你负责生成可供用户复核的结构化营养估算。不要提供医疗诊断。",
             user: prompt,
             images: images,
-            wantsJSON: true
+            wantsJSON: true,
+            maxTokensOverride: 700,
+            temperatureOverride: 0.1
         )
         guard let data = cleanedJSON(response).data(using: .utf8),
               let draft = try? JSONDecoder().decode(MealDraft.self, from: data) else {
@@ -118,14 +121,22 @@ struct AIClient {
 
     func agent(system: String, messages: [AIChatMessage], images: [Data] = []) async throws -> AIAgentReply {
         let history = messages.suffix(14).map { "\($0.role): \($0.content)" }.joined(separator: "\n")
+        let currentTime = Date.now.formatted(.iso8601)
         let envelope = """
         \(history)
 
+        当前本地时间：\(currentTime)
         只输出 JSON：
-        {"answer":"给用户的自然语言回答","actions":[{"type":"add_meal|add_weight|add_water|update_goals","date":"ISO8601 可选","mealKind":"早餐|午餐|晚餐|加餐","name":"可选","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"weight":0,"bodyFat":0,"waist":0,"waterML":0,"targetWeight":0,"calorieGoal":0,"proteinGoal":0,"carbsGoal":0,"fatGoal":0,"note":"可选"}]}
-        只有用户明确要求修改或记录数据时才生成 actions。普通问答 actions 必须为空。不得生成删除动作。图片可能是食物、营养表、配料表、训练截图或用户希望你分析的任何内容。
+        {"answer":"给用户的自然语言回答","actions":[{"type":"add_meal|add_weight|add_water|update_goals","date":"ISO8601 可选","mealKind":"早餐|午餐|晚餐|加餐","name":"可选","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"weight":0,"bodyFat":0,"waterML":0,"targetWeight":0,"calorieGoal":0,"proteinGoal":0,"carbsGoal":0,"fatGoal":0,"note":"可选"}]}
+        只有用户明确要求修改或记录数据时才生成 actions。普通问答 actions 必须为空。不得生成删除动作。answer 只能说明计划或结果含义，绝不能声称“已记录”“已更新”或“执行成功”；App 会在数据库保存成功后自行给出核验回执。图片可能是食物、营养表、配料表、训练截图或用户希望你分析的任何内容。
         """
-        let response = try await complete(system: system, user: envelope, images: images, wantsJSON: true)
+        let response = try await complete(
+            system: system,
+            user: envelope,
+            images: images,
+            wantsJSON: true,
+            maxTokensOverride: 1_600
+        )
         guard let data = cleanedJSON(response).data(using: .utf8),
               let reply = try? JSONDecoder().decode(AIAgentReply.self, from: data) else {
             throw AIClientError.malformedAgentReply
@@ -148,7 +159,9 @@ struct AIClient {
         user: String,
         images: [Data],
         wantsJSON: Bool,
-        apiKeyOverride: String? = nil
+        apiKeyOverride: String? = nil,
+        maxTokensOverride: Int? = nil,
+        temperatureOverride: Double? = nil
     ) async throws -> String {
         let override = apiKeyOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let apiKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider) : override
@@ -177,9 +190,16 @@ struct AIClient {
         var userContent: Any = user
         if !images.isEmpty {
             var parts: [[String: Any]] = [["type": "text", "text": user]]
-            for data in images {
-                let mime = Self.mimeType(for: data)
-                parts.append(["type": "image_url", "image_url": ["url": "data:\(mime);base64,\(data.base64EncodedString())"]])
+            for original in images {
+                // 相册原图可能是 HEIC；教练页此前能识别，是因为它先压成了 JPEG。
+                // 这里统一兜底，保证首页加号、教练页和后续新入口发送的都是 JPEG。
+                let data = Self.jpegImageData(forSending: original)
+                var imageObject: [String: Any] = ["url": "data:image/jpeg;base64,\(data.base64EncodedString())"]
+                // Dots 需要 detail 字段；GLM/OpenAI 兼容接口保持最小字段，避免未知参数被拒绝。
+                if settings.provider == .dots {
+                    imageObject["detail"] = "medium"
+                }
+                parts.append(["type": "image_url", "image_url": imageObject])
             }
             userContent = parts
         }
@@ -190,12 +210,18 @@ struct AIClient {
                 ["role": "system", "content": system + (settings.customInstructions.isEmpty ? "" : "\n用户自定义指令：\(settings.customInstructions)")],
                 ["role": "user", "content": userContent]
             ],
-            "temperature": settings.temperature,
-            "max_tokens": settings.maxTokens
+            "temperature": temperatureOverride ?? settings.temperature,
+            "max_tokens": min(max(maxTokensOverride ?? settings.maxTokens, 256), 4_096),
         ]
+        if settings.provider == .dots {
+            // 非流式便于稳定解码；响应上限由具体任务控制，避免短 JSON 仍等待 4096 tokens。
+            body["stream"] = false
+        }
         // Dots 的托管接口当前没有在公开文档中声明 response_format；
         // 依靠提示词返回 JSON，避免连接正常却因未知参数被 400 拒绝。
-        if wantsJSON && settings.provider != .dots {
+        // Some multimodal endpoints accept image content but reject JSON response_format.
+        // For image requests, rely on the prompt's JSON schema instead.
+        if wantsJSON && images.isEmpty && settings.provider != .dots {
             body["response_format"] = ["type": "json_object"]
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -233,6 +259,26 @@ struct AIClient {
             .replacingOccurrences(of: "```json", with: "")
             .replacingOccurrences(of: "```", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 统一转成 JPEG 再发送：相册原图可能是 HEIC，多模态接口普遍只接受 JPEG/PNG/WebP。
+    static func jpegImageData(forSending data: Data, maxDimension: CGFloat = 1600) -> Data {
+        if isJPEG(data), let image = UIImage(data: data) {
+            let longest = max(image.size.width, image.size.height)
+            if longest <= maxDimension { return data }
+        }
+        guard let image = UIImage(data: data) else { return data }
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxDimension else { return image.jpegData(compressionQuality: 0.82) ?? data }
+        let scale = maxDimension / longest
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+        return resized.jpegData(compressionQuality: 0.8) ?? data
+    }
+
+    private static func isJPEG(_ data: Data) -> Bool {
+        data.count >= 2 && data[data.startIndex] == 0xFF && data[data.index(after: data.startIndex)] == 0xD8
     }
 
     private static func mimeType(for data: Data) -> String {

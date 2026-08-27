@@ -97,16 +97,16 @@ final class AppSettings {
         static let aiCanWrite = "aiCanWrite"
     }
 
-    var calorieGoal: Double { didSet { save(calorieGoal, Key.calorieGoal) } }
-    var proteinGoal: Double { didSet { save(proteinGoal, Key.proteinGoal) } }
-    var carbsGoal: Double { didSet { save(carbsGoal, Key.carbsGoal) } }
-    var fatGoal: Double { didSet { save(fatGoal, Key.fatGoal) } }
-    var waterGoal: Double { didSet { save(waterGoal, Key.waterGoal) } }
-    var targetWeight: Double { didSet { save(targetWeight, Key.targetWeight) } }
-    var height: Double { didSet { save(height, Key.height) } }
-    var baselineWeight: Double { didSet { save(baselineWeight, Key.baselineWeight) } }
+    var calorieGoal: Double { didSet { save(calorieGoal, Key.calorieGoal); publishSharedProfile() } }
+    var proteinGoal: Double { didSet { save(proteinGoal, Key.proteinGoal); publishSharedProfile() } }
+    var carbsGoal: Double { didSet { save(carbsGoal, Key.carbsGoal); publishSharedProfile() } }
+    var fatGoal: Double { didSet { save(fatGoal, Key.fatGoal); publishSharedProfile() } }
+    var waterGoal: Double { didSet { save(waterGoal, Key.waterGoal); publishSharedProfile() } }
+    var targetWeight: Double { didSet { save(targetWeight, Key.targetWeight); publishSharedProfile() } }
+    var height: Double { didSet { save(height, Key.height); publishSharedProfile() } }
+    var baselineWeight: Double { didSet { save(baselineWeight, Key.baselineWeight); publishSharedProfile() } }
     var weeklyWeightTarget: Double { didSet { save(weeklyWeightTarget, Key.weeklyWeightTarget) } }
-    var fitnessGoal: FitnessGoal { didSet { save(fitnessGoal.rawValue, Key.fitnessGoal) } }
+    var fitnessGoal: FitnessGoal { didSet { save(fitnessGoal.rawValue, Key.fitnessGoal); publishSharedProfile() } }
     var displayName: String { didSet { save(displayName, Key.displayName) } }
     var provider: AIProvider {
         didSet {
@@ -161,6 +161,7 @@ final class AppSettings {
         maxTokens = defaults.object(forKey: Key.maxTokens) as? Int ?? 1600
         customInstructions = defaults.string(forKey: Key.customInstructions) ?? ""
         aiCanWrite = defaults.object(forKey: Key.aiCanWrite) as? Bool ?? true
+        publishSharedProfile()
     }
 
     func applyGoalTemplate(_ goal: FitnessGoal) {
@@ -173,6 +174,10 @@ final class AppSettings {
         case .maintain:
             calorieGoal = 2300; proteinGoal = 125; carbsGoal = 285; fatGoal = 70; weeklyWeightTarget = 0
         }
+    }
+
+    private func publishSharedProfile() {
+        SharedProfileStore.publish(self)
     }
 
     private func save(_ value: Any, _ key: String) {

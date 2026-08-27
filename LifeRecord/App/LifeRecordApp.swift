@@ -11,6 +11,6 @@ struct LifeRecordApp: App {
                 .environment(settings)
                 .tint(AppTheme.accent)
         }
-        .modelContainer(for: [MealEntry.self, BodyMetric.self, WaterEntry.self, CoachMessage.self])
+        .modelContainer(for: [MealEntry.self, BodyMetric.self, WaterEntry.self, CoachConversation.self, CoachMessage.self])
     }
 }

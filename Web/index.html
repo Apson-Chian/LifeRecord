@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f4fb">
+  <meta name="description" content="LifeRecord 本地优先的饮食、营养与饮水记录页面。">
+  <title>LifeRecord · 今日记录</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="LifeRecord 首页">
+        <span class="brand-mark">L</span>
+        <span><strong>LifeRecord</strong><small>生活记录</small></span>
+      </a>
+      <button class="date-button" id="dateButton" type="button" aria-haspopup="dialog">
+        <span class="date-icon" aria-hidden="true">▦</span>
+        <span id="dateLabel"></span>
+        <span aria-hidden="true">⌄</span>
+      </button>
+    </header>
+
+    <section class="hero-grid">
+      <article class="card activity-card">
+        <div class="section-heading">
+          <div><span class="eyebrow">今日进度</span><h1>吃得清楚，练得踏实</h1></div>
+          <span class="goal-chip">增肌计划</span>
+        </div>
+        <div class="activity-content">
+          <div class="rings" role="img" id="rings" aria-label="今日营养进度">
+            <div class="ring ring-meals"></div>
+            <div class="ring ring-carbs"></div>
+            <div class="ring ring-protein"></div>
+            <div class="ring-center"><strong id="mealCount">0</strong><span>餐</span></div>
+          </div>
+          <div class="ring-legend">
+            <div><i class="dot meals"></i><span>用餐<small id="mealLegend">0 / 4 次</small></span></div>
+            <div><i class="dot carbs"></i><span>碳水<small id="carbsLegend">0 / 340 g</small></span></div>
+            <div><i class="dot protein"></i><span>蛋白质<small id="proteinLegend">0 / 130 g</small></span></div>
+          </div>
+        </div>
+        <p class="calorie-line"><span class="flame">◆</span><span id="calorieStatus">还差 2600 千卡</span></p>
+      </article>
+
+      <aside class="card water-card">
+        <div class="water-heading"><span class="water-icon">●</span><div><span class="eyebrow">今日饮水</span><h2><strong id="waterTotal">0.0</strong> L</h2></div></div>
+        <div class="water-track"><span id="waterProgress"></span></div>
+        <p><span id="waterDetail">0 / 2800 ml</span><span>目标 2.8 L</span></p>
+        <div class="water-options" id="waterOptions" aria-label="常用饮水量"></div>
+      </aside>
+    </section>
+
+    <section class="content-grid">
+      <article class="card meal-card">
+        <div class="section-heading compact">
+          <div><span class="eyebrow">饮食记录</span><h2 id="mealTitle">今天吃了什么</h2></div>
+          <button class="primary-button" id="addMealButton" type="button">＋ 记一餐</button>
+        </div>
+        <div class="meal-list" id="mealList"></div>
+      </article>
+
+      <aside class="card summary-card">
+        <span class="eyebrow">营养目标</span>
+        <h2>今日摄入</h2>
+        <div class="summary-list">
+          <div><span><i class="dot protein"></i>蛋白质</span><strong id="proteinSummary">0 g</strong></div>
+          <div><span><i class="dot carbs"></i>碳水</span><strong id="carbsSummary">0 g</strong></div>
+          <div><span><i class="dot fat"></i>脂肪</span><strong id="fatSummary">0 g</strong></div>
+          <div><span><i class="dot calories"></i>热量</span><strong id="calorieSummary">0 kcal</strong></div>
+        </div>
+        <p class="privacy-note">数据只保存在当前浏览器中，不会自动上传。</p>
+      </aside>
+    </section>
+  </main>
+
+  <dialog id="calendarDialog" class="modal calendar-modal">
+    <form method="dialog" class="modal-sheet">
+      <div class="modal-top"><div><span class="eyebrow">浏览记录</span><h2>选择日期</h2></div><button class="icon-button" value="cancel" aria-label="关闭">×</button></div>
+      <div class="calendar-header"><button id="prevMonth" type="button" aria-label="上个月">‹</button><strong id="monthLabel"></strong><button id="nextMonth" type="button" aria-label="下个月">›</button></div>
+      <div class="calendar-grid weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+      <p class="calendar-hint"><i class="record-dot"></i>绿点表示当天已有记录</p>
+    </form>
+  </dialog>
+
+  <dialog id="mealDialog" class="modal">
+    <form id="mealForm" class="modal-sheet">
+      <div class="modal-top"><div><span class="eyebrow">新增记录</span><h2>记一餐</h2></div><button class="icon-button" id="closeMeal" type="button" aria-label="关闭">×</button></div>
+      <label>餐次<select name="kind"><option>早餐</option><option>午餐</option><option>晚餐</option><option>加餐</option></select></label>
+      <label>餐食名称<input name="name" required placeholder="例如：鸡胸肉拌饭"></label>
+      <div class="form-grid">
+        <label>热量 kcal<input name="calories" required type="number" min="0" step="1" value="500"></label>
+        <label>蛋白质 g<input name="protein" required type="number" min="0" step="1" value="30"></label>
+        <label>碳水 g<input name="carbs" required type="number" min="0" step="1" value="60"></label>
+        <label>脂肪 g<input name="fat" required type="number" min="0" step="1" value="15"></label>
+      </div>
+      <button class="primary-button submit-button" type="submit">保存记录</button>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
