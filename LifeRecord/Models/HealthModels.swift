@@ -41,6 +41,8 @@ final class MealEntry {
     // Declaration-site defaults make newly added fields lightweight-migratable.
     var isDemo: Bool = false
     var updatedAt: Date = Date.now
+    // Only compact server image identifiers are kept on device; image bytes live on the private server.
+    var photoIDsRaw: String = "[]"
 
     init(
         id: UUID = UUID(),
@@ -54,7 +56,8 @@ final class MealEntry {
         fiber: Double = 0,
         note: String = "",
         source: EntrySource = .manual,
-        isDemo: Bool = false
+        isDemo: Bool = false,
+        photoIDs: [String] = []
     ) {
         self.id = id
         self.date = date
@@ -70,10 +73,23 @@ final class MealEntry {
         self.createdAt = .now
         self.isDemo = isDemo
         self.updatedAt = .now
+        self.photoIDs = photoIDs
     }
 
     var kind: MealKind { MealKind(rawValue: kindRaw) ?? .snack }
     var source: EntrySource { EntrySource(rawValue: sourceRaw) ?? .manual }
+    var photoIDs: [String] {
+        get {
+            guard let data = photoIDsRaw.data(using: .utf8),
+                  let values = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+            return values
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue),
+                  let value = String(data: data, encoding: .utf8) else { return }
+            photoIDsRaw = value
+        }
+    }
 }
 
 @Model

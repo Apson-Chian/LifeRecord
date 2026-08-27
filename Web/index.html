@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f4fb">
-  <meta name="description" content="LifeRecord 本地优先的饮食、营养与饮水记录页面。">
+  <meta name="description" content="LifeRecord 与 iPhone 双向同步的饮食、营养、饮水与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260828-2">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
@@ -26,6 +26,8 @@
         </button>
       </div>
     </header>
+
+    <section class="week-rings" id="weekRings" aria-label="本周每日营养进度"></section>
 
     <section class="hero-grid">
       <article class="card activity-card">
@@ -131,6 +133,8 @@
         <label>碳水 g<input name="carbs" required type="number" min="0" step="1" value="60"></label>
         <label>脂肪 g<input name="fat" required type="number" min="0" step="1" value="15"></label>
       </div>
+      <label>餐食照片（可选，最多 6 张）<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
+      <p class="upload-hint">照片会加密传输并保存在你的私有服务器，浏览器只在查看历史记录时加载。</p>
       <button class="primary-button submit-button" type="submit">保存记录</button>
     </form>
   </dialog>
@@ -160,7 +164,14 @@
     </form>
   </dialog>
 
+  <dialog id="photoDialog" class="modal photo-modal">
+    <div class="modal-sheet">
+      <div class="modal-top"><div><span class="eyebrow">餐食照片</span><h2 id="photoTitle">历史照片</h2></div><button class="icon-button" id="closePhotos" type="button" aria-label="关闭">×</button></div>
+      <div class="photo-gallery" id="photoGallery"></div>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js"></script>
+  <script src="app.js?v=20260828-2"></script>
 </body>
 </html>

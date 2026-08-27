@@ -6,6 +6,7 @@ import UIKit
 struct CoachView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var syncCoordinator
     @EnvironmentObject private var coachTaskCenter: CoachTaskCenter
     @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]
     @Query(sort: \CoachConversation.updatedAt, order: .reverse) private var conversations: [CoachConversation]
@@ -463,7 +464,7 @@ struct CoachView: View {
                         messages: outgoingHistory,
                         images: attachedImages
                     )
-                    let execution = try apply(reply.actions)
+                    let execution = try await apply(reply.actions, attachedImages: attachedImages)
                     let content: String
                     if !execution.receipts.isEmpty {
                         content = reply.answer
@@ -538,9 +539,10 @@ struct CoachView: View {
     }
 
     @MainActor
-    private func apply(_ actions: [AIAgentAction]) throws -> ActionExecution {
+    private func apply(_ actions: [AIAgentAction], attachedImages: [Data]) async throws -> ActionExecution {
         var receipts: [String] = []
         var rejectedCount = 0
+        var didAttachPhotos = false
         for action in actions.prefix(12) {
             let date = resolvedActionDate(action.date)
             let type = action.type
@@ -556,7 +558,16 @@ struct CoachView: View {
                     continue
                 }
                 let kind = action.mealKind.flatMap(MealKind.init(rawValue:)) ?? .snack
+                let mealID = UUID()
+                let photoIDs: [String]
+                if !didAttachPhotos && !attachedImages.isEmpty {
+                    photoIDs = try await syncCoordinator.uploadMealPhotos(attachedImages, mealID: mealID)
+                    didAttachPhotos = true
+                } else {
+                    photoIDs = []
+                }
                 modelContext.insert(MealEntry(
+                    id: mealID,
                     date: date,
                     kind: kind,
                     name: name,
@@ -566,7 +577,8 @@ struct CoachView: View {
                     fat: max(action.fat ?? 0, 0),
                     fiber: max(action.fiber ?? 0, 0),
                     note: action.note ?? "由 AI 助手按要求记录",
-                    source: .ai
+                    source: .ai,
+                    photoIDs: photoIDs
                 ))
                 if let waterML = action.waterML, waterML > 0, waterML <= 10_000 {
                     modelContext.insert(WaterEntry(date: date, milliliters: waterML, note: "来自 AI 识别：\(name)"))
@@ -620,6 +632,7 @@ struct CoachView: View {
         if !receipts.isEmpty {
             // 只有数据库真正保存成功，界面才允许显示“已核验并写入”。
             try modelContext.save()
+            await syncCoordinator.sync(context: modelContext, settings: settings)
         }
         return ActionExecution(receipts: receipts, rejectedCount: rejectedCount)
     }

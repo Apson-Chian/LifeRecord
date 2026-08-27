@@ -25,6 +25,11 @@ let state = { meals: [], bodyMetrics: [], waterEntries: [], settings: null, dele
 let selectedDate = localStorage.getItem(UI_DATE_KEY) || dateKey(new Date());
 let visibleMonth = parseDate(selectedDate);
 let connected = false;
+let localRevision = 0;
+let syncInFlight = false;
+let syncAgain = false;
+
+function touchLocalState() { localRevision += 1; }
 
 function goals() { return state.settings || defaultSettings; }
 function selectedMeals() { return state.meals.filter(item => recordDateKey(item) === selectedDate); }
@@ -77,18 +82,32 @@ function showAuth() {
   if (!dialog.open) dialog.showModal();
 }
 
-async function syncNow(message = "已同步") {
+async function syncNow(message = "已同步", silent = false) {
   if (!connected) return showAuth();
+  if (syncInFlight) { syncAgain = true; return false; }
+  syncInFlight = true;
+  const revisionAtStart = localRevision;
   setSyncStatus("正在同步");
   try {
-    state = await api("/sync", { method: "POST", body: JSON.stringify(state) });
-    render();
+    const inbound = await api("/sync", { method: "POST", body: JSON.stringify(state) });
+    if (revisionAtStart === localRevision) {
+      state = inbound;
+      render();
+    } else {
+      syncAgain = true;
+    }
     setSyncStatus(message, "synced");
     return true;
   } catch (error) {
     setSyncStatus("同步失败", "error");
-    showToast(error.message);
+    if (!silent) showToast(error.message);
     return false;
+  } finally {
+    syncInFlight = false;
+    if (syncAgain) {
+      syncAgain = false;
+      setTimeout(() => syncNow("已自动同步", true), 0);
+    }
   }
 }
 
@@ -108,6 +127,7 @@ async function migrateLegacyIfNeeded() {
       id: String(item.id || newID()).toLowerCase(), date: epochForDateKey(item.date), milliliters: Number(item.amount || 0),
       note: "从旧版网页迁移", updatedAt: timestamp - index
     })).filter(item => item.milliliters > 0);
+    touchLocalState();
     if (await syncNow("旧版数据已迁移")) localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch (_) {}
 }
@@ -143,6 +163,35 @@ function render() {
   $("#goalWater").textContent = `${Math.round(target.waterGoal)} ml`;
   renderMeals(meals);
   renderMetrics();
+  renderWeekRings();
+}
+
+function renderWeekRings() {
+  const selected = parseDate(selectedDate);
+  const mondayOffset = (selected.getDay() + 6) % 7;
+  const monday = new Date(selected);
+  monday.setDate(selected.getDate() - mondayOffset);
+  const target = goals();
+  const labels = ["一", "二", "三", "四", "五", "六", "日"];
+  const html = [];
+  for (let index = 0; index < 7; index++) {
+    const date = new Date(monday); date.setDate(monday.getDate() + index);
+    const key = dateKey(date);
+    const meals = state.meals.filter(item => recordDateKey(item) === key);
+    const protein = meals.reduce((sum, item) => sum + Number(item.protein || 0), 0);
+    const carbs = meals.reduce((sum, item) => sum + Number(item.carbs || 0), 0);
+    const hasRecord = recordedDates().has(key);
+    html.push(`<button class="week-day ${key === selectedDate ? "selected" : ""} ${hasRecord ? "recorded" : ""}" type="button" data-week-date="${key}" aria-label="${fmtDate(date)}${hasRecord ? "，已有记录" : ""}">
+      <span>${labels[index]}</span>
+      <i class="mini-rings" aria-hidden="true">
+        <i class="mini-ring mini-protein" style="--progress:${progress(protein, target.proteinGoal)}"></i>
+        <i class="mini-ring mini-carbs" style="--progress:${progress(carbs, target.carbsGoal)}"></i>
+        <i class="mini-ring mini-meals" style="--progress:${progress(meals.length, 4)}"></i>
+        <b class="mini-day-number">${date.getDate()}</b>
+      </i>
+    </button>`);
+  }
+  $("#weekRings").innerHTML = html.join("");
 }
 
 function renderMeals(meals) {
@@ -151,12 +200,18 @@ function renderMeals(meals) {
     list.innerHTML = `<div class="empty">这一天还没有餐食记录，点“记一餐”开始。</div>`;
     return;
   }
-  list.innerHTML = meals.sort((a, b) => b.date - a.date).map(item => `
+  list.innerHTML = meals.sort((a, b) => b.date - a.date).map(item => {
+    const photoIDs = Array.isArray(item.photoIDs) ? item.photoIDs.filter(id => /^[a-f0-9]{32}$/.test(id)) : [];
+    const leading = photoIDs.length
+      ? `<button class="meal-photo" type="button" data-show-meal="${item.id}" aria-label="查看 ${escapeHtml(item.name)} 的 ${photoIDs.length} 张照片"><img loading="lazy" src="${API_BASE}/images/${photoIDs[0]}" alt="${escapeHtml(item.name)}"><em>${photoIDs.length}</em></button>`
+      : `<span class="meal-symbol" aria-hidden="true">${symbols[item.kind] || "◇"}</span>`;
+    return `
     <div class="meal-item">
-      <span class="meal-symbol" aria-hidden="true">${symbols[item.kind] || "◇"}</span>
+      ${leading}
       <div class="meal-copy"><strong>${escapeHtml(item.name)}</strong><small>${item.kind} · 蛋白 ${Math.round(item.protein)}g · 碳水 ${Math.round(item.carbs)}g · 脂肪 ${Math.round(item.fat)}g</small></div>
       <div class="meal-kcal"><strong>${Math.round(item.calories)}</strong><span>kcal</span><button class="delete-meal" data-delete-meal="${item.id}" aria-label="删除 ${escapeHtml(item.name)}">×</button></div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 function renderMetrics() {
@@ -178,9 +233,55 @@ function escapeHtml(value) { const node = document.createElement("span"); node.t
 function showToast(message) { const toast = $("#toast"); toast.textContent = message; toast.classList.add("show"); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("show"), 1700); }
 function renderWaterOptions() { $("#waterOptions").innerHTML = commonWater.map(amount => `<button type="button" data-water="${amount}">+${amount} ml</button>`).join(""); }
 
+function blobBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = () => reject(new Error("照片读取失败"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function preparedImageBase64(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d", { alpha: false }).drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", .82));
+    if (!blob) throw new Error("照片压缩失败");
+    return blobBase64(blob);
+  } catch (error) {
+    if (file.size <= 4 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp"].includes(file.type)) return blobBase64(file);
+    throw error;
+  }
+}
+
+async function uploadMealPhotos(mealId, files) {
+  const imageIDs = [];
+  for (const file of files.slice(0, 6)) {
+    const base64 = await preparedImageBase64(file);
+    const result = await api("/images", { method: "POST", body: JSON.stringify({ mealId, base64 }) });
+    imageIDs.push(result.id);
+  }
+  return imageIDs;
+}
+
+function showMealPhotos(meal) {
+  const photoIDs = Array.isArray(meal.photoIDs) ? meal.photoIDs.filter(id => /^[a-f0-9]{32}$/.test(id)) : [];
+  if (!photoIDs.length) return;
+  $("#photoTitle").textContent = meal.name;
+  $("#photoGallery").innerHTML = photoIDs.map((id, index) => `<img src="${API_BASE}/images/${id}" alt="${escapeHtml(meal.name)}照片 ${index + 1}">`).join("");
+  $("#photoDialog").showModal();
+}
+
 function addDeletion(id, recordType) {
   state.deletions = state.deletions.filter(item => !(item.id === id && item.recordType === recordType));
   state.deletions.push({ id, recordType, deletedAt: nowSeconds() });
+  touchLocalState();
 }
 
 function recordedDates() {
@@ -227,10 +328,17 @@ $("#waterOptions").addEventListener("click", async event => {
   const button = event.target.closest("[data-water]"); if (!button) return;
   const amount = Number(button.dataset.water);
   state.waterEntries.push({ id: newID(), date: epochForDateKey(selectedDate), milliliters: amount, note: "网页版快速记录", updatedAt: nowSeconds() });
+  touchLocalState();
   render(); await syncNow(); showToast(`已记录 ${amount} ml 饮水`);
 });
 
 $("#mealList").addEventListener("click", async event => {
+  const photoButton = event.target.closest("[data-show-meal]");
+  if (photoButton) {
+    const meal = state.meals.find(item => item.id === photoButton.dataset.showMeal);
+    if (meal) showMealPhotos(meal);
+    return;
+  }
   const button = event.target.closest("[data-delete-meal]"); if (!button) return;
   addDeletion(button.dataset.deleteMeal, "meal");
   state.meals = state.meals.filter(item => item.id !== button.dataset.deleteMeal);
@@ -251,17 +359,34 @@ $("#calendarGrid").addEventListener("click", event => {
   const button = event.target.closest("[data-date]"); if (!button) return;
   selectedDate = button.dataset.date; localStorage.setItem(UI_DATE_KEY, selectedDate); render(); $("#calendarDialog").close();
 });
+$("#weekRings").addEventListener("click", event => {
+  const button = event.target.closest("[data-week-date]"); if (!button) return;
+  selectedDate = button.dataset.weekDate; localStorage.setItem(UI_DATE_KEY, selectedDate); render();
+});
 
 $("#addMealButton").addEventListener("click", () => $("#mealDialog").showModal());
 $("#closeMeal").addEventListener("click", () => $("#mealDialog").close());
 $("#mealForm").addEventListener("submit", async event => {
-  event.preventDefault(); const data = new FormData(event.currentTarget); const timestamp = nowSeconds();
-  state.meals.push({
-    id: newID(), date: epochForDateKey(selectedDate), kind: data.get("kind"), name: data.get("name").trim(),
-    calories: Number(data.get("calories")), protein: Number(data.get("protein")), carbs: Number(data.get("carbs")),
-    fat: Number(data.get("fat")), fiber: 0, note: "网页版记录", source: "手动", createdAt: timestamp, updatedAt: timestamp
-  });
-  render(); event.currentTarget.reset(); $("#mealDialog").close(); await syncNow(); showToast("餐食已保存");
+  event.preventDefault();
+  const form = event.currentTarget; const data = new FormData(form); const timestamp = nowSeconds(); const id = newID();
+  const submit = form.querySelector('[type="submit"]'); const originalLabel = submit.textContent;
+  submit.disabled = true; submit.textContent = "正在保存照片…";
+  try {
+    const files = Array.from(form.elements.photos.files || []);
+    if (files.length > 6) throw new Error("一次最多保存 6 张照片");
+    const photoIDs = await uploadMealPhotos(id, files);
+    state.meals.push({
+      id, date: epochForDateKey(selectedDate), kind: data.get("kind"), name: data.get("name").trim(),
+      calories: Number(data.get("calories")), protein: Number(data.get("protein")), carbs: Number(data.get("carbs")),
+      fat: Number(data.get("fat")), fiber: 0, note: "网页版记录", source: "手动", createdAt: timestamp, updatedAt: timestamp, photoIDs
+    });
+    touchLocalState();
+    render(); form.reset(); $("#mealDialog").close(); await syncNow(); showToast("餐食与照片已保存");
+  } catch (error) {
+    showToast(error.message || "照片保存失败");
+  } finally {
+    submit.disabled = false; submit.textContent = originalLabel;
+  }
 });
 
 $("#addWeightButton").addEventListener("click", () => $("#weightDialog").showModal());
@@ -269,6 +394,7 @@ $("#closeWeight").addEventListener("click", () => $("#weightDialog").close());
 $("#weightForm").addEventListener("submit", async event => {
   event.preventDefault(); const data = new FormData(event.currentTarget); const bodyFat = Number(data.get("bodyFat"));
   state.bodyMetrics.push({ id: newID(), date: epochForDateKey(selectedDate), weight: Number(data.get("weight")), bodyFat: bodyFat || null, waist: null, note: data.get("note").trim(), updatedAt: nowSeconds() });
+  touchLocalState();
   render(); event.currentTarget.reset(); $("#weightDialog").close(); await syncNow(); showToast("身体数据已保存");
 });
 
@@ -282,6 +408,7 @@ $("#goalsForm").addEventListener("submit", async event => {
   event.preventDefault(); const data = new FormData(event.currentTarget); const base = goals();
   state.settings = { ...base, id: "profile", updatedAt: nowSeconds() };
   for (const key of ["calorieGoal", "proteinGoal", "carbsGoal", "fatGoal", "waterGoal", "targetWeight"]) state.settings[key] = Number(data.get(key));
+  touchLocalState();
   render(); $("#goalsDialog").close(); await syncNow(); showToast("目标已同步到 App");
 });
 
@@ -290,3 +417,9 @@ $("#exportButton").addEventListener("click", () => {
   const url = URL.createObjectURL(blob); const link = document.createElement("a");
   link.href = url; link.download = `LifeRecord-${dateKey(new Date())}.json`; link.click(); URL.revokeObjectURL(url);
 });
+
+$("#closePhotos").addEventListener("click", () => $("#photoDialog").close());
+
+setInterval(() => { if (connected && document.visibilityState === "visible") syncNow("已自动同步", true); }, 15000);
+document.addEventListener("visibilitychange", () => { if (connected && document.visibilityState === "visible") syncNow("已自动同步", true); });
+window.addEventListener("focus", () => { if (connected) syncNow("已自动同步", true); });

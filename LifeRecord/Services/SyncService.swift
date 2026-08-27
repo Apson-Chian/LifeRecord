@@ -32,6 +32,7 @@ private struct SyncedMeal: Codable {
     var source: String
     var createdAt: Double
     var updatedAt: Double
+    var photoIDs: [String]?
 }
 
 private struct SyncedBodyMetric: Codable {
@@ -68,11 +69,14 @@ private struct SyncSnapshot: Codable {
 }
 
 enum SyncServiceError: LocalizedError {
+    case notConfigured
     case invalidResponse
     case server(String)
 
     var errorDescription: String? {
         switch self {
+        case .notConfigured:
+            "请先在设置中配置同步密钥，照片才能安全保存到你的服务器。"
         case .invalidResponse:
             "同步服务器返回了无法识别的数据。"
         case .server(let message):
@@ -85,6 +89,8 @@ enum SyncServiceError: LocalizedError {
 @Observable
 final class SyncCoordinator {
     private static let endpoint = URL(string: "https://apsonchian.ltd/liferecord-api/sync")!
+    private static let imageEndpoint = URL(string: "https://apsonchian.ltd/liferecord-api/images")!
+    private var needsAnotherSync = false
 
     var isSyncing = false
     var isConfigured = KeychainStore.hasSyncKey
@@ -102,23 +108,59 @@ final class SyncCoordinator {
 
     func sync(context: ModelContext, settings: AppSettings) async {
         let key = KeychainStore.loadSyncKey().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty, !isSyncing else { return }
+        guard !key.isEmpty else { return }
+        if isSyncing {
+            needsAnotherSync = true
+            return
+        }
         isConfigured = true
         isSyncing = true
         lastError = nil
         statusMessage = "正在同步…"
         defer { isSyncing = false }
 
-        do {
-            let outbound = try makeSnapshot(context: context, settings: settings)
-            let inbound = try await exchange(outbound, key: key)
-            try apply(inbound, context: context, settings: settings)
-            lastSyncedAt = .now
-            statusMessage = "所有设备已同步"
-        } catch {
-            lastError = error.localizedDescription
-            statusMessage = "同步失败"
+        repeat {
+            needsAnotherSync = false
+            do {
+                let outbound = try makeSnapshot(context: context, settings: settings)
+                let inbound = try await exchange(outbound, key: key)
+                try apply(inbound, context: context, settings: settings)
+                lastSyncedAt = .now
+                statusMessage = "所有设备已同步"
+            } catch {
+                lastError = error.localizedDescription
+                statusMessage = "同步失败"
+                break
+            }
+        } while needsAnotherSync
+    }
+
+    func uploadMealPhotos(_ images: [Data], mealID: UUID) async throws -> [String] {
+        guard !images.isEmpty else { return [] }
+        let key = KeychainStore.loadSyncKey().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw SyncServiceError.notConfigured }
+        var imageIDs: [String] = []
+        for image in images {
+            var request = URLRequest(url: Self.imageEndpoint)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 45
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "mealId": mealID.uuidString.lowercased(),
+                "base64": image.base64EncodedString()
+            ])
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw SyncServiceError.invalidResponse }
+            guard (200..<300).contains(http.statusCode) else {
+                let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                throw SyncServiceError.server(payload?["error"] as? String ?? "照片上传失败（\(http.statusCode)）")
+            }
+            guard let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let imageID = payload["id"] as? String else { throw SyncServiceError.invalidResponse }
+            imageIDs.append(imageID)
         }
+        return imageIDs
     }
 
     private func makeSnapshot(context: ModelContext, settings: AppSettings) throws -> SyncSnapshot {
@@ -138,7 +180,8 @@ final class SyncCoordinator {
                     note: $0.note,
                     source: $0.source.rawValue,
                     createdAt: $0.createdAt.timeIntervalSince1970,
-                    updatedAt: $0.updatedAt.timeIntervalSince1970
+                    updatedAt: $0.updatedAt.timeIntervalSince1970,
+                    photoIDs: $0.photoIDs
                 )
             }
         let bodyMetrics = try context.fetch(FetchDescriptor<BodyMetric>())
@@ -267,6 +310,7 @@ final class SyncCoordinator {
                 local.sourceRaw = remote.source
                 local.createdAt = Date(timeIntervalSince1970: remote.createdAt)
                 local.updatedAt = updatedAt
+                local.photoIDs = remote.photoIDs ?? []
             } else {
                 let entry = MealEntry(
                     id: id,
@@ -279,7 +323,8 @@ final class SyncCoordinator {
                     fat: remote.fat,
                     fiber: remote.fiber,
                     note: remote.note,
-                    source: EntrySource(rawValue: remote.source) ?? .manual
+                    source: EntrySource(rawValue: remote.source) ?? .manual,
+                    photoIDs: remote.photoIDs ?? []
                 )
                 entry.createdAt = Date(timeIntervalSince1970: remote.createdAt)
                 entry.updatedAt = updatedAt

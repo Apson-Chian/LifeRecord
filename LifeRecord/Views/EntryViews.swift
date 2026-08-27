@@ -6,6 +6,7 @@ struct AddMealView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var syncCoordinator
 
     let defaultDate: Date
     @State private var date: Date
@@ -17,6 +18,7 @@ struct AddMealView: View {
     @State private var imageData: [Data] = []
     @State private var isLoadingPhotos = false
     @State private var isAnalyzing = false
+    @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var wasAIAnalyzed = false
     @FocusState private var focusedField: Field?
@@ -71,7 +73,7 @@ struct AddMealView: View {
                 } header: {
                     Text("这顿吃了什么")
                 } footer: {
-                    Text("照片和文字会直接发送到你配置的 AI 服务商。结果只是估算，保存前请复核。")
+                    Text("照片和文字会发送到你配置的 AI 服务商；保存餐食后，照片会存入你的私有服务器，手机只保留很小的图片编号。结果只是估算，保存前请复核。")
                 }
 
                 Section("记录") {
@@ -109,9 +111,9 @@ struct AddMealView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
+                    Button(isSaving ? "保存中…" : "保存") { Task { await save() } }
                         .fontWeight(.semibold)
-                        .disabled(isAnalyzing || isLoadingPhotos)
+                        .disabled(isAnalyzing || isLoadingPhotos || isSaving)
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -199,7 +201,8 @@ struct AddMealView: View {
         if loaded.count < items.count { errorMessage = "有 \(items.count - loaded.count) 张照片无法读取，请重新选择。" }
     }
 
-    private func save() {
+    @MainActor
+    private func save() async {
         let typedName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let describedName = description.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = typedName.isEmpty ? describedName : typedName
@@ -216,10 +219,23 @@ struct AddMealView: View {
             return
         }
 
+        isSaving = true
+        defer { isSaving = false }
+
         var mealEntry: MealEntry?
         var waterEntry: WaterEntry?
         if hasNutrition {
+            let mealID = UUID()
+            let photoIDs: [String]
+            do {
+                photoIDs = try await syncCoordinator.uploadMealPhotos(imageData, mealID: mealID)
+            } catch {
+                errorMessage = "照片保存失败：\(error.localizedDescription)"
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                return
+            }
             let entry = MealEntry(
+                id: mealID,
                 date: date,
                 kind: kind,
                 name: name,
@@ -229,7 +245,8 @@ struct AddMealView: View {
                 fat: draft.fat,
                 fiber: draft.fiber,
                 note: draft.note,
-                source: wasAIAnalyzed ? .ai : .manual
+                source: wasAIAnalyzed ? .ai : .manual,
+                photoIDs: photoIDs
             )
             mealEntry = entry
             modelContext.insert(entry)
@@ -245,6 +262,7 @@ struct AddMealView: View {
         }
         do {
             try modelContext.save()
+            await syncCoordinator.sync(context: modelContext, settings: settings)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
         } catch {

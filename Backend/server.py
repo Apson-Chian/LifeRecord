@@ -7,6 +7,8 @@ import hashlib
 import hmac
 import json
 import os
+import base64
+import binascii
 import sqlite3
 import threading
 import time
@@ -21,8 +23,10 @@ from urllib.parse import urlparse
 HOST = os.environ.get("LIFERECORD_HOST", "127.0.0.1")
 PORT = int(os.environ.get("LIFERECORD_PORT", "18084"))
 DB_PATH = Path(os.environ.get("LIFERECORD_DB", "/var/lib/liferecord-sync/liferecord.sqlite3"))
+IMAGE_DIR = Path(os.environ.get("LIFERECORD_IMAGE_DIR", str(DB_PATH.parent / "images")))
 SYNC_TOKEN = os.environ.get("LIFERECORD_SYNC_TOKEN", "")
-MAX_BODY = 2 * 1024 * 1024
+MAX_BODY = 8 * 1024 * 1024
+MAX_IMAGE_BYTES = 4 * 1024 * 1024
 ALLOWED_TYPES = {"meal", "body", "water", "settings"}
 COOKIE_NAME = "liferecord_session"
 
@@ -31,6 +35,7 @@ if len(SYNC_TOKEN) < 20:
 
 TOKEN_HASH = hashlib.sha256(SYNC_TOKEN.encode()).hexdigest()
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 _db_lock = threading.Lock()
 _failed_auth: dict[str, deque[float]] = defaultdict(deque)
 
@@ -60,6 +65,20 @@ def initialize() -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_records_type_updated ON records(record_type, updated_at)"
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS meal_images (
+                image_id TEXT PRIMARY KEY,
+                meal_id TEXT NOT NULL,
+                filename TEXT NOT NULL UNIQUE,
+                content_type TEXT NOT NULL,
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_meal_images_meal_id ON meal_images(meal_id)"
+        )
         connection.execute("PRAGMA optimize")
 
 
@@ -80,6 +99,14 @@ def validate_record(record_type: str, item: dict) -> None:
         for key, maximum in (("calories", 20_000), ("protein", 2_000), ("carbs", 3_000), ("fat", 2_000), ("fiber", 500)):
             if not valid_number(item.get(key, 0), 0, maximum):
                 raise ValueError(f"invalid meal {key}")
+        photo_ids = item.get("photoIDs", [])
+        if not isinstance(photo_ids, list) or len(photo_ids) > 12 or any(
+            not isinstance(image_id, str)
+            or len(image_id) != 32
+            or any(character not in "0123456789abcdef" for character in image_id)
+            for image_id in photo_ids
+        ):
+            raise ValueError("invalid meal photo ids")
     elif record_type == "body":
         if not valid_number(item.get("weight"), 20, 400):
             raise ValueError("invalid weight")
@@ -126,8 +153,75 @@ def merge_snapshot(snapshot: dict) -> None:
             deleted = excluded.deleted
         WHERE excluded.updated_at >= records.updated_at
     """
+    deleted_image_files: list[str] = []
+    deleted_meal_ids = [record_id for record_type, record_id, _, _, deleted in operations if record_type == "meal" and deleted]
     with _db_lock, connect() as connection:
         connection.executemany(statement, operations)
+        for meal_id in deleted_meal_ids:
+            record = connection.execute(
+                "SELECT deleted FROM records WHERE record_type = 'meal' AND record_id = ?",
+                (meal_id,),
+            ).fetchone()
+            if record and record["deleted"]:
+                deleted_image_files.extend(
+                    row["filename"] for row in connection.execute(
+                        "SELECT filename FROM meal_images WHERE meal_id = ?", (meal_id,)
+                    ).fetchall()
+                )
+                connection.execute("DELETE FROM meal_images WHERE meal_id = ?", (meal_id,))
+    for filename in deleted_image_files:
+        try:
+            (IMAGE_DIR / filename).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def store_meal_image(payload: dict) -> dict:
+    meal_id = payload.get("mealId")
+    encoded = payload.get("base64")
+    if not isinstance(meal_id, str) or not (1 <= len(meal_id) <= 80):
+        raise ValueError("invalid meal id")
+    if not isinstance(encoded, str) or not encoded:
+        raise ValueError("image data is required")
+    try:
+        image = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise ValueError("invalid image data") from error
+    if not image or len(image) > MAX_IMAGE_BYTES:
+        raise ValueError("image must be between 1 byte and 4 MB")
+
+    if image.startswith(b"\xff\xd8\xff"):
+        content_type, suffix = "image/jpeg", ".jpg"
+    elif image.startswith(b"\x89PNG\r\n\x1a\n"):
+        content_type, suffix = "image/png", ".png"
+    elif len(image) > 12 and image[:4] == b"RIFF" and image[8:12] == b"WEBP":
+        content_type, suffix = "image/webp", ".webp"
+    else:
+        raise ValueError("only JPEG, PNG and WebP images are supported")
+
+    image_id = hashlib.sha256(meal_id.lower().encode() + image).hexdigest()[:32]
+    filename = f"{image_id}{suffix}"
+    destination = IMAGE_DIR / filename
+    destination.write_bytes(image)
+    try:
+        with _db_lock, connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO meal_images(image_id, meal_id, filename, content_type, created_at) VALUES (?, ?, ?, ?, ?)",
+                (image_id, meal_id.lower(), filename, content_type, time.time()),
+            )
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    return {"id": image_id, "url": f"/liferecord-api/images/{image_id}"}
+
+
+def image_record(image_id: str) -> sqlite3.Row | None:
+    if len(image_id) != 32 or any(character not in "0123456789abcdef" for character in image_id):
+        return None
+    with _db_lock, connect() as connection:
+        return connection.execute(
+            "SELECT filename, content_type FROM meal_images WHERE image_id = ?", (image_id,)
+        ).fetchone()
 
 
 def current_snapshot() -> dict:
@@ -170,6 +264,27 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(HTTPStatus.OK, current_snapshot())
             return
+        if path.startswith("/liferecord-api/images/"):
+            if not self._authorized():
+                self._json(HTTPStatus.UNAUTHORIZED, {"error": "需要先配对同步密钥"})
+                return
+            image_id = path.rsplit("/", 1)[-1].lower()
+            record = image_record(image_id)
+            if not record:
+                self._json(HTTPStatus.NOT_FOUND, {"error": "image not found"})
+                return
+            try:
+                encoded = (IMAGE_DIR / record["filename"]).read_bytes()
+            except OSError:
+                self._json(HTTPStatus.NOT_FOUND, {"error": "image not found"})
+                return
+            self.send_response(HTTPStatus.OK)
+            self._security_headers()
+            self.send_header("Content-Type", record["content_type"])
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def do_POST(self) -> None:
@@ -191,6 +306,16 @@ class Handler(BaseHTTPRequestHandler):
                 payload = self._read_json()
                 merge_snapshot(payload)
                 self._json(HTTPStatus.OK, current_snapshot())
+            except (ValueError, json.JSONDecodeError) as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/liferecord-api/images":
+            if not self._authorized():
+                self._json(HTTPStatus.UNAUTHORIZED, {"error": "同步密钥无效"})
+                return
+            try:
+                result = store_meal_image(self._read_json())
+                self._json(HTTPStatus.CREATED, result)
             except (ValueError, json.JSONDecodeError) as error:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return

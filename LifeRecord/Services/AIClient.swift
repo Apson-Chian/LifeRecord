@@ -239,26 +239,97 @@ struct AIClient {
                 ?? "未知错误"
             throw AIClientError.server("接口错误 \(http.statusCode)：\(message.prefix(360))")
         }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = object["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any] else {
+        guard let content = Self.responseText(from: data), !content.isEmpty else {
             throw AIClientError.invalidResponse
         }
-        if let content = message["content"] as? String {
-            return content.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let parts = message["content"] as? [[String: Any]] {
-            let text = parts.compactMap { $0["text"] as? String }.joined()
-            if !text.isEmpty { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
-        }
-        throw AIClientError.invalidResponse
+        return content
     }
 
     private func cleanedJSON(_ value: String) -> String {
-        value
+        let cleaned = value
             .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```JSON", with: "")
             .replacingOccurrences(of: "```", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let start = cleaned.firstIndex(where: { $0 == "{" || $0 == "[" }) else { return cleaned }
+        let opening = cleaned[start]
+        let closing: Character = opening == "{" ? "}" : "]"
+        var depth = 0
+        var isInsideString = false
+        var isEscaped = false
+        var cursor = start
+        while cursor < cleaned.endIndex {
+            let character = cleaned[cursor]
+            if isInsideString {
+                if isEscaped {
+                    isEscaped = false
+                } else if character == "\\" {
+                    isEscaped = true
+                } else if character == "\"" {
+                    isInsideString = false
+                }
+            } else if character == "\"" {
+                isInsideString = true
+            } else if character == opening {
+                depth += 1
+            } else if character == closing {
+                depth -= 1
+                if depth == 0 { return String(cleaned[start...cursor]) }
+            }
+            cursor = cleaned.index(after: cursor)
+        }
+        return cleaned
+    }
+
+    /// Accepts OpenAI Chat Completions, OpenAI Responses-style output, provider wrappers,
+    /// and servers that return SSE despite `stream: false`.
+    nonisolated static func responseText(from data: Data) -> String? {
+        if let object = try? JSONSerialization.jsonObject(with: data),
+           let text = extractResponseText(object)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        guard let raw = String(data: data, encoding: .utf8) else { return nil }
+        let chunks = raw.split(whereSeparator: \Character.isNewline).compactMap { line -> String? in
+            let value = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard value.hasPrefix("data:") else { return nil }
+            let payload = value.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard payload != "[DONE]", let chunkData = payload.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: chunkData) else { return nil }
+            return extractResponseText(object)
+        }
+        let joined = chunks.joined()
+        if !joined.isEmpty { return joined.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let plain = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return plain.isEmpty || plain.hasPrefix("<") ? nil : plain
+    }
+
+    nonisolated private static func extractResponseText(_ value: Any) -> String? {
+        if let text = value as? String { return text.isEmpty ? nil : text }
+        if let values = value as? [Any] {
+            let text = values.compactMap(extractResponseText).joined()
+            return text.isEmpty ? nil : text
+        }
+        guard let object = value as? [String: Any] else { return nil }
+
+        if let choices = object["choices"] as? [Any] {
+            for choice in choices {
+                guard let dictionary = choice as? [String: Any] else { continue }
+                for key in ["message", "delta", "text"] {
+                    if let nested = dictionary[key], let text = extractResponseText(nested), !text.isEmpty { return text }
+                }
+            }
+        }
+        for key in ["output_text", "answer", "result", "message", "content", "output", "data", "text"] {
+            if let nested = object[key], let text = extractResponseText(nested), !text.isEmpty { return text }
+        }
+        if (object["name"] != nil || object["actions"] != nil),
+           JSONSerialization.isValidJSONObject(object),
+           let data = try? JSONSerialization.data(withJSONObject: object),
+           let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        return nil
     }
 
     /// 统一转成 JPEG 再发送：相册原图可能是 HEIC，多模态接口普遍只接受 JPEG/PNG/WebP。

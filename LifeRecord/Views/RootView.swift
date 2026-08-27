@@ -14,8 +14,12 @@ struct RootView: View {
     @Query private var tombstones: [SyncTombstone]
     @State private var showsOnboarding = !OnboardingState.hasSeenOnboarding
 
-    private var syncFingerprint: Int {
-        meals.count &* 31 &+ bodyMetrics.count &* 17 &+ waterEntries.count &* 13 &+ tombstones.count
+    private var syncFingerprint: String {
+        let mealStamp = meals.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
+        let bodyStamp = bodyMetrics.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
+        let waterStamp = waterEntries.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
+        let deletionStamp = tombstones.map(\.deletedAt.timeIntervalSince1970).max() ?? 0
+        return "\(meals.count):\(mealStamp):\(bodyMetrics.count):\(bodyStamp):\(waterEntries.count):\(waterStamp):\(tombstones.count):\(deletionStamp)"
     }
 
     var body: some View {
@@ -71,6 +75,11 @@ struct RootView: View {
         .task {
             DemoDataService.installIfNeeded(context: modelContext)
             await syncCoordinator.sync(context: modelContext, settings: settings)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled else { break }
+                await syncCoordinator.sync(context: modelContext, settings: settings)
+            }
         }
         .onChange(of: syncFingerprint) { _, _ in
             Task { await syncCoordinator.sync(context: modelContext, settings: settings) }

@@ -48,7 +48,13 @@ struct TodayView: View {
                 AppBackground()
                 ScrollView {
                     LazyVStack(spacing: 18) {
-                        DateNavigator(selectedDate: $selectedDate, recordedDates: recordedDates)
+                        DateNavigator(
+                            selectedDate: $selectedDate,
+                            recordedDates: recordedDates,
+                            meals: meals,
+                            proteinGoal: settings.proteinGoal,
+                            carbsGoal: settings.carbsGoal
+                        )
                         demoDataBanner
                         goalHero
                         quickActions
@@ -372,47 +378,68 @@ struct TodayView: View {
 private struct DateNavigator: View {
     @Binding var selectedDate: Date
     let recordedDates: Set<Date>
+    let meals: [MealEntry]
+    let proteinGoal: Double
+    let carbsGoal: Double
     private let calendar = Calendar.current
     @State private var isShowingCalendar = false
 
+    private var weekDates: [Date] {
+        let start = calendar.dateInterval(of: .weekOfYear, for: selectedDate)?.start
+            ?? calendar.startOfDay(for: selectedDate)
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+    }
+
     var body: some View {
-        HStack(spacing: 10) {
-            Button { moveDay(-1) } label: {
-                Image(systemName: "chevron.left")
-                    .frame(width: 36, height: 36)
-            }
-            .buttonStyle(PressScaleButtonStyle())
-
-            Button {
-                isShowingCalendar = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "calendar")
-                    Text(selectedDate.formatted(.dateTime.year().month().day().weekday()))
-                        .font(.subheadline.weight(.semibold))
+        VStack(spacing: 11) {
+            HStack(spacing: 10) {
+                Button { moveDay(-1) } label: {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 36, height: 36)
                 }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+                .buttonStyle(PressScaleButtonStyle())
 
-            if !calendar.isDateInToday(selectedDate) {
-                Button("今天") {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 1)) { selectedDate = .now }
+                Button {
+                    isShowingCalendar = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "calendar")
+                        Text(selectedDate.formatted(.dateTime.year().month().day().weekday()))
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
                 }
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
+                .buttonStyle(.plain)
+
+                if !calendar.isDateInToday(selectedDate) {
+                    Button("今天") {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 1)) { selectedDate = .now }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                }
+
+                Button { moveDay(1) } label: {
+                    Image(systemName: "chevron.right")
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(PressScaleButtonStyle())
             }
 
-            Button { moveDay(1) } label: {
-                Image(systemName: "chevron.right")
-                    .frame(width: 36, height: 36)
+            HStack(spacing: 2) {
+                ForEach(weekDates, id: \.self) { date in
+                    dayRingButton(date)
+                }
             }
-            .buttonStyle(PressScaleButtonStyle())
         }
-        .padding(8)
-        .background(.regularMaterial, in: Capsule())
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.22), lineWidth: 0.5)
+        }
         .sheet(isPresented: $isShowingCalendar) {
             RecordCalendarView(selectedDate: $selectedDate, recordedDates: recordedDates)
                 .presentationDetents([.medium, .large])
@@ -423,6 +450,39 @@ private struct DateNavigator: View {
     private func moveDay(_ value: Int) {
         guard let next = calendar.date(byAdding: .day, value: value, to: selectedDate) else { return }
         withAnimation(.spring(response: 0.32, dampingFraction: 1)) { selectedDate = next }
+    }
+
+    private func dayRingButton(_ date: Date) -> some View {
+        let dayMeals = meals.filter { calendar.isDate($0.date, inSameDayAs: date) }
+        let protein = dayMeals.reduce(0) { $0 + $1.protein }
+        let carbs = dayMeals.reduce(0) { $0 + $1.carbs }
+        let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
+        let hasRecord = recordedDates.contains(calendar.startOfDay(for: date))
+
+        return Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 1)) { selectedDate = date }
+        } label: {
+            VStack(spacing: 5) {
+                Text(date.formatted(.dateTime.weekday(.narrow)))
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                    .frame(width: 24, height: 20)
+                    .background(isSelected ? AppTheme.meals : Color.clear, in: Circle())
+                MiniNutritionRings(
+                    mealCount: dayMeals.count,
+                    proteinProgress: protein / max(proteinGoal, 1),
+                    carbsProgress: carbs / max(carbsGoal, 1),
+                    day: calendar.component(.day, from: date)
+                )
+                .frame(width: 42, height: 42)
+                .opacity(hasRecord || isSelected ? 1 : 0.34)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScaleButtonStyle())
+        .accessibilityLabel(date.formatted(date: .long, time: .omitted))
+        .accessibilityValue(hasRecord ? "已有记录" : "无记录")
     }
 }
 
@@ -435,12 +495,12 @@ private struct NutritionActivityRings: View {
 
     var body: some View {
         ZStack {
-            ActivityRing(progress: protein / max(proteinGoal, 1), color: AppTheme.protein, lineWidth: 10)
-                .padding(1)
-            ActivityRing(progress: carbs / max(carbsGoal, 1), color: AppTheme.carbs, lineWidth: 9)
-                .padding(16)
-            ActivityRing(progress: Double(mealCount) / 4, color: AppTheme.meals, lineWidth: 8)
-                .padding(30)
+            ActivityRing(progress: protein / max(proteinGoal, 1), color: AppTheme.protein, lineWidth: 14)
+                .padding(7)
+            ActivityRing(progress: carbs / max(carbsGoal, 1), color: AppTheme.carbs, lineWidth: 14)
+                .padding(21)
+            ActivityRing(progress: Double(mealCount) / 4, color: AppTheme.meals, lineWidth: 14)
+                .padding(35)
             VStack(spacing: 0) {
                 Text("\(mealCount)")
                     .font(.title3.bold().monospacedDigit())
@@ -456,6 +516,7 @@ private struct NutritionActivityRings: View {
 }
 
 private struct ActivityRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let progress: Double
     let color: Color
     let lineWidth: CGFloat
@@ -463,17 +524,42 @@ private struct ActivityRing: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(color.opacity(0.14), lineWidth: lineWidth)
+                .stroke(color.opacity(0.13), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: min(max(progress, 0), 1))
                 .stroke(
-                    AngularGradient(colors: [color.opacity(0.72), color], center: .center),
+                    AngularGradient(
+                        colors: [color.opacity(0.72), color, color.opacity(0.88), color],
+                        center: .center,
+                        startAngle: .degrees(-35),
+                        endAngle: .degrees(325)
+                    ),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .shadow(color: color.opacity(0.22), radius: 4, y: 2)
-                .animation(.spring(response: 0.5, dampingFraction: 0.88), value: progress)
+                .shadow(color: .black.opacity(0.2), radius: 2.6, x: 1.2, y: 2.2)
+                .shadow(color: color.opacity(0.34), radius: 4, y: 1)
+                .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.88), value: progress)
         }
+    }
+}
+
+private struct MiniNutritionRings: View {
+    let mealCount: Int
+    let proteinProgress: Double
+    let carbsProgress: Double
+    let day: Int
+
+    var body: some View {
+        ZStack {
+            ActivityRing(progress: proteinProgress, color: AppTheme.protein, lineWidth: 5).padding(2.5)
+            ActivityRing(progress: carbsProgress, color: AppTheme.carbs, lineWidth: 5).padding(7.5)
+            ActivityRing(progress: Double(mealCount) / 4, color: AppTheme.meals, lineWidth: 5).padding(12.5)
+            Text("\(day)")
+                .font(.system(size: 8, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityHidden(true)
     }
 }
 

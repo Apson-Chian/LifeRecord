@@ -38,6 +38,19 @@ button { cursor: pointer; }
 .brand small { margin-top: 1px; color: var(--muted); font-size: 11px; letter-spacing: .12em; }
 .date-button { display: flex; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 999px; padding: 10px 15px; color: var(--text); background: rgba(255,255,255,.7); box-shadow: 0 8px 26px rgba(45,45,80,.05); }
 .date-icon { color: var(--accent); }
+.week-rings { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 18px; padding: 12px 16px; border: 1px solid rgba(255,255,255,.85); border-radius: 24px; background: var(--card); box-shadow: 0 14px 42px rgba(37,36,77,.07); backdrop-filter: blur(22px); }
+.week-day { display: grid; justify-items: center; gap: 6px; min-width: 0; border: 0; border-radius: 16px; padding: 5px 2px 7px; color: var(--muted); background: transparent; }
+.week-day:hover { background: rgba(92,82,240,.07); }
+.week-day > span { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; font-size: 11px; font-weight: 800; }
+.week-day.selected > span { color: #fff; background: var(--meals); box-shadow: 0 5px 12px rgba(240,64,85,.3); }
+.mini-rings { position: relative; width: 48px; height: 48px; opacity: .38; transition: opacity .25s ease, transform .25s cubic-bezier(.2,.8,.2,1); }
+.week-day.recorded .mini-rings, .week-day.selected .mini-rings { opacity: 1; }
+.week-day:active .mini-rings { transform: scale(.94); }
+.mini-ring { position: absolute; border-radius: 50%; background: conic-gradient(from -90deg, color-mix(in srgb, var(--color) 72%, #202035) 0, var(--color) calc(var(--progress, 0) * .74turn), color-mix(in srgb, var(--color) 72%, white) calc(var(--progress, 0) * 1turn), color-mix(in srgb, var(--color) 13%, transparent) 0); mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4.5px)); filter: drop-shadow(1px 1.5px 1.5px rgba(20,20,35,.18)); }
+.mini-protein { inset: 0; --color: var(--protein); }
+.mini-carbs { inset: 5px; --color: var(--carbs); }
+.mini-meals { inset: 10px; --color: var(--meals); }
+.mini-day-number { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 8px; font-weight: 850; font-variant-numeric: tabular-nums; }
 .hero-grid, .content-grid { display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(300px, .88fr); gap: 18px; }
 .content-grid { margin-top: 18px; align-items: start; }
 .card { border: 1px solid rgba(255,255,255,.85); border-radius: 28px; padding: 25px; background: var(--card); box-shadow: var(--shadow); backdrop-filter: blur(22px); }
@@ -50,10 +63,10 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .goal-chip { white-space: nowrap; padding: 7px 11px; border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-size: 12px; font-weight: 700; }
 .activity-content { display: flex; align-items: center; gap: clamp(30px, 6vw, 66px); margin: 24px 0 12px; padding-left: 16px; }
 .rings { position: relative; flex: 0 0 158px; height: 158px; }
-.ring { position: absolute; border-radius: 50%; background: conic-gradient(var(--color) calc(var(--progress, 0) * 1turn), color-mix(in srgb, var(--color) 13%, transparent) 0); transform: rotate(-90deg); transition: background .45s ease; mask: radial-gradient(farthest-side, transparent calc(100% - var(--width)), #000 calc(100% - var(--width) + 1px)); }
-.ring-protein { inset: 0; --color: var(--protein); --width: 13px; }
-.ring-carbs { inset: 20px; --color: var(--carbs); --width: 12px; }
-.ring-meals { inset: 39px; --color: var(--meals); --width: 11px; }
+.ring { position: absolute; border-radius: 50%; background: conic-gradient(from -90deg, color-mix(in srgb, var(--color) 70%, #22223a) 0, var(--color) calc(var(--progress, 0) * .74turn), color-mix(in srgb, var(--color) 70%, white) calc(var(--progress, 0) * 1turn), color-mix(in srgb, var(--color) 13%, transparent) 0); transition: background .45s ease; mask: radial-gradient(farthest-side, transparent calc(100% - 18px), #000 calc(100% - 17.5px)); filter: drop-shadow(2px 3px 2.5px rgba(20,20,40,.2)) drop-shadow(0 0 4px color-mix(in srgb, var(--color) 24%, transparent)); }
+.ring-protein { inset: 0; --color: var(--protein); }
+.ring-carbs { inset: 18px; --color: var(--carbs); }
+.ring-meals { inset: 36px; --color: var(--meals); }
 .ring-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .ring-center strong { font-size: 28px; line-height: 1; }
 .ring-center span { margin-top: 3px; color: var(--muted); font-size: 12px; }
@@ -81,8 +94,11 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .secondary-button { border: 0; border-radius: 14px; padding: 11px 15px; color: var(--accent); background: var(--accent-soft); font-size: 13px; font-weight: 750; }
 .text-button { border: 0; color: var(--accent); background: transparent; font-size: 13px; font-weight: 750; }
 .meal-list { display: grid; gap: 11px; margin-top: 21px; }
-.meal-item { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 18px; background: rgba(248,248,253,.7); }
+.meal-item { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 18px; background: rgba(248,248,253,.7); }
 .meal-symbol { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: var(--accent-soft); }
+.meal-photo { position: relative; width: 48px; height: 48px; overflow: hidden; border: 0; border-radius: 14px; padding: 0; background: var(--accent-soft); box-shadow: 0 6px 14px rgba(32,32,55,.12); }
+.meal-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.meal-photo em { position: absolute; right: 3px; bottom: 3px; min-width: 17px; padding: 2px 4px; border-radius: 999px; color: #fff; background: rgba(20,20,28,.7); font-size: 9px; font-style: normal; font-weight: 800; }
 .meal-copy strong, .meal-copy small { display: block; }
 .meal-copy strong { font-size: 14px; }
 .meal-copy small { margin-top: 4px; color: var(--muted); font-size: 11px; }
@@ -111,6 +127,7 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .auth-mark { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 17px; border-radius: 18px; color: #fff; background: linear-gradient(145deg, #8277ff, #4e45dd); font-size: 28px; font-weight: 850; box-shadow: 0 12px 28px rgba(92,82,240,.25); }
 .auth-copy { margin: 12px 0 18px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .form-error { min-height: 17px; margin-top: 8px; color: #d83f4c; font-size: 11px; text-align: left; }
+.upload-hint { margin-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .modal { width: min(460px, calc(100% - 28px)); border: 0; padding: 0; border-radius: 26px; color: var(--text); background: transparent; box-shadow: 0 28px 100px rgba(20,20,45,.28); }
 .modal::backdrop { background: rgba(22,22,35,.35); backdrop-filter: blur(8px); }
 .modal-sheet { padding: 24px; background: #fff; }
@@ -133,6 +150,9 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .calendar-day.selected.recorded::after { background: #8dffaf; }
 .calendar-hint { display: flex; align-items: center; gap: 7px; margin-top: 16px; color: var(--muted); font-size: 11px; }
 .record-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--recorded); }
+.photo-modal { width: min(760px, calc(100% - 28px)); }
+.photo-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; max-height: 72vh; overflow: auto; }
+.photo-gallery img { width: 100%; max-height: 520px; border-radius: 18px; object-fit: contain; background: #f2f2f7; box-shadow: 0 10px 30px rgba(25,25,45,.12); }
 .toast { position: fixed; left: 50%; bottom: 28px; z-index: 20; padding: 11px 16px; border-radius: 999px; color: white; background: #23232b; font-size: 12px; opacity: 0; transform: translate(-50%, 12px); transition: .2s ease; pointer-events: none; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
@@ -145,13 +165,17 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
   .card { border-radius: 23px; padding: 20px; }
   .activity-content { justify-content: center; gap: 25px; padding-left: 0; }
   .rings { flex-basis: 142px; height: 142px; }
-  .ring-carbs { inset: 18px; } .ring-meals { inset: 35px; }
+  .week-rings { overflow-x: auto; padding-inline: 10px; }
+  .mini-rings { width: 44px; height: 44px; }
+  .ring { mask: radial-gradient(farthest-side, transparent calc(100% - 16px), #000 calc(100% - 15.5px)); }
+  .ring-carbs { inset: 16px; } .ring-meals { inset: 32px; }
 }
 
 @media (max-width: 450px) {
   .activity-content { align-items: center; gap: 20px; }
   .rings { flex-basis: 128px; height: 128px; }
-  .ring-protein { --width: 11px; } .ring-carbs { inset: 17px; --width: 10px; } .ring-meals { inset: 33px; --width: 9px; }
+  .ring { mask: radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 13.5px)); }
+  .ring-carbs { inset: 14px; } .ring-meals { inset: 28px; }
   .ring-legend { gap: 12px; }
   .section-heading.compact { align-items: start; }
   .form-grid { grid-template-columns: 1fr; }
