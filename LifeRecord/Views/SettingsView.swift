@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-struct SettingsView: View {
+private struct LegacySettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
     @Environment(\.modelContext) private var modelContext
@@ -145,7 +145,7 @@ struct SettingsView: View {
                     Text("AI 能力与权限")
                 } footer: {
                     Text(settings.aiCanWrite
-                         ? "AI 可按你的明确要求新增餐食、体重、饮水记录并调整目标；删除仍需你手动完成。"
+                         ? "AI 可按你的明确要求新增或删除餐食、体重与饮水记录，并调整目标。"
                          : "AI 目前只能读取摘要并回答，不会修改任何记录。")
                 }
 
@@ -321,7 +321,7 @@ struct SettingsView: View {
     }
 }
 
-private struct SyncKeyEditorView: View {
+struct SyncKeyEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var settings
@@ -444,7 +444,7 @@ private struct SyncKeyEditorView: View {
     }
 }
 
-private struct APIKeyEditorView: View {
+struct APIKeyEditorView: View {
     @Environment(\.dismiss) private var dismiss
     let settings: AppSettings
 

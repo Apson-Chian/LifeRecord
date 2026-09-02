@@ -344,7 +344,7 @@ struct TodayView: View {
 
     private var insightCard: some View {
         Button {
-            router.openCoach(draft: "请结合我今天的记录，进一步分析这条今日提示并给出可执行建议：\n\(localInsight)")
+            router.openCoach(draft: "请根据我今天的数据，进一步分析这条提示并给出可执行建议：\n\(localInsight)")
         } label: {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: "lightbulb.max.fill")
@@ -771,22 +771,31 @@ private struct MealSection: View {
 
     var body: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(kind.rawValue, systemImage: kind.symbol)
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.accent)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label(kind.rawValue, systemImage: kind.symbol)
+                        .font(.headline)
+                        .foregroundStyle(AppTheme.accent)
+                    Spacer()
+                    Text("\(Int(meals.reduce(0) { $0 + $1.calories })) kcal")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(meals) { meal in
                     NavigationLink {
                         MealDetailView(meal: meal)
                     } label: {
-                        HStack(spacing: 12) {
-                            if let imageID = meal.photoIDs.first {
-                                MealPhotoView(imageID: imageID)
-                                    .frame(width: 48, height: 48)
-                            }
+                        HStack(spacing: 11) {
+                            Image(systemName: meal.kind.symbol)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppTheme.accent)
+                                .frame(width: 38, height: 38)
+                                .background(AppTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: 5) {
-                                    Text(meal.name).font(.subheadline.weight(.semibold))
+                                    Text(meal.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .lineLimit(1)
                                     if meal.source == .ai {
                                         Image(systemName: "sparkles").font(.caption2).foregroundStyle(AppTheme.accent)
                                     }
@@ -804,13 +813,19 @@ private struct MealSection: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Text("\(meal.calories, specifier: "%.0f")")
-                                .font(.subheadline.weight(.semibold).monospacedDigit())
-                            Text("kcal").font(.caption2).foregroundStyle(.secondary)
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("\(meal.calories, specifier: "%.0f") kcal")
+                                    .font(.caption.weight(.semibold).monospacedDigit())
+                                Text(meal.date.formatted(date: .omitted, time: .shortened))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
+                                .font(.caption2.weight(.bold))
                                 .foregroundStyle(.tertiary)
                         }
+                        .padding(10)
+                        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
@@ -819,7 +834,6 @@ private struct MealSection: View {
                             try? modelContext.save()
                         }
                     }
-                    if meal.id != meals.last?.id { Divider() }
                 }
             }
         }

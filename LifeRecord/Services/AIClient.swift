@@ -39,6 +39,7 @@ struct AIAgentReply: Codable {
 struct AIAgentAction: Codable, Identifiable {
     var id = UUID()
     var type: String
+    var recordID: String?
     var date: String?
     var mealKind: String?
     var name: String?
@@ -51,6 +52,7 @@ struct AIAgentAction: Codable, Identifiable {
     var bodyFat: Double?
     var waist: Double?
     var waterML: Double?
+    var waterSource: String?
     var targetWeight: Double?
     var calorieGoal: Double?
     var proteinGoal: Double?
@@ -59,7 +61,7 @@ struct AIAgentAction: Codable, Identifiable {
     var note: String?
 
     enum CodingKeys: String, CodingKey {
-        case type, date, mealKind, name, calories, protein, carbs, fat, fiber, weight, bodyFat, waist, waterML, targetWeight, calorieGoal, proteinGoal, carbsGoal, fatGoal, note
+        case type, recordID, date, mealKind, name, calories, protein, carbs, fat, fiber, weight, bodyFat, waist, waterML, waterSource, targetWeight, calorieGoal, proteinGoal, carbsGoal, fatGoal, note
     }
 }
 
@@ -99,7 +101,7 @@ struct AIClient {
 
         只输出 JSON，不要 Markdown：
         {"name":"简短餐食名称","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"waterML":0,"note":"识别依据、每份/总份量、配料或不确定性"}
-        单位：热量 kcal，waterML 为 ml，其余均为 g。所有数字按用户实际摄入的整份估算。若画面包含饮料，waterML 要估算其中可计入日常饮水的液体量：白水按实际容量；无糖茶、咖啡、牛奶可按主要液体量；奶茶、含糖饮料按实际液体量谨慎折算，通常为杯体积的 70%–90%；酒精饮料记 0。固体食物记 0。无法判断时给合理范围的中位估计，并在 note 中说明。
+        单位：热量 kcal，waterML 为 ml，其余均为 g。所有数字按用户实际摄入的整份估算。只有画面或文字明确包含一杯/一瓶实际饮用的饮料时，waterML 才可大于 0：白水按实际容量；无糖茶、咖啡、牛奶可按主要液体量；奶茶、含糖饮料按实际液体量谨慎折算，通常为杯体积的 70%–90%；酒精饮料记 0。菜肴、米饭、汤汁、蔬菜、水果本身的含水量不能计入饮水；没有明确饮料时必须为 0。无法判断食物营养时给合理范围的中位估计，并在 note 中说明。
         """
         let response = try await complete(
             system: "你负责生成可供用户复核的结构化营养估算。不要提供医疗诊断。",
@@ -123,14 +125,16 @@ struct AIClient {
 
     func agent(system: String, messages: [AIChatMessage], images: [Data] = []) async throws -> AIAgentReply {
         let history = messages.suffix(14).map { "\($0.role): \($0.content)" }.joined(separator: "\n")
-        let currentTime = Date.now.formatted(.iso8601)
+        let currentTime = Self.localISO8601String(from: .now)
         let envelope = """
         \(history)
 
         当前本地时间：\(currentTime)
         只输出 JSON：
-        {"answer":"给用户的自然语言回答","actions":[{"type":"add_meal|add_weight|add_water|update_goals","date":"ISO8601 可选","mealKind":"早餐|午餐|晚餐|加餐","name":"可选","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"weight":0,"bodyFat":0,"waterML":0,"targetWeight":0,"calorieGoal":0,"proteinGoal":0,"carbsGoal":0,"fatGoal":0,"note":"可选"}]}
-        只有用户明确要求修改或记录数据时才生成 actions。例外：只要用户发送的图片明显是其实际摄入的餐食或饮料，且没有明确说“只分析/不要记录”，就视为明确的记录请求；必须识别整份餐食、估算营养并返回 add_meal action。配料表、商品包装或菜单图片若无法确认已经摄入，则只分析、不记录。普通问答 actions 必须为空。不得生成删除动作。answer 只能说明计划或结果含义，绝不能声称“已记录”“已更新”或“执行成功”；App 会在数据库保存成功后自行给出核验回执。图片可能是食物、饮料、营养表、配料表、训练截图或用户希望你分析的任何内容。若新增餐食中含白水、茶、咖啡、牛奶、奶茶或其他饮料，应在同一个 add_meal action 的 waterML 中给出可计入饮水的估算量；酒精记 0。
+        {"answer":"给用户的自然语言回答","actions":[{"type":"add_meal|add_weight|add_water|update_goals|delete_meal|delete_weight|delete_water","recordID":"删除时必填，必须来自当前记录清单","date":"带时区的 ISO8601，可选","mealKind":"早餐|午餐|晚餐|加餐","name":"可选","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"weight":0,"bodyFat":0,"waterML":0,"waterSource":"仅在明确包含实际饮用的饮料时填写饮料名称","targetWeight":0,"calorieGoal":0,"proteinGoal":0,"carbsGoal":0,"fatGoal":0,"note":"可选"}]}
+        只有用户明确要求新增、修改或删除数据时才生成 actions。例外：只要用户发送的图片明显是其实际摄入的餐食或饮料，且没有明确说“只分析/不要记录”，就视为明确的记录请求；必须识别整份餐食、估算营养并返回 add_meal action。配料表、商品包装或菜单图片若无法确认已经摄入，则只分析、不记录。普通问答 actions 必须为空。
+        用户指定了日期或时间时必须严格保留，date 输出带本地时区的完整 ISO8601；不要擅自改成当前时间。删除仅在用户明确要求时生成，必须从系统提供的当前记录清单选择准确 recordID；有歧义时 actions 为空，并在 answer 里询问要删哪一条。answer 只能说明计划、需要澄清的内容或结果含义，绝不能声称“已记录”“已更新”“已删除”或“执行成功”；App 会在数据库操作成功后自行给出核验回执。
+        图片可能是食物、饮料、营养表、配料表、训练截图或用户希望你分析的任何内容。只有新增餐食中明确包含实际饮用的白水、茶、咖啡、牛奶、奶茶或其他饮料时，才填写 waterSource 并给出 waterML；菜肴、米饭、汤汁、蔬菜、水果本身的水分不能计入饮水，酒精记 0。没有明确饮料时 waterSource 为空且 waterML 为 0。
         """
         let response = try await complete(
             system: system,
@@ -144,6 +148,15 @@ struct AIClient {
             throw AIClientError.malformedAgentReply
         }
         return reply
+    }
+
+    private static func localISO8601String(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXX"
+        return formatter.string(from: date)
     }
 
     func testConnection(apiKey: String? = nil) async throws -> String {

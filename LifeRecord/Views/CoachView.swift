@@ -517,16 +517,23 @@ struct CoachView: View {
                         messages: outgoingHistory,
                         images: attachedImages
                     )
-                    let execution = try await apply(reply.actions, attachedImages: attachedImages)
+                    let execution = try await apply(
+                        reply.actions,
+                        attachedImages: attachedImages,
+                        explicitlyRequestedDate: requestedActionDate(in: requestText)
+                    )
                     let content: String
                     if !execution.receipts.isEmpty {
                         content = reply.answer
-                            + "\n\n已核验并写入\n"
+                            + "\n\n已核验并执行\n"
                             + execution.receipts.map { "• \($0)" }.joined(separator: "\n")
                             + (execution.rejectedCount > 0 ? "\n• 另有 \(execution.rejectedCount) 项参数无效，未写入" : "")
                             + (execution.warnings.isEmpty ? "" : "\n\n" + execution.warnings.map { "⚠️ \($0)" }.joined(separator: "\n"))
-                    } else if isActionRequest(text) || !attachedImages.isEmpty {
-                        content = "未执行：AI 没有返回可验证的有效操作，数据库没有被修改。请把要记录的数值说完整后重试。"
+                    } else if execution.rejectedCount > 0 || isMutationRequest(text) || !attachedImages.isEmpty {
+                        content = "未执行：AI 没有返回可验证的有效操作，数据库没有被修改。"
+                            + (reply.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                               ? " 请把目标记录说得更明确后重试。"
+                               : "\n\n" + reply.answer)
                     } else {
                         content = reply.answer
                     }
@@ -607,14 +614,18 @@ struct CoachView: View {
     }
 
     @MainActor
-    private func apply(_ actions: [AIAgentAction], attachedImages: [Data]) async throws -> ActionExecution {
+    private func apply(
+        _ actions: [AIAgentAction],
+        attachedImages: [Data],
+        explicitlyRequestedDate: Date?
+    ) async throws -> ActionExecution {
         var receipts: [String] = []
         var rejectedCount = 0
         var warnings: [String] = []
         var photoUploadError: Error?
         var didAttachPhotos = false
         for action in actions.prefix(12) {
-            let date = resolvedActionDate(action.date)
+            let date = explicitlyRequestedDate ?? resolvedActionDate(action.date)
             let type = action.type
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
@@ -658,24 +669,52 @@ struct CoachView: View {
                     source: .ai,
                     photoIDs: photoIDs
                 ))
-                if let waterML = action.waterML, waterML > 0, waterML <= 10_000 {
-                    modelContext.insert(WaterEntry(date: date, milliliters: waterML, note: "来自 AI 识别：\(name)"))
+                if let waterML = action.waterML,
+                   waterML > 0,
+                   waterML <= 10_000,
+                   let waterSource = action.waterSource?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !waterSource.isEmpty {
+                    modelContext.insert(WaterEntry(date: date, milliliters: waterML, note: "来自 AI 识别：\(waterSource)"))
                 }
-                receipts.append("新增\(kind.rawValue)：\(name)，\(Int(calories)) kcal")
+                receipts.append("新增\(kind.rawValue)：\(name)，\(Int(calories)) kcal · \(receiptDate(date))")
             case "add_weight", "record_weight", "log_weight":
                 guard let weight = action.weight, (20...400).contains(weight) else {
                     rejectedCount += 1
                     continue
                 }
                 modelContext.insert(BodyMetric(date: date, weight: weight, bodyFat: action.bodyFat, note: action.note ?? "由 AI 助手按要求记录"))
-                receipts.append("记录体重 \(weight.formatted(.number.precision(.fractionLength(1)))) kg")
+                receipts.append("记录体重 \(weight.formatted(.number.precision(.fractionLength(1)))) kg · \(receiptDate(date))")
             case "add_water", "record_water", "log_water":
                 guard let amount = action.waterML, amount > 0, amount <= 10_000 else {
                     rejectedCount += 1
                     continue
                 }
-                modelContext.insert(WaterEntry(date: date, milliliters: amount))
-                receipts.append("记录饮水 \(Int(amount)) ml")
+                modelContext.insert(WaterEntry(date: date, milliliters: amount, note: action.note ?? "由 AI 助手按要求记录"))
+                receipts.append("记录饮水 \(Int(amount)) ml · \(receiptDate(date))")
+            case "delete_meal", "remove_meal":
+                guard let id = actionRecordID(action), let meal = meals.first(where: { $0.id == id }) else {
+                    rejectedCount += 1
+                    continue
+                }
+                let description = "\(meal.kind.rawValue)：\(meal.name) · \(receiptDate(meal.date))"
+                SyncDeletion.delete(meal, context: modelContext)
+                receipts.append("删除\(description)")
+            case "delete_weight", "remove_weight", "delete_body":
+                guard let id = actionRecordID(action), let metric = bodyMetrics.first(where: { $0.id == id }) else {
+                    rejectedCount += 1
+                    continue
+                }
+                let description = "体重 \(metric.weight.formatted(.number.precision(.fractionLength(1)))) kg · \(receiptDate(metric.date))"
+                SyncDeletion.delete(metric, context: modelContext)
+                receipts.append("删除\(description)")
+            case "delete_water", "remove_water":
+                guard let id = actionRecordID(action), let water = waterEntries.first(where: { $0.id == id }) else {
+                    rejectedCount += 1
+                    continue
+                }
+                let description = "饮水 \(Int(water.milliliters)) ml · \(receiptDate(water.date))"
+                SyncDeletion.delete(water, context: modelContext)
+                receipts.append("删除\(description)")
             case "update_goals", "update_goal", "set_goals", "set_goal":
                 var updates: [String] = []
                 if let value = action.targetWeight, (20...400).contains(value) {
@@ -708,7 +747,7 @@ struct CoachView: View {
             }
         }
         if !receipts.isEmpty {
-            // 只有数据库真正保存成功，界面才允许显示“已核验并写入”。
+            // 只有数据库真正保存成功，界面才允许显示成功回执。
             try modelContext.save()
             await syncCoordinator.sync(context: modelContext, settings: settings)
             if let photoUploadError {
@@ -739,8 +778,77 @@ struct CoachView: View {
         return iso.date(from: string) ?? .now
     }
 
-    private func isActionRequest(_ text: String) -> Bool {
-        ["记录", "记一下", "帮我记", "改成", "修改", "更新", "设置", "喝水"].contains { text.contains($0) }
+    private func isMutationRequest(_ text: String) -> Bool {
+        let compact = text.replacingOccurrences(of: " ", with: "")
+        return ["帮我记录", "帮我记", "记录一下", "记一下", "新增", "添加", "修改", "改成", "更新目标", "设置为", "删掉", "删除", "移除"]
+            .contains { compact.contains($0) }
+            || compact.hasPrefix("记录")
+    }
+
+    private func actionRecordID(_ action: AIAgentAction) -> UUID? {
+        guard let value = action.recordID?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        return UUID(uuidString: value)
+    }
+
+    private func receiptDate(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    /// Explicit times in the user's own instruction win over a model-produced timestamp.
+    private func requestedActionDate(in text: String) -> Date? {
+        let normalized = text.replacingOccurrences(of: "：", with: ":")
+        let timePattern = #"(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?!\d)|(?<!\d)([0-2]?\d)点(?:(半)|([0-5]?\d)分?)?"#
+        guard let match = firstRegexMatch(timePattern, in: normalized) else { return nil }
+
+        let hourText = match[1] ?? match[3]
+        guard var hour = hourText.flatMap(Int.init) else { return nil }
+        let minute = match[2].flatMap(Int.init) ?? (match[4] == "半" ? 30 : match[5].flatMap(Int.init) ?? 0)
+
+        if normalized.range(of: #"下午|晚上|今晚|傍晚"#, options: .regularExpression) != nil, hour < 12 {
+            hour += 12
+        } else if normalized.contains("中午"), hour < 11 {
+            hour += 12
+        } else if normalized.contains("凌晨"), hour == 12 {
+            hour = 0
+        }
+
+        let calendar = Calendar.current
+        var base = Date.now
+        if normalized.contains("前天") {
+            base = calendar.date(byAdding: .day, value: -2, to: base) ?? base
+        } else if normalized.contains("昨天") || normalized.contains("昨日") {
+            base = calendar.date(byAdding: .day, value: -1, to: base) ?? base
+        } else if normalized.contains("明天") || normalized.contains("明日") {
+            base = calendar.date(byAdding: .day, value: 1, to: base) ?? base
+        } else if let dateMatch = firstRegexMatch(#"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?"#, in: normalized),
+                  let year = dateMatch[1].flatMap(Int.init),
+                  let month = dateMatch[2].flatMap(Int.init),
+                  let day = dateMatch[3].flatMap(Int.init) {
+            var components = calendar.dateComponents(in: .current, from: base)
+            components.year = year
+            components.month = month
+            components.day = day
+            base = calendar.date(from: components) ?? base
+        } else if let dateMatch = firstRegexMatch(#"(?<!\d)(\d{1,2})月(\d{1,2})日?"#, in: normalized),
+                  let month = dateMatch[1].flatMap(Int.init),
+                  let day = dateMatch[2].flatMap(Int.init) {
+            var components = calendar.dateComponents(in: .current, from: base)
+            components.month = month
+            components.day = day
+            base = calendar.date(from: components) ?? base
+        }
+
+        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: base)
+    }
+
+    private func firstRegexMatch(_ pattern: String, in text: String) -> [String?]? {
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else { return nil }
+        return (0..<match.numberOfRanges).map { index in
+            let range = match.range(at: index)
+            guard range.location != NSNotFound, let swiftRange = Range(range, in: text) else { return nil }
+            return String(text[swiftRange])
+        }
     }
 
     private var systemContext: String {
@@ -757,12 +865,25 @@ struct CoachView: View {
             "\($0.date.formatted(date: .numeric, time: .omitted)) \($0.weight)kg"
         }.joined(separator: "，")
         let recentWater = waterEntries.filter { $0.date >= cutoff }.reduce(0) { $0 + $1.milliliters }
+        let deletableMeals = recentMeals.sorted { $0.date > $1.date }.prefix(30).map {
+            "meal id=\($0.id.uuidString) | \(receiptDate($0.date)) | \($0.kind.rawValue) | \($0.name) | \(Int($0.calories))kcal"
+        }.joined(separator: "\n")
+        let deletableWeights = bodyMetrics.sorted { $0.date > $1.date }.prefix(20).map {
+            "weight id=\($0.id.uuidString) | \(receiptDate($0.date)) | \($0.weight)kg"
+        }.joined(separator: "\n")
+        let deletableWater = waterEntries.sorted { $0.date > $1.date }.prefix(30).map {
+            "water id=\($0.id.uuidString) | \(receiptDate($0.date)) | \(Int($0.milliliters))ml | \($0.note.isEmpty ? "无备注" : $0.note)"
+        }.joined(separator: "\n")
 
         return """
         你是这个私人健身记录 App 内的通用 AI 助手。可以回答用户提出的任何正常问题，也应结合记录给出简洁、可执行、明确区分事实与估算的建议。
         用户身高 \(settings.height)cm，起始体重 \(settings.baselineWeight)kg，当前约 \(latestWeight)kg；目标为\(settings.fitnessGoal.rawValue)，目标体重 \(settings.targetWeight)kg，每周期望变化 \(settings.weeklyWeightTarget)kg。每日目标：\(Int(settings.calorieGoal))kcal、蛋白质 \(Int(settings.proteinGoal))g、碳水 \(Int(settings.carbsGoal))g、脂肪 \(Int(settings.fatGoal))g、饮水 \(Int(settings.waterGoal))ml。
         最近体重：\(weightSummary.isEmpty ? "暂无" : weightSummary)。最近饮食：\(foodSummary.isEmpty ? "暂无" : foodSummary)。近 30 天已记录饮水总量 \(Int(recentWater))ml。
-        当用户明确要求记录餐食、体重、饮水或调整目标时，按约定返回 action；用户发送明显属于实际摄入的餐食或饮料照片且没有要求“只分析/不要记录”时，也必须识别营养并返回 add_meal action。不要把单独的配料表、商品包装或菜单误判为已经摄入。不要臆造用户没说的数据。你不能删除数据。涉及伤病、进食障碍或异常体重变化时提示咨询专业人士，不做医疗诊断。
+        当前可操作记录清单（删除只能使用这里的准确 id；找不到或有歧义就先询问）：
+        \(deletableMeals.isEmpty ? "暂无餐食" : deletableMeals)
+        \(deletableWeights.isEmpty ? "暂无体重" : deletableWeights)
+        \(deletableWater.isEmpty ? "暂无饮水" : deletableWater)
+        当用户明确要求记录餐食、体重、饮水、调整目标或删除记录时，按约定返回 action；用户发送明显属于实际摄入的餐食或饮料照片且没有要求“只分析/不要记录”时，也必须识别营养并返回 add_meal action。不要把单独的配料表、商品包装或菜单误判为已经摄入。不要臆造用户没说的数据。删除动作必须与用户明确指定的类型、时间和内容一致。涉及伤病、进食障碍或异常体重变化时提示咨询专业人士，不做医疗诊断。
         """
     }
 }

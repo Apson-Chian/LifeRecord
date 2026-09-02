@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f4f4fb">
   <meta name="description" content="LifeRecord 与 iPhone 双向同步的饮食、营养、饮水与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
-  <link rel="stylesheet" href="styles.css?v=20260902-1">
+  <link rel="stylesheet" href="styles.css?v=20260902-2">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
@@ -46,105 +46,31 @@
     <section class="week-rings" id="weekRings" aria-label="本周每日营养进度"></section>
 
     <section class="overview-grid" aria-label="所选日期概览">
-      <article class="overview-item calories-overview">
-        <span>热量摄入</span><strong id="overviewCalories">0</strong><small id="overviewCaloriesDetail">目标 2600 kcal</small>
-        <i><b id="overviewCaloriesBar"></b></i>
-      </article>
-      <article class="overview-item">
-        <span>蛋白质完成度</span><strong id="overviewProtein">0%</strong><small id="overviewProteinDetail">0 / 130 g</small>
-        <i><b id="overviewProteinBar"></b></i>
-      </article>
-      <article class="overview-item">
-        <span>饮水完成度</span><strong id="overviewWater">0%</strong><small id="overviewWaterDetail">0 / 2800 ml</small>
-        <i><b id="overviewWaterBar"></b></i>
-      </article>
-      <article class="overview-item weight-overview">
-        <span>最近体重</span><strong id="overviewWeight">--</strong><small id="overviewWeightDetail">暂无身体记录</small>
-      </article>
+      <button class="overview-item calories-overview" type="button" data-open-detail="calories"><span>热量</span><strong id="overviewCalories">0</strong><small id="overviewCaloriesDetail">目标 2600 kcal</small><i><b id="overviewCaloriesBar"></b></i><em>查看来源 →</em></button>
+      <button class="overview-item" type="button" data-open-detail="protein"><span>蛋白质</span><strong id="overviewProtein">0%</strong><small id="overviewProteinDetail">0 / 130 g</small><i><b id="overviewProteinBar"></b></i><em>查看来源 →</em></button>
+      <button class="overview-item" type="button" data-open-detail="water"><span>饮水</span><strong id="overviewWater">0%</strong><small id="overviewWaterDetail">0 / 2800 ml</small><i><b id="overviewWaterBar"></b></i><em>查看来源 →</em></button>
+      <button class="overview-item weight-overview" type="button" data-open-detail="weight"><span>体重</span><strong id="overviewWeight">--</strong><small id="overviewWeightDetail">暂无身体记录</small><em>查看来源 →</em></button>
     </section>
 
-    <section class="hero-grid">
-      <article class="card activity-card">
-        <div class="section-heading">
-          <div><span class="eyebrow">今日进度</span><h1>吃得清楚，练得踏实</h1></div>
-          <span class="goal-chip">增肌计划</span>
-        </div>
-        <div class="activity-content">
-          <div class="rings" role="img" id="rings" aria-label="今日营养进度">
-            <div class="ring ring-protein"></div>
-            <div class="ring ring-carbs"></div>
-            <div class="ring ring-meals"></div>
-            <div class="ring-center"><strong id="mealCount">0</strong><span>餐</span></div>
-          </div>
-          <div class="ring-legend">
-            <div><i class="dot protein"></i><span>蛋白质<small id="proteinLegend">0 / 130 g</small></span></div>
-            <div><i class="dot carbs"></i><span>碳水<small id="carbsLegend">0 / 340 g</small></span></div>
-            <div><i class="dot water"></i><span>饮水<small id="waterLegend">0 / 2800 ml</small></span></div>
-          </div>
-        </div>
-        <p class="calorie-line"><span class="flame">◆</span><span id="calorieStatus">还差 2600 千卡</span></p>
-      </article>
-
-      <aside class="card water-card">
-        <div class="water-heading"><span class="water-icon">●</span><div><span class="eyebrow">今日饮水</span><h2><strong id="waterTotal">0.0</strong> L</h2></div></div>
-        <div class="water-track"><span id="waterProgress"></span></div>
-        <p><span id="waterDetail">0 / 2800 ml</span><span>目标 2.8 L</span></p>
-        <div class="water-options" id="waterOptions" aria-label="常用饮水量"></div>
-      </aside>
-    </section>
-
-    <section class="content-grid">
+    <section class="home-grid">
       <article class="card meal-card">
         <div class="section-heading compact">
-          <div><span class="eyebrow">饮食记录</span><h2 id="mealTitle">今天吃了什么</h2></div>
-          <button class="primary-button" id="addMealButton" type="button">＋ 记一餐</button>
+          <div><span class="eyebrow">饮食记录</span><h2 id="mealTitle">今天吃了什么</h2><p class="section-subtitle" id="mealSummary">0 餐</p></div>
+          <div class="heading-actions"><button class="text-button" id="showMealsButton" type="button">查看详情</button><button class="primary-button" id="addMealButton" type="button">＋ 记一餐</button></div>
         </div>
-        <div class="meal-tools" role="search">
-          <label class="search-field"><span aria-hidden="true">⌕</span><input id="mealSearch" type="search" placeholder="搜索餐食名称、备注或日期" autocomplete="off"></label>
-          <select id="mealKindFilter" aria-label="筛选餐次">
-            <option value="">全部餐次</option><option value="早餐">早餐</option><option value="午餐">午餐</option><option value="晚餐">晚餐</option><option value="加餐">加餐</option>
-          </select>
-          <select id="mealScopeFilter" aria-label="筛选日期范围">
-            <option value="day">所选日期</option><option value="all">全部历史</option>
-          </select>
-          <span class="result-count" id="mealResultCount">0 条</span>
-        </div>
-        <div class="meal-list" id="mealList"></div>
+        <div class="meal-list meal-preview" id="mealPreview"></div>
       </article>
 
-      <aside class="card summary-card">
-        <span class="eyebrow">营养目标</span>
-        <h2>今日摄入</h2>
-        <div class="summary-list">
-          <div><span><i class="dot protein"></i>蛋白质</span><strong id="proteinSummary">0 g</strong></div>
-          <div><span><i class="dot carbs"></i>碳水</span><strong id="carbsSummary">0 g</strong></div>
-          <div><span><i class="dot fat"></i>脂肪</span><strong id="fatSummary">0 g</strong></div>
-          <div><span><i class="dot calories"></i>热量</span><strong id="calorieSummary">0 kcal</strong></div>
-        </div>
-        <p class="privacy-note">数据已通过私有密钥与 LifeRecord App 双向同步。</p>
+      <aside class="card quick-card">
+        <div class="section-heading compact"><div><span class="eyebrow">快捷记录</span><h2>今天还要记什么</h2></div></div>
+        <button class="quick-detail water-quick" type="button" data-open-detail="water"><span class="quick-icon">●</span><span><small>今日饮水</small><strong><b id="waterTotal">0.0</b> L</strong></span><span class="quick-chevron">›</span></button>
+        <div class="water-options compact-water-options" id="waterOptions" aria-label="常用饮水量"></div>
+        <div class="quick-actions-grid"><button class="secondary-button" id="addWeightButton" type="button">＋ 记体重</button><button class="secondary-button" id="editGoalsButton" type="button">调整目标</button></div>
+        <p class="privacy-note">首页只显示摘要。点击任一栏目可查看明细、记录时间与数据来源。</p>
       </aside>
     </section>
 
-    <section class="content-grid health-grid">
-      <article class="card meal-card">
-        <div class="section-heading compact">
-          <div><span class="eyebrow">身体记录</span><h2>体重与体脂</h2></div>
-          <button class="secondary-button" id="addWeightButton" type="button">＋ 记体重</button>
-        </div>
-        <div class="metric-list" id="metricList"></div>
-      </article>
-      <aside class="card summary-card">
-        <div class="section-heading compact"><div><span class="eyebrow">个人计划</span><h2>每日目标</h2></div><button class="text-button" id="editGoalsButton" type="button">编辑</button></div>
-        <div class="summary-list goals-list">
-          <div><span>热量</span><strong id="goalCalories">2600 kcal</strong></div>
-          <div><span>蛋白质</span><strong id="goalProtein">130 g</strong></div>
-          <div><span>碳水</span><strong id="goalCarbs">340 g</strong></div>
-          <div><span>饮水</span><strong id="goalWater">2800 ml</strong></div>
-        </div>
-        <button class="export-button" id="exportButton" type="button">导出全部记录 JSON</button>
-        <button class="key-button" id="changeKeyButton" type="button">更换网页登录密钥</button>
-      </aside>
-    </section>
+    <footer class="page-footer"><button class="text-button" id="exportButton" type="button">导出全部记录</button><span>·</span><button class="text-button" id="changeKeyButton" type="button">更换同步密钥</button></footer>
   </main>
 
   <dialog id="authDialog" class="modal auth-modal">
@@ -209,14 +135,14 @@
     </form>
   </dialog>
 
-  <dialog id="photoDialog" class="modal photo-modal">
+  <dialog id="detailDialog" class="modal detail-modal">
     <div class="modal-sheet">
-      <div class="modal-top"><div><span class="eyebrow">餐食照片</span><h2 id="photoTitle">历史照片</h2></div><button class="icon-button" id="closePhotos" type="button" aria-label="关闭">×</button></div>
-      <div class="photo-gallery" id="photoGallery"></div>
+      <div class="modal-top"><div><span class="eyebrow" id="detailEyebrow">数据明细</span><h2 id="detailTitle">详情</h2><p class="detail-subtitle" id="detailSubtitle"></p></div><button class="icon-button" id="closeDetail" type="button" aria-label="关闭">×</button></div>
+      <div class="detail-content" id="detailContent"></div>
     </div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20260902-1"></script>
+  <script src="app.js?v=20260902-2"></script>
 </body>
 </html>

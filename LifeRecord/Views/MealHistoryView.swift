@@ -106,29 +106,6 @@ struct MealDetailView: View {
                     }
                 }
 
-                if !meal.photoIDs.isEmpty {
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("餐食照片").font(.headline)
-                                Spacer()
-                                Text("\(meal.photoIDs.count) 张")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            ScrollView(.horizontal) {
-                                HStack(spacing: 10) {
-                                    ForEach(meal.photoIDs, id: \.self) { imageID in
-                                        MealPhotoView(imageID: imageID)
-                                            .frame(width: 210, height: 180)
-                                    }
-                                }
-                            }
-                            .scrollIndicators(.hidden)
-                        }
-                    }
-                }
-
                 GlassCard {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("营养详情").font(.headline)
@@ -148,6 +125,30 @@ struct MealDetailView: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+
+                if !meal.photoIDs.isEmpty {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("餐食照片").font(.headline)
+                                Spacer()
+                                Text("\(meal.photoIDs.count) 张")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 12) {
+                                    ForEach(meal.photoIDs, id: \.self) { imageID in
+                                        MealPhotoView(imageID: imageID)
+                                            .frame(width: 210, height: 180)
+                                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                    }
+                                }
+                            }
+                            .scrollIndicators(.hidden)
                         }
                     }
                 }

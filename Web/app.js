@@ -30,7 +30,6 @@ let connected = false;
 let localRevision = 0;
 let syncInFlight = false;
 let syncAgain = false;
-let mealFilters = { query: "", kind: "", scope: "day" };
 
 function touchLocalState() { localRevision += 1; }
 
@@ -145,30 +144,10 @@ function render() {
   $("#dateLabel").textContent = fmtDate(date);
   $("#toolbarDateLabel").textContent = relativeDateLabel(date);
   $("#mealTitle").textContent = selectedDate === dateKey(new Date()) ? "今天吃了什么" : `${date.getMonth() + 1} 月 ${date.getDate()} 日记录`;
-  $("#mealCount").textContent = meals.length;
-  $("#carbsLegend").textContent = `${Math.round(nutrition.carbs)} / ${Math.round(target.carbsGoal)} g`;
-  $("#proteinLegend").textContent = `${Math.round(nutrition.protein)} / ${Math.round(target.proteinGoal)} g`;
-  $("#waterLegend").textContent = `${Math.round(water)} / ${Math.round(target.waterGoal)} ml`;
-  $(".ring-meals").style.setProperty("--progress", progress(meals.length, 4));
-  $(".ring-carbs").style.setProperty("--progress", progress(nutrition.carbs, target.carbsGoal));
-  $(".ring-protein").style.setProperty("--progress", progress(nutrition.protein, target.proteinGoal));
-  $("#rings").setAttribute("aria-label", `蛋白质 ${Math.round(nutrition.protein)} 克，碳水 ${Math.round(nutrition.carbs)} 克，用餐 ${meals.length} 次`);
-  const remaining = Math.round(target.calorieGoal - nutrition.calories);
-  $("#calorieStatus").textContent = remaining >= 0 ? `还差 ${remaining} 千卡` : `超出 ${Math.abs(remaining)} 千卡`;
+  $("#mealSummary").textContent = `${meals.length} 餐 · ${Math.round(nutrition.calories)} kcal`;
   $("#waterTotal").textContent = (water / 1000).toFixed(1);
-  $("#waterDetail").textContent = `${Math.round(water)} / ${Math.round(target.waterGoal)} ml`;
-  $("#waterProgress").style.width = `${progress(water, target.waterGoal) * 100}%`;
-  $("#proteinSummary").textContent = `${Math.round(nutrition.protein)} g`;
-  $("#carbsSummary").textContent = `${Math.round(nutrition.carbs)} g`;
-  $("#fatSummary").textContent = `${Math.round(nutrition.fat)} g`;
-  $("#calorieSummary").textContent = `${Math.round(nutrition.calories)} kcal`;
-  $("#goalCalories").textContent = `${Math.round(target.calorieGoal)} kcal`;
-  $("#goalProtein").textContent = `${Math.round(target.proteinGoal)} g`;
-  $("#goalCarbs").textContent = `${Math.round(target.carbsGoal)} g`;
-  $("#goalWater").textContent = `${Math.round(target.waterGoal)} ml`;
   renderOverview(nutrition, water, target);
-  renderMeals(filteredMeals());
-  renderMetrics();
+  renderMealPreview(meals);
   renderWeekRings();
 }
 
@@ -201,17 +180,6 @@ function renderOverview(nutrition, water, target) {
   $("#overviewWeightDetail").textContent = metric ? `${fmtMealDate(metric.date)}${metric.bodyFat ? ` · 体脂 ${Number(metric.bodyFat).toFixed(1)}%` : ""}` : "暂无身体记录";
 }
 
-function filteredMeals() {
-  const source = mealFilters.scope === "all" ? [...state.meals] : selectedMeals();
-  const query = mealFilters.query.trim().toLocaleLowerCase("zh-CN");
-  return source.filter(item => {
-    if (mealFilters.kind && item.kind !== mealFilters.kind) return false;
-    if (!query) return true;
-    return [item.name, item.note, item.kind, recordDateKey(item), fmtMealDate(item.date)]
-      .some(value => String(value || "").toLocaleLowerCase("zh-CN").includes(query));
-  });
-}
-
 function renderWeekRings() {
   const selected = parseDate(selectedDate);
   const mondayOffset = (selected.getDay() + 6) % 7;
@@ -240,41 +208,21 @@ function renderWeekRings() {
   $("#weekRings").innerHTML = html.join("");
 }
 
-function renderMeals(meals) {
-  const list = $("#mealList");
-  $("#mealResultCount").textContent = `${meals.length} 条`;
+function renderMealPreview(meals) {
+  const list = $("#mealPreview");
   if (!meals.length) {
-    const filtering = mealFilters.query || mealFilters.kind || mealFilters.scope === "all";
-    list.innerHTML = `<div class="empty">${filtering ? "没有找到符合条件的餐食记录。" : "这一天还没有餐食记录，点“记一餐”开始。"}</div>`;
+    list.innerHTML = `<div class="empty">这一天还没有餐食记录，点“记一餐”开始。</div>`;
     return;
   }
-  list.innerHTML = [...meals].sort((a, b) => b.date - a.date).map(item => {
+  list.innerHTML = [...meals].sort((a, b) => b.date - a.date).slice(0, 4).map(item => {
     const photoIDs = Array.isArray(item.photoIDs) ? item.photoIDs.filter(id => /^[a-f0-9]{32}$/.test(id)) : [];
-    const leading = photoIDs.length
-      ? `<button class="meal-photo" type="button" data-show-meal="${item.id}" aria-label="查看 ${escapeHtml(item.name)} 的 ${photoIDs.length} 张照片"><img loading="lazy" src="${API_BASE}/images/${photoIDs[0]}" alt="${escapeHtml(item.name)}"><em>${photoIDs.length}</em></button>`
-      : `<span class="meal-symbol" aria-hidden="true">${symbols[item.kind] || "◇"}</span>`;
     return `
-    <div class="meal-item">
-      ${leading}
-      <div class="meal-copy"><strong>${escapeHtml(item.name)}</strong><small>${mealFilters.scope === "all" ? `${fmtMealDate(item.date)} · ` : ""}${item.kind} · 蛋白 ${Math.round(item.protein)}g · 碳水 ${Math.round(item.carbs)}g · 脂肪 ${Math.round(item.fat)}g</small></div>
-      <div class="meal-kcal"><strong>${Math.round(item.calories)}</strong><span>kcal</span><button class="delete-meal" data-delete-meal="${item.id}" aria-label="删除 ${escapeHtml(item.name)}">×</button></div>
-    </div>`;
+    <button class="meal-item" type="button" data-show-meal="${item.id}">
+      <span class="meal-symbol" aria-hidden="true">${symbols[item.kind] || "◇"}</span>
+      <span class="meal-copy"><strong>${escapeHtml(item.name)}</strong><small>${item.kind} · 蛋白 ${Math.round(item.protein)}g · 碳水 ${Math.round(item.carbs)}g${photoIDs.length ? ` · ${photoIDs.length} 张照片` : ""}</small></span>
+      <span class="meal-kcal"><strong>${Math.round(item.calories)}</strong><span>kcal · 详情 ›</span></span>
+    </button>`;
   }).join("");
-}
-
-function renderMetrics() {
-  const list = $("#metricList");
-  const items = [...state.bodyMetrics].sort((a, b) => b.date - a.date).slice(0, 8);
-  if (!items.length) {
-    list.innerHTML = `<div class="empty">还没有身体数据，记录后会与 iPhone 同步。</div>`;
-    return;
-  }
-  list.innerHTML = items.map(item => `
-    <div class="metric-item">
-      <div><strong>${fmtShortDate(item.date)}</strong><small>${escapeHtml(item.note || "身体记录")}</small></div>
-      <span class="metric-value">${Number(item.weight).toFixed(1)} kg${item.bodyFat ? ` · ${Number(item.bodyFat).toFixed(1)}%` : ""}</span>
-      <button class="delete-meal" data-delete-body="${item.id}" aria-label="删除身体记录">×</button>
-    </div>`).join("");
 }
 
 function escapeHtml(value) { const node = document.createElement("span"); node.textContent = String(value); return node.innerHTML; }
@@ -318,12 +266,77 @@ async function uploadMealPhotos(mealId, files) {
   return imageIDs;
 }
 
-function showMealPhotos(meal) {
+function recordSource(item, kind) {
+  if (kind === "meal") return item.source === "AI 估算" ? "AI 估算并记录" : "手动记录";
+  const note = String(item.note || "");
+  if (note.includes("AI")) return "AI 自动记录";
+  if (note.includes("网页")) return "网页版记录";
+  return "手动记录";
+}
+
+function openDetail({ eyebrow = "数据明细", title, subtitle = "", html }) {
+  $("#detailEyebrow").textContent = eyebrow;
+  $("#detailTitle").textContent = title;
+  $("#detailSubtitle").textContent = subtitle;
+  $("#detailContent").innerHTML = html;
+  const dialog = $("#detailDialog");
+  if (!dialog.open) dialog.showModal();
+}
+
+function emptyDetail(message) {
+  return `<div class="empty">${escapeHtml(message)}</div>`;
+}
+
+function mealSourceRows(meals, key, unit) {
+  if (!meals.length) return emptyDetail("所选日期没有相关餐食来源。");
+  return `<div class="source-list">${[...meals].sort((a, b) => b.date - a.date).map(item => `
+    <button class="source-row" type="button" data-show-meal="${item.id}">
+      <span><strong>${escapeHtml(item.name)}</strong><small>${fmtShortDate(item.date)} · ${escapeHtml(recordSource(item, "meal"))}</small></span>
+      <b>${Math.round(Number(item[key] || 0))} ${unit}<small>查看餐食 ›</small></b>
+    </button>`).join("")}</div>`;
+}
+
+function showColumnDetail(type) {
+  const meals = selectedMeals();
+  const target = goals();
+  const nutrition = totals();
+  const date = fmtDate(parseDate(selectedDate));
+  if (type === "calories") {
+    openDetail({ title: "热量来源", subtitle: `${date} · 共 ${Math.round(nutrition.calories)} / ${Math.round(target.calorieGoal)} kcal`, html: mealSourceRows(meals, "calories", "kcal") });
+  } else if (type === "protein") {
+    openDetail({ title: "蛋白质来源", subtitle: `${date} · 共 ${Math.round(nutrition.protein)} / ${Math.round(target.proteinGoal)} g`, html: mealSourceRows(meals, "protein", "g") });
+  } else if (type === "water") {
+    const entries = [...selectedWaterEntries()].sort((a, b) => b.date - a.date);
+    const total = entries.reduce((sum, item) => sum + Number(item.milliliters || 0), 0);
+    const html = entries.length ? `<div class="source-list">${entries.map(item => `
+      <div class="source-row">
+        <span><strong>${escapeHtml(item.note || "饮水记录")}</strong><small>${fmtShortDate(item.date)} · ${escapeHtml(recordSource(item, "water"))}</small></span>
+        <b>${Math.round(item.milliliters)} ml<button class="delete-record" type="button" data-delete-water="${item.id}" aria-label="删除这条饮水记录">删除</button></b>
+      </div>`).join("")}</div>` : emptyDetail("所选日期还没有饮水记录。");
+    openDetail({ title: "饮水来源", subtitle: `${date} · ${Math.round(total)} / ${Math.round(target.waterGoal)} ml`, html: `<p class="calculation-note">计算方式：当天所有饮水记录的毫升数直接相加。AI 只会为明确饮用的饮料新增来源，不计算菜肴、米饭、蔬果本身的水分。</p>${html}` });
+  } else if (type === "weight") {
+    const end = epochForDateKey(selectedDate) + 86400;
+    const entries = [...state.bodyMetrics].filter(item => item.date < end).sort((a, b) => b.date - a.date).slice(0, 20);
+    const html = entries.length ? `<div class="source-list">${entries.map(item => `
+      <div class="source-row">
+        <span><strong>${Number(item.weight).toFixed(1)} kg${item.bodyFat ? ` · 体脂 ${Number(item.bodyFat).toFixed(1)}%` : ""}</strong><small>${fmtShortDate(item.date)} · ${escapeHtml(recordSource(item, "body"))}${item.note ? ` · ${escapeHtml(item.note)}` : ""}</small></span>
+        <b><button class="delete-record" type="button" data-delete-body="${item.id}" aria-label="删除这条身体记录">删除</button></b>
+      </div>`).join("")}</div>` : emptyDetail("这一天之前还没有身体记录。");
+    openDetail({ title: "体重记录", subtitle: `截至 ${date} 的最近记录`, html });
+  } else if (type === "meals") {
+    openDetail({ title: "饮食记录", subtitle: `${date} · ${meals.length} 餐`, html: mealSourceRows(meals, "calories", "kcal") });
+  }
+}
+
+function showMealDetail(meal) {
   const photoIDs = Array.isArray(meal.photoIDs) ? meal.photoIDs.filter(id => /^[a-f0-9]{32}$/.test(id)) : [];
-  if (!photoIDs.length) return;
-  $("#photoTitle").textContent = meal.name;
-  $("#photoGallery").innerHTML = photoIDs.map((id, index) => `<img src="${API_BASE}/images/${id}" alt="${escapeHtml(meal.name)}照片 ${index + 1}">`).join("");
-  $("#photoDialog").showModal();
+  const photos = photoIDs.length ? `<section class="detail-photos"><h3>餐食照片 <small>${photoIDs.length} 张</small></h3><div class="photo-gallery">${photoIDs.map((id, index) => `<img loading="lazy" src="${API_BASE}/images/${id}" alt="${escapeHtml(meal.name)}照片 ${index + 1}">`).join("")}</div></section>` : "";
+  openDetail({
+    eyebrow: `${meal.kind} · ${recordSource(meal, "meal")}`,
+    title: meal.name,
+    subtitle: fmtShortDate(meal.date),
+    html: `<div class="detail-kpis"><div><span>热量</span><strong>${Math.round(meal.calories)} kcal</strong></div><div><span>蛋白质</span><strong>${Math.round(meal.protein)} g</strong></div><div><span>碳水</span><strong>${Math.round(meal.carbs)} g</strong></div><div><span>脂肪</span><strong>${Math.round(meal.fat)} g</strong></div></div>${meal.note ? `<section class="detail-note"><h3>记录说明</h3><p>${escapeHtml(meal.note)}</p></section>` : ""}<div class="detail-actions"><button class="delete-record" type="button" data-delete-meal="${meal.id}">删除这条记录</button></div>${photos}`
+  });
 }
 
 function addDeletion(id, recordType) {
@@ -395,24 +408,45 @@ $("#waterOptions").addEventListener("click", async event => {
   render(); await syncNow(); showToast(`已记录 ${amount} ml 饮水`);
 });
 
-$("#mealList").addEventListener("click", async event => {
-  const photoButton = event.target.closest("[data-show-meal]");
-  if (photoButton) {
-    const meal = state.meals.find(item => item.id === photoButton.dataset.showMeal);
-    if (meal) showMealPhotos(meal);
-    return;
-  }
-  const button = event.target.closest("[data-delete-meal]"); if (!button) return;
-  addDeletion(button.dataset.deleteMeal, "meal");
-  state.meals = state.meals.filter(item => item.id !== button.dataset.deleteMeal);
-  render(); await syncNow(); showToast("已删除餐食记录");
+$("#mealPreview").addEventListener("click", event => {
+  const button = event.target.closest("[data-show-meal]"); if (!button) return;
+  const meal = state.meals.find(item => item.id === button.dataset.showMeal);
+  if (meal) showMealDetail(meal);
 });
 
-$("#metricList").addEventListener("click", async event => {
-  const button = event.target.closest("[data-delete-body]"); if (!button) return;
-  addDeletion(button.dataset.deleteBody, "body");
-  state.bodyMetrics = state.bodyMetrics.filter(item => item.id !== button.dataset.deleteBody);
-  render(); await syncNow(); showToast("已删除身体记录");
+document.addEventListener("click", event => {
+  const button = event.target.closest("[data-open-detail]");
+  if (button) showColumnDetail(button.dataset.openDetail);
+});
+
+$("#detailContent").addEventListener("click", async event => {
+  const mealLink = event.target.closest("[data-show-meal]");
+  if (mealLink) {
+    const meal = state.meals.find(item => item.id === mealLink.dataset.showMeal);
+    if (meal) showMealDetail(meal);
+    return;
+  }
+  const mealButton = event.target.closest("[data-delete-meal]");
+  const bodyButton = event.target.closest("[data-delete-body]");
+  const waterButton = event.target.closest("[data-delete-water]");
+  if (mealButton) {
+    addDeletion(mealButton.dataset.deleteMeal, "meal");
+    state.meals = state.meals.filter(item => item.id !== mealButton.dataset.deleteMeal);
+    showToast("已删除餐食记录");
+  } else if (bodyButton) {
+    addDeletion(bodyButton.dataset.deleteBody, "body");
+    state.bodyMetrics = state.bodyMetrics.filter(item => item.id !== bodyButton.dataset.deleteBody);
+    showToast("已删除身体记录");
+  } else if (waterButton) {
+    addDeletion(waterButton.dataset.deleteWater, "water");
+    state.waterEntries = state.waterEntries.filter(item => item.id !== waterButton.dataset.deleteWater);
+    showToast("已删除饮水记录");
+  } else {
+    return;
+  }
+  $("#detailDialog").close();
+  render();
+  await syncNow();
 });
 
 $("#dateButton").addEventListener("click", () => { visibleMonth = parseDate(selectedDate); renderCalendar(); $("#calendarDialog").showModal(); });
@@ -433,13 +467,8 @@ $("#todayButton").addEventListener("click", () => selectDate(dateKey(new Date())
 $("#syncButton").addEventListener("click", async () => {
   if (await syncNow("已手动同步")) showToast("手机与电脑数据已同步");
 });
-$("#searchMealButton").addEventListener("click", () => {
-  $("#mealSearch").focus();
-  $("#mealSearch").scrollIntoView({ behavior: "smooth", block: "center" });
-});
-$("#mealSearch").addEventListener("input", event => { mealFilters.query = event.currentTarget.value; renderMeals(filteredMeals()); });
-$("#mealKindFilter").addEventListener("change", event => { mealFilters.kind = event.currentTarget.value; renderMeals(filteredMeals()); });
-$("#mealScopeFilter").addEventListener("change", event => { mealFilters.scope = event.currentTarget.value; renderMeals(filteredMeals()); });
+$("#searchMealButton").addEventListener("click", () => showColumnDetail("meals"));
+$("#showMealsButton").addEventListener("click", () => showColumnDetail("meals"));
 
 $("#addMealButton").addEventListener("click", openMealDialog);
 $("#quickMealButton").addEventListener("click", openMealDialog);
@@ -504,7 +533,7 @@ $("#changeKeyButton").addEventListener("click", async () => {
   showAuth();
 });
 
-$("#closePhotos").addEventListener("click", () => $("#photoDialog").close());
+$("#closeDetail").addEventListener("click", () => $("#detailDialog").close());
 
 document.addEventListener("keydown", event => {
   if (event.metaKey || event.ctrlKey || event.altKey || document.querySelector("dialog[open]")) return;
@@ -512,7 +541,7 @@ document.addEventListener("keydown", event => {
   const isEditing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target.isContentEditable;
   if (event.key === "/" && !isEditing) {
     event.preventDefault();
-    $("#mealSearch").focus();
+    showColumnDetail("meals");
   } else if (!isEditing && event.key.toLowerCase() === "n") {
     event.preventDefault(); openMealDialog();
   } else if (!isEditing && event.key.toLowerCase() === "w") {
