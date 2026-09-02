@@ -310,6 +310,13 @@ struct TodayView: View {
             HStack {
                 Text("饮食记录").font(.title3.bold())
                 Spacer()
+                NavigationLink {
+                    MealPhotoGalleryView()
+                } label: {
+                    Label("照片", systemImage: "photo.on.rectangle")
+                        .labelStyle(.titleAndIcon)
+                }
+                .font(.subheadline.weight(.semibold))
                 NavigationLink("查看全部") {
                     MealHistoryView()
                 }
@@ -726,6 +733,10 @@ private struct MealSection: View {
                         MealDetailView(meal: meal)
                     } label: {
                         HStack(spacing: 12) {
+                            if let imageID = meal.photoIDs.first {
+                                MealPhotoView(imageID: imageID)
+                                    .frame(width: 48, height: 48)
+                            }
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: 5) {
                                     Text(meal.name).font(.subheadline.weight(.semibold))

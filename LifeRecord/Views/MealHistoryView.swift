@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct MealHistoryView: View {
     @Environment(\.modelContext) private var modelContext
@@ -105,6 +106,29 @@ struct MealDetailView: View {
                     }
                 }
 
+                if !meal.photoIDs.isEmpty {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("餐食照片").font(.headline)
+                                Spacer()
+                                Text("\(meal.photoIDs.count) 张")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 10) {
+                                    ForEach(meal.photoIDs, id: \.self) { imageID in
+                                        MealPhotoView(imageID: imageID)
+                                            .frame(width: 210, height: 180)
+                                    }
+                                }
+                            }
+                            .scrollIndicators(.hidden)
+                        }
+                    }
+                }
+
                 GlassCard {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("营养详情").font(.headline)
@@ -173,10 +197,15 @@ private struct MealHistoryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: meal.kind.symbol)
-                .foregroundStyle(AppTheme.accent)
-                .frame(width: 34, height: 34)
-                .background(AppTheme.accent.opacity(0.1), in: Circle())
+            if let imageID = meal.photoIDs.first {
+                MealPhotoView(imageID: imageID)
+                    .frame(width: 48, height: 48)
+            } else {
+                Image(systemName: meal.kind.symbol)
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 48, height: 48)
+                    .background(AppTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
             VStack(alignment: .leading, spacing: 3) {
                 Text(meal.name).font(.subheadline.weight(.semibold))
                 Text("\(meal.kind.rawValue) · \(meal.date.formatted(date: .omitted, time: .shortened))")
@@ -189,6 +218,103 @@ private struct MealHistoryRow: View {
         }
         .padding(.vertical, 3)
     }
+}
+
+struct MealPhotoView: View {
+    @Environment(SyncCoordinator.self) private var syncCoordinator
+    let imageID: String
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.tertiarySystemFill))
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if failed {
+                Image(systemName: "photo.badge.exclamationmark")
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(.white.opacity(0.16), lineWidth: 0.5)
+        }
+        .task(id: imageID) {
+            image = nil
+            failed = false
+            do {
+                let data = try await syncCoordinator.mealPhotoData(imageID: imageID)
+                guard let decoded = UIImage(data: data) else {
+                    failed = true
+                    return
+                }
+                image = decoded
+            } catch {
+                failed = true
+            }
+        }
+        .accessibilityLabel("餐食照片")
+    }
+}
+
+struct MealPhotoGalleryView: View {
+    @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
+
+    private var items: [MealPhotoItem] {
+        meals.flatMap { meal in
+            meal.photoIDs.map { MealPhotoItem(id: $0, meal: meal) }
+        }
+    }
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 3),
+        GridItem(.flexible(), spacing: 3),
+        GridItem(.flexible(), spacing: 3)
+    ]
+
+    var body: some View {
+        Group {
+            if items.isEmpty {
+                ContentUnavailableView(
+                    "暂无餐食照片",
+                    systemImage: "photo.on.rectangle.angled",
+                    description: Text("拍摄或选择照片并保存餐食后，可以在这里集中查看。")
+                )
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 3) {
+                        ForEach(items) { item in
+                            NavigationLink {
+                                MealDetailView(meal: item.meal)
+                            } label: {
+                                MealPhotoView(imageID: item.id)
+                                    .aspectRatio(1, contentMode: .fit)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(3)
+                }
+            }
+        }
+        .navigationTitle("餐食照片")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct MealPhotoItem: Identifiable {
+    let id: String
+    let meal: MealEntry
 }
 
 private struct NutritionDetailRow: View {

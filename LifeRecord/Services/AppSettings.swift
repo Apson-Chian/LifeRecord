@@ -60,7 +60,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .deepSeek: "deepseek-v4-flash"
         case .dots: "dots3-note-prev"
-        case .glm: "glm-4.5v"
+        case .glm: "glm-4.6v-flash"
         case .custom: "vision-model-name"
         }
     }
@@ -154,6 +154,10 @@ final class AppSettings {
         endpoint = defaults.string(forKey: Key.endpoint) ?? savedProvider.endpoint
         if savedProvider == .dots && savedModel == "dots.llm1.inst" {
             // 修复旧版 Dots 预设：开源权重名并不是开放平台的托管模型名。
+            model = savedProvider.model
+        } else if savedProvider == .glm && savedModel?.lowercased() == "glm-4.5v" {
+            // GLM-4.5V 已不再是开放平台当前的视觉预设，自动迁移只有这个旧默认值。
+            // 用户手动填写的其他模型名仍保持不变。
             model = savedProvider.model
         } else {
             model = savedModel ?? savedProvider.model

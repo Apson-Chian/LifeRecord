@@ -39,6 +39,8 @@
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>选择食物照片用于 AI 营养估算。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>拍摄餐食照片用于 AI 营养估算和饮食记录。</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIApplicationSceneManifest</key>

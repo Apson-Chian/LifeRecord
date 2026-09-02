@@ -18,6 +18,8 @@ struct CoachView: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var imageData: [Data] = []
     @State private var isLoadingPhotos = false
+    @State private var showsCamera = false
+    @State private var showsPhotoLibrary = false
     @State private var errorMessage: String?
     @State private var confirmsClear = false
     @State private var showsConversationSidebar = false
@@ -190,6 +192,23 @@ struct CoachView: View {
             } message: {
                 Text(errorMessage ?? "未知错误")
             }
+            .fullScreenCover(isPresented: $showsCamera) {
+                CameraImagePicker { image in
+                    addCameraPhoto(image)
+                }
+                .ignoresSafeArea()
+            }
+            .photosPicker(
+                isPresented: $showsPhotoLibrary,
+                selection: $photoItems,
+                maxSelectionCount: max(settings.maxPhotos - imageData.count, 1),
+                selectionBehavior: .ordered,
+                matching: .images
+            )
+            .onChange(of: photoItems) { _, items in
+                guard !items.isEmpty else { return }
+                Task { await loadPhotos(items) }
+            }
         }
     }
 
@@ -272,17 +291,29 @@ struct CoachView: View {
             }
 
             HStack(alignment: .bottom, spacing: 8) {
-                PhotosPicker(
-                    selection: $photoItems,
-                    maxSelectionCount: settings.maxPhotos,
-                    selectionBehavior: .ordered,
-                    matching: .images
-                ) {
+                Menu {
+                    Button {
+                        showsCamera = true
+                    } label: {
+                        Label("拍照", systemImage: "camera.fill")
+                    }
+                    .disabled(
+                        imageData.count >= settings.maxPhotos
+                        || !UIImagePickerController.isSourceTypeAvailable(.camera)
+                    )
+
+                    Button {
+                        showsPhotoLibrary = true
+                    } label: {
+                        Label("从相册选择", systemImage: "photo.on.rectangle")
+                    }
+                    .disabled(imageData.count >= settings.maxPhotos)
+                } label: {
                     Group {
                         if isLoadingPhotos {
                             ProgressView().controlSize(.small)
                         } else {
-                            Image(systemName: "photo")
+                            Image(systemName: "plus")
                                 .font(.body.weight(.medium))
                         }
                     }
@@ -290,11 +321,11 @@ struct CoachView: View {
                     .frame(width: 38, height: 38)
                     .background(Color(.tertiarySystemFill), in: Circle())
                 }
-                .disabled(isSending || !settings.supportsVision)
-                .onChange(of: photoItems) { _, items in Task { await loadPhotos(items) } }
-                .accessibilityLabel("添加图片")
+                .disabled(isSending || isLoadingPhotos || !settings.supportsVision)
+                .accessibilityLabel("添加照片")
+                .accessibilityHint("可以拍照或从相册选择")
 
-                TextField("问问题，或让我替你记录…", text: $input, axis: .vertical)
+                TextField(imageData.isEmpty ? "问问题，或让我替你记录…" : "告诉教练你做了什么…", text: $input, axis: .vertical)
                     .lineLimit(1...6)
                     .padding(.vertical, 9)
                     .focused($composerFocused)
@@ -421,8 +452,16 @@ struct CoachView: View {
         let displayText = text.isEmpty
             ? "[发送了 \(attachedImages.count) 张图片]"
             : (attachedImages.isEmpty ? text : "\(text)\n[附带 \(attachedImages.count) 张图片]")
+        let requestText: String
+        if attachedImages.isEmpty {
+            requestText = text
+        } else if text.isEmpty {
+            requestText = "请识别我发送的图片。如果这是我实际吃下的餐食或饮料，请估算营养并直接记录进饮食记录；如果只是配料表、包装或菜单，则只分析。"
+        } else {
+            requestText = text + "\n如果图片是我实际吃下的餐食或饮料，且我没有明确说不要记录，请同时记录进饮食记录。"
+        }
         let outgoingHistory = messages.map { AIChatMessage(role: $0.role, content: $0.content) }
-            + [AIChatMessage(role: "user", content: text.isEmpty ? "请分析我发送的图片。" : text)]
+            + [AIChatMessage(role: "user", content: requestText)]
 
         let conversation = activeConversation ?? CoachConversation()
         if activeConversation == nil {
@@ -471,7 +510,8 @@ struct CoachView: View {
                             + "\n\n已核验并写入\n"
                             + execution.receipts.map { "• \($0)" }.joined(separator: "\n")
                             + (execution.rejectedCount > 0 ? "\n• 另有 \(execution.rejectedCount) 项参数无效，未写入" : "")
-                    } else if isActionRequest(text) {
+                            + (execution.warnings.isEmpty ? "" : "\n\n" + execution.warnings.map { "⚠️ \($0)" }.joined(separator: "\n"))
+                    } else if isActionRequest(text) || !attachedImages.isEmpty {
                         content = "未执行：AI 没有返回可验证的有效操作，数据库没有被修改。请把要记录的数值说完整后重试。"
                     } else {
                         content = reply.answer
@@ -514,16 +554,29 @@ struct CoachView: View {
     @MainActor
     private func loadPhotos(_ items: [PhotosPickerItem]) async {
         isLoadingPhotos = true
-        defer { isLoadingPhotos = false }
-        var loaded: [Data] = []
-        for item in items.prefix(settings.maxPhotos) {
+        let remaining = max(settings.maxPhotos - imageData.count, 0)
+        var loaded = imageData
+        var failedCount = 0
+        for item in items.prefix(remaining) {
             guard let original = try? await item.loadTransferable(type: Data.self) else { continue }
             loaded.append(AIClient.jpegImageData(forSending: original))
         }
+        failedCount = min(items.count, remaining) - (loaded.count - imageData.count)
         imageData = loaded
-        if loaded.count < items.count {
-            errorMessage = "有 \(items.count - loaded.count) 张图片无法读取，请重新选择。"
+        photoItems = []
+        isLoadingPhotos = false
+        if failedCount > 0 {
+            errorMessage = "有 \(failedCount) 张图片无法读取，请重新选择。"
         }
+        if !loaded.isEmpty { composerFocused = true }
+    }
+
+    @MainActor
+    private func addCameraPhoto(_ image: UIImage) {
+        guard imageData.count < settings.maxPhotos,
+              let original = image.jpegData(compressionQuality: 0.9) else { return }
+        imageData.append(AIClient.jpegImageData(forSending: original))
+        composerFocused = true
     }
 
     private func removePhoto(at index: Int) {
@@ -536,12 +589,15 @@ struct CoachView: View {
     private struct ActionExecution {
         var receipts: [String] = []
         var rejectedCount = 0
+        var warnings: [String] = []
     }
 
     @MainActor
     private func apply(_ actions: [AIAgentAction], attachedImages: [Data]) async throws -> ActionExecution {
         var receipts: [String] = []
         var rejectedCount = 0
+        var warnings: [String] = []
+        var photoUploadError: Error?
         var didAttachPhotos = false
         for action in actions.prefix(12) {
             let date = resolvedActionDate(action.date)
@@ -561,7 +617,15 @@ struct CoachView: View {
                 let mealID = UUID()
                 let photoIDs: [String]
                 if !didAttachPhotos && !attachedImages.isEmpty {
-                    photoIDs = try await syncCoordinator.uploadMealPhotos(attachedImages, mealID: mealID)
+                    do {
+                        photoIDs = try await syncCoordinator.uploadMealPhotos(attachedImages, mealID: mealID)
+                    } catch {
+                        // 图片持久化是附加能力，不应该把已经成功的 AI 识别和数据写入整体判定为失败。
+                        photoIDs = []
+                        photoUploadError = error
+                        let warning = "AI 识别和记录已完成，但附带图片未保存：\(error.localizedDescription)"
+                        if !warnings.contains(warning) { warnings.append(warning) }
+                    }
                     didAttachPhotos = true
                 } else {
                     photoIDs = []
@@ -633,8 +697,11 @@ struct CoachView: View {
             // 只有数据库真正保存成功，界面才允许显示“已核验并写入”。
             try modelContext.save()
             await syncCoordinator.sync(context: modelContext, settings: settings)
+            if let photoUploadError {
+                syncCoordinator.reportPhotoUploadFailure(photoUploadError)
+            }
         }
-        return ActionExecution(receipts: receipts, rejectedCount: rejectedCount)
+        return ActionExecution(receipts: receipts, rejectedCount: rejectedCount, warnings: warnings)
     }
 
     private func resolvedActionDate(_ string: String?) -> Date {
@@ -681,7 +748,7 @@ struct CoachView: View {
         你是这个私人健身记录 App 内的通用 AI 助手。可以回答用户提出的任何正常问题，也应结合记录给出简洁、可执行、明确区分事实与估算的建议。
         用户身高 \(settings.height)cm，起始体重 \(settings.baselineWeight)kg，当前约 \(latestWeight)kg；目标为\(settings.fitnessGoal.rawValue)，目标体重 \(settings.targetWeight)kg，每周期望变化 \(settings.weeklyWeightTarget)kg。每日目标：\(Int(settings.calorieGoal))kcal、蛋白质 \(Int(settings.proteinGoal))g、碳水 \(Int(settings.carbsGoal))g、脂肪 \(Int(settings.fatGoal))g、饮水 \(Int(settings.waterGoal))ml。
         最近体重：\(weightSummary.isEmpty ? "暂无" : weightSummary)。最近饮食：\(foodSummary.isEmpty ? "暂无" : foodSummary)。近 30 天已记录饮水总量 \(Int(recentWater))ml。
-        当用户明确要求记录餐食、体重、饮水或调整目标时，按约定返回 action；不要臆造用户没说的数据。你不能删除数据。涉及伤病、进食障碍或异常体重变化时提示咨询专业人士，不做医疗诊断。
+        当用户明确要求记录餐食、体重、饮水或调整目标时，按约定返回 action；用户发送明显属于实际摄入的餐食或饮料照片且没有要求“只分析/不要记录”时，也必须识别营养并返回 add_meal action。不要把单独的配料表、商品包装或菜单误判为已经摄入。不要臆造用户没说的数据。你不能删除数据。涉及伤病、进食障碍或异常体重变化时提示咨询专业人士，不做医疗诊断。
         """
     }
 }
@@ -890,11 +957,15 @@ private struct ChatBubble: View {
             if isUser {
                 Spacer(minLength: 52)
             } else {
-                Image(systemName: "wand.and.sparkles")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 29, height: 29)
-                    .background(AppTheme.accent.gradient, in: Circle())
+                Image("CoachAvatar")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 32, height: 32)
+                    .clipShape(Circle())
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.75), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
             }
 
             Group {

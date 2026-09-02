@@ -115,7 +115,12 @@ struct SettingsView: View {
                 } header: {
                     Text("AI 接口")
                 } footer: {
-                    Text("兼容 OpenAI Chat Completions 格式。每个服务商的 API Key 分开保存在本机钥匙串，不会写入项目或 GitHub。Dots 托管模型应使用 dots3-note-prev。")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("兼容 OpenAI Chat Completions 格式。每个服务商的 API Key 分开保存在本机钥匙串。当前预设：DeepSeek deepseek-v4-flash、Dots dots3-note-prev、GLM glm-4.6v-flash。")
+                        if settings.provider == .dots {
+                            Link("Dots API 开放平台与接口文档", destination: URL(string: "https://dots.ai/platform/docs")!)
+                        }
+                    }
                 }
 
                 Section {
@@ -485,7 +490,13 @@ private struct APIKeyEditorView: View {
                 } header: {
                     Text("\(settings.provider.rawValue) 密钥")
                 } footer: {
-                    Text("保存会先写入 iOS 钥匙串，再使用当前接口与模型发起一次最小请求。该密钥仅属于 \(settings.provider.rawValue)，不会与其他服务商共用。")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("保存会先写入 iOS 钥匙串，再使用当前接口与模型发起一次结构化输出测试。该密钥仅属于 \(settings.provider.rawValue)，不会与其他服务商共用。")
+                        if settings.provider == .dots {
+                            Text("Dots 必须使用 dots.ai API 开放平台创建的完整 API Key；普通账号凭证、旧密钥或其他平台密钥会被 401/403 拒绝。")
+                            Link("打开 Dots API 文档", destination: URL(string: "https://dots.ai/platform/docs")!)
+                        }
+                    }
                 }
 
                 if let statusMessage {

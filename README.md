@@ -27,8 +27,10 @@
 Dots 开放平台使用托管模型 `dots3-note-prev`，接口地址为
 `https://note3-prev-api.askdiandian.com/v1/chat/completions`，认证方式选择
 `api-key 请求头`。`dots.llm1.inst` 是开源权重名称，不能作为该托管接口的模型名。
+Dots 的深度思考默认开启；App 会通过 `chat_template_kwargs.enable_thinking = false` 关闭，避免结构化营养回复只产生思考内容。Dots 密钥必须在 Dots API 开放平台创建；HTTP 403 表示当前密钥无模型访问权限。
 
 DeepSeek、Dots、GLM 与自定义服务的 API Key 会分别保存在钥匙串中；切换服务商不会把上一家的密钥发送给当前接口。
+GLM 预设使用当前的免费视觉模型 `glm-4.6v-flash`；旧版默认的 `glm-4.5v` 会自动迁移。
 
 ## 运行
 

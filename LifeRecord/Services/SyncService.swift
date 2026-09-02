@@ -91,6 +91,7 @@ final class SyncCoordinator {
     private static let endpoint = URL(string: "https://apsonchian.ltd/liferecord-api/sync")!
     private static let imageEndpoint = URL(string: "https://apsonchian.ltd/liferecord-api/images")!
     private var needsAnotherSync = false
+    private let photoCache = NSCache<NSString, NSData>()
 
     var isSyncing = false
     var isConfigured = KeychainStore.hasSyncKey
@@ -104,6 +105,11 @@ final class SyncCoordinator {
             statusMessage = "尚未配置跨设备同步"
             lastSyncedAt = nil
         }
+    }
+
+    func reportPhotoUploadFailure(_ error: Error) {
+        lastError = error.localizedDescription
+        statusMessage = "记录已保存，照片未上传"
     }
 
     func sync(context: ModelContext, settings: AppSettings) async {
@@ -159,8 +165,35 @@ final class SyncCoordinator {
             guard let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let imageID = payload["id"] as? String else { throw SyncServiceError.invalidResponse }
             imageIDs.append(imageID)
+            photoCache.setObject(image as NSData, forKey: imageID as NSString)
         }
         return imageIDs
+    }
+
+    func mealPhotoData(imageID: String) async throws -> Data {
+        let normalizedID = imageID.lowercased()
+        guard normalizedID.count == 32,
+              normalizedID.allSatisfy({ $0.isHexDigit }) else {
+            throw SyncServiceError.invalidResponse
+        }
+        if let cached = photoCache.object(forKey: normalizedID as NSString) {
+            return cached as Data
+        }
+
+        let key = KeychainStore.loadSyncKey().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw SyncServiceError.notConfigured }
+        var request = URLRequest(url: Self.imageEndpoint.appendingPathComponent(normalizedID))
+        request.timeoutInterval = 30
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw SyncServiceError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            throw SyncServiceError.server(payload?["error"] as? String ?? "照片读取失败（\(http.statusCode)）")
+        }
+        guard !data.isEmpty else { throw SyncServiceError.invalidResponse }
+        photoCache.setObject(data as NSData, forKey: normalizedID as NSString)
+        return data
     }
 
     private func makeSnapshot(context: ModelContext, settings: AppSettings) throws -> SyncSnapshot {

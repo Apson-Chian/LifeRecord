@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import UIKit
 
 struct AddMealView: View {
     @Environment(\.dismiss) private var dismiss
@@ -19,6 +20,7 @@ struct AddMealView: View {
     @State private var isLoadingPhotos = false
     @State private var isAnalyzing = false
     @State private var isSaving = false
+    @State private var showsCamera = false
     @State private var errorMessage: String?
     @State private var wasAIAnalyzed = false
     @FocusState private var focusedField: Field?
@@ -44,19 +46,33 @@ struct AddMealView: View {
                     TextField("例如：一碗牛肉面，少油，加一个蛋", text: $description, axis: .vertical)
                         .lineLimit(2...5)
                         .focused($focusedField, equals: .description)
-                    PhotosPicker(
-                        selection: $photoItems,
-                        maxSelectionCount: settings.maxPhotos,
-                        selectionBehavior: .ordered,
-                        matching: .images
-                    ) {
-                        HStack {
-                            Label(imageData.isEmpty ? "选择多张照片" : "已选择 \(imageData.count) 张", systemImage: "photo.stack")
-                            Spacer()
-                            if isLoadingPhotos { ProgressView().controlSize(.small) }
+                    HStack(spacing: 0) {
+                        Button {
+                            showsCamera = true
+                        } label: {
+                            Label("拍照", systemImage: "camera.fill")
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .disabled(
+                            isAnalyzing || isLoadingPhotos || imageData.count >= settings.maxPhotos
+                            || !UIImagePickerController.isSourceTypeAvailable(.camera)
+                        )
+
+                        Divider().frame(height: 24)
+
+                        PhotosPicker(
+                            selection: $photoItems,
+                            maxSelectionCount: max(settings.maxPhotos - imageData.count, 1),
+                            selectionBehavior: .ordered,
+                            matching: .images
+                        ) {
+                            Label("从相册选择", systemImage: "photo.stack")
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        .disabled(isAnalyzing || isLoadingPhotos || imageData.count >= settings.maxPhotos)
                     }
                     .onChange(of: photoItems) { _, items in
+                        guard !items.isEmpty else { return }
                         Task { await loadPhotos(items) }
                     }
                     photoPreview
@@ -64,7 +80,7 @@ struct AddMealView: View {
                         Task { await analyze() }
                     } label: {
                         HStack {
-                            Label("用 AI 估算营养", systemImage: "sparkles")
+                            Label(imageData.isEmpty ? "用 AI 估算营养" : "重新分析照片", systemImage: "sparkles")
                             Spacer()
                             if isAnalyzing { ProgressView() }
                         }
@@ -73,7 +89,9 @@ struct AddMealView: View {
                 } header: {
                     Text("这顿吃了什么")
                 } footer: {
-                    Text("照片和文字会发送到你配置的 AI 服务商；保存餐食后，照片会存入你的私有服务器，手机只保留很小的图片编号。结果只是估算，保存前请复核。")
+                    Text(syncCoordinator.isConfigured
+                         ? "照片和文字会发送到你配置的 AI 服务商；保存餐食后，照片会存入你的私有服务器。结果只是估算，保存前请复核。"
+                         : "照片和文字会发送到你配置的 AI 服务商。当前未配置私有同步，照片不会长期保存；营养记录仍可正常保存。")
                 }
 
                 Section("记录") {
@@ -126,6 +144,12 @@ struct AddMealView: View {
             } message: {
                 Text(errorMessage ?? "未知错误")
             }
+            .fullScreenCover(isPresented: $showsCamera) {
+                CameraImagePicker { image in
+                    Task { await addCameraPhoto(image) }
+                }
+                .ignoresSafeArea()
+            }
         }
     }
 
@@ -144,7 +168,6 @@ struct AddMealView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 Button {
                                     imageData.remove(at: index)
-                                    if photoItems.indices.contains(index) { photoItems.remove(at: index) }
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
                                         .symbolRenderingMode(.palette)
@@ -191,14 +214,27 @@ struct AddMealView: View {
     @MainActor
     private func loadPhotos(_ items: [PhotosPickerItem]) async {
         isLoadingPhotos = true
-        defer { isLoadingPhotos = false }
-        var loaded: [Data] = []
-        for item in items.prefix(settings.maxPhotos) {
+        let remaining = max(settings.maxPhotos - imageData.count, 0)
+        var loaded = imageData
+        var failedCount = 0
+        for item in items.prefix(remaining) {
             guard let original = try? await item.loadTransferable(type: Data.self) else { continue }
             loaded.append(AIClient.jpegImageData(forSending: original, maxDimension: 1280))
         }
+        failedCount = min(items.count, remaining) - (loaded.count - imageData.count)
         imageData = loaded
-        if loaded.count < items.count { errorMessage = "有 \(items.count - loaded.count) 张照片无法读取，请重新选择。" }
+        photoItems = []
+        isLoadingPhotos = false
+        if failedCount > 0 { errorMessage = "有 \(failedCount) 张照片无法读取，请重新选择。" }
+        if !loaded.isEmpty { await analyze() }
+    }
+
+    @MainActor
+    private func addCameraPhoto(_ image: UIImage) async {
+        guard imageData.count < settings.maxPhotos,
+              let original = image.jpegData(compressionQuality: 0.9) else { return }
+        imageData.append(AIClient.jpegImageData(forSending: original, maxDimension: 1280))
+        await analyze()
     }
 
     @MainActor
@@ -224,15 +260,16 @@ struct AddMealView: View {
 
         var mealEntry: MealEntry?
         var waterEntry: WaterEntry?
+        var photoUploadError: Error?
         if hasNutrition {
             let mealID = UUID()
             let photoIDs: [String]
             do {
                 photoIDs = try await syncCoordinator.uploadMealPhotos(imageData, mealID: mealID)
             } catch {
-                errorMessage = "照片保存失败：\(error.localizedDescription)"
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
-                return
+                // 照片服务不可用时仍保存已经复核过的营养数据，避免让同步故障看起来像 AI 失效。
+                photoIDs = []
+                photoUploadError = error
             }
             let entry = MealEntry(
                 id: mealID,
@@ -263,6 +300,9 @@ struct AddMealView: View {
         do {
             try modelContext.save()
             await syncCoordinator.sync(context: modelContext, settings: settings)
+            if let photoUploadError {
+                syncCoordinator.reportPhotoUploadFailure(photoUploadError)
+            }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
         } catch {
@@ -270,6 +310,47 @@ struct AddMealView: View {
             if let waterEntry { modelContext.delete(waterEntry) }
             errorMessage = "餐食保存失败：\(error.localizedDescription)"
             UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+}
+
+struct CameraImagePicker: UIViewControllerRepresentable {
+    @Environment(\.dismiss) private var dismiss
+    let onImage: (UIImage) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        private let parent: CameraImagePicker
+
+        init(parent: CameraImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImage(image)
+            }
+            parent.dismiss()
         }
     }
 }
