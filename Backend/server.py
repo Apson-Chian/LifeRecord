@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import base64
@@ -29,15 +30,37 @@ MAX_BODY = 8 * 1024 * 1024
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 ALLOWED_TYPES = {"meal", "body", "water", "settings"}
 COOKIE_NAME = "liferecord_session"
+AUTH_WINDOW_SECONDS = 60
+MAX_AUTH_FAILURES = 10
 
-if len(SYNC_TOKEN) < 20:
-    raise SystemExit("LIFERECORD_SYNC_TOKEN must contain at least 20 characters")
+if len(SYNC_TOKEN) < 6:
+    raise SystemExit("LIFERECORD_SYNC_TOKEN must contain at least 6 characters")
 
 TOKEN_HASH = hashlib.sha256(SYNC_TOKEN.encode()).hexdigest()
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 _db_lock = threading.Lock()
+_auth_lock = threading.Lock()
 _failed_auth: dict[str, deque[float]] = defaultdict(deque)
+
+
+def auth_blocked(client: str) -> bool:
+    now = time.time()
+    with _auth_lock:
+        attempts = _failed_auth[client]
+        while attempts and attempts[0] < now - AUTH_WINDOW_SECONDS:
+            attempts.popleft()
+        return len(attempts) >= MAX_AUTH_FAILURES
+
+
+def note_auth_failure(client: str) -> None:
+    with _auth_lock:
+        _failed_auth[client].append(time.time())
+
+
+def clear_auth_failures(client: str) -> None:
+    with _auth_lock:
+        _failed_auth[client].clear()
 
 
 def connect() -> sqlite3.Connection:
@@ -322,12 +345,8 @@ class Handler(BaseHTTPRequestHandler):
         self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def _authenticate_browser(self) -> None:
-        client = self.client_address[0]
-        now = time.time()
-        attempts = _failed_auth[client]
-        while attempts and attempts[0] < now - 60:
-            attempts.popleft()
-        if len(attempts) >= 10:
+        client = self._client_identity()
+        if auth_blocked(client):
             self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "尝试次数过多，请稍后再试"})
             return
         try:
@@ -335,22 +354,37 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError):
             token = ""
         if not isinstance(token, str) or not hmac.compare_digest(token, SYNC_TOKEN):
-            attempts.append(now)
+            note_auth_failure(client)
             self._json(HTTPStatus.UNAUTHORIZED, {"error": "同步密钥不正确"})
             return
-        attempts.clear()
+        clear_auth_failures(client)
         self.send_response(HTTPStatus.NO_CONTENT)
         self._security_headers()
         self.send_header("Set-Cookie", f"{COOKIE_NAME}={TOKEN_HASH}; Path=/liferecord-api/; Max-Age=31536000; HttpOnly; Secure; SameSite=Strict")
         self.end_headers()
 
     def _authorized(self) -> bool:
+        client = self._client_identity()
+        if auth_blocked(client):
+            return False
         authorization = self.headers.get("Authorization", "")
         if authorization.startswith("Bearer ") and hmac.compare_digest(authorization[7:], SYNC_TOKEN):
+            clear_auth_failures(client)
             return True
         cookie = SimpleCookie(self.headers.get("Cookie", ""))
         value = cookie.get(COOKIE_NAME)
-        return bool(value and hmac.compare_digest(value.value, TOKEN_HASH))
+        if value and hmac.compare_digest(value.value, TOKEN_HASH):
+            clear_auth_failures(client)
+            return True
+        note_auth_failure(client)
+        return False
+
+    def _client_identity(self) -> str:
+        forwarded = self.headers.get("X-Real-IP", "").strip()
+        try:
+            return str(ipaddress.ip_address(forwarded))
+        except ValueError:
+            return self.client_address[0]
 
     def _read_json(self) -> dict:
         try:

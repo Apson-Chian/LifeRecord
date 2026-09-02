@@ -19,6 +19,8 @@ const nowSeconds = () => Date.now() / 1000;
 const newID = () => crypto.randomUUID().toLowerCase();
 const fmtDate = date => new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(date);
 const fmtShortDate = seconds => new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(seconds * 1000));
+const fmtMealDate = seconds => new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric" }).format(new Date(seconds * 1000));
+const fmtSyncTime = () => new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date());
 const progress = (value, goal) => Math.min(Math.max(value / Math.max(goal, 1), 0), 1);
 
 let state = { meals: [], bodyMetrics: [], waterEntries: [], settings: null, deletions: [], serverTime: null };
@@ -28,6 +30,7 @@ let connected = false;
 let localRevision = 0;
 let syncInFlight = false;
 let syncAgain = false;
+let mealFilters = { query: "", kind: "", scope: "day" };
 
 function touchLocalState() { localRevision += 1; }
 
@@ -43,6 +46,7 @@ function setSyncStatus(text, kind = "") {
   const node = $("#syncStatus");
   node.className = `sync-pill ${kind}`.trim();
   node.innerHTML = `<i></i>${text}`;
+  node.title = kind === "synced" ? `最近同步：${new Date().toLocaleString("zh-CN")}` : text;
 }
 
 async function api(path, options = {}) {
@@ -71,7 +75,7 @@ async function boot() {
     connected = true;
     await migrateLegacyIfNeeded();
     render();
-    setSyncStatus("已同步", "synced");
+    setSyncStatus(`已同步 · ${fmtSyncTime()}`, "synced");
   } catch (error) {
     if (error.message !== "需要同步密钥") setSyncStatus("连接失败", "error");
   }
@@ -96,7 +100,7 @@ async function syncNow(message = "已同步", silent = false) {
     } else {
       syncAgain = true;
     }
-    setSyncStatus(message, "synced");
+    setSyncStatus(`${message} · ${fmtSyncTime()}`, "synced");
     return true;
   } catch (error) {
     setSyncStatus("同步失败", "error");
@@ -139,6 +143,7 @@ function render() {
   const water = selectedWater();
   const target = goals();
   $("#dateLabel").textContent = fmtDate(date);
+  $("#toolbarDateLabel").textContent = relativeDateLabel(date);
   $("#mealTitle").textContent = selectedDate === dateKey(new Date()) ? "今天吃了什么" : `${date.getMonth() + 1} 月 ${date.getDate()} 日记录`;
   $("#mealCount").textContent = meals.length;
   $("#carbsLegend").textContent = `${Math.round(nutrition.carbs)} / ${Math.round(target.carbsGoal)} g`;
@@ -161,9 +166,50 @@ function render() {
   $("#goalProtein").textContent = `${Math.round(target.proteinGoal)} g`;
   $("#goalCarbs").textContent = `${Math.round(target.carbsGoal)} g`;
   $("#goalWater").textContent = `${Math.round(target.waterGoal)} ml`;
-  renderMeals(meals);
+  renderOverview(nutrition, water, target);
+  renderMeals(filteredMeals());
   renderMetrics();
   renderWeekRings();
+}
+
+function relativeDateLabel(date) {
+  const today = parseDate(dateKey(new Date()));
+  const days = Math.round((date - today) / 86400000);
+  if (days === 0) return "今天";
+  if (days === -1) return "昨天";
+  if (days === 1) return "明天";
+  return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+}
+
+function renderOverview(nutrition, water, target) {
+  const calorieProgress = progress(nutrition.calories, target.calorieGoal);
+  const proteinProgress = progress(nutrition.protein, target.proteinGoal);
+  const waterProgress = progress(water, target.waterGoal);
+  $("#overviewCalories").textContent = `${Math.round(nutrition.calories)} kcal`;
+  $("#overviewCaloriesDetail").textContent = `目标 ${Math.round(target.calorieGoal)} kcal`;
+  $("#overviewProtein").textContent = `${Math.round(proteinProgress * 100)}%`;
+  $("#overviewProteinDetail").textContent = `${Math.round(nutrition.protein)} / ${Math.round(target.proteinGoal)} g`;
+  $("#overviewWater").textContent = `${Math.round(waterProgress * 100)}%`;
+  $("#overviewWaterDetail").textContent = `${Math.round(water)} / ${Math.round(target.waterGoal)} ml`;
+  $("#overviewCaloriesBar").style.width = `${calorieProgress * 100}%`;
+  $("#overviewProteinBar").style.width = `${proteinProgress * 100}%`;
+  $("#overviewWaterBar").style.width = `${waterProgress * 100}%`;
+
+  const endOfSelectedDay = epochForDateKey(selectedDate) + 86400;
+  const metric = [...state.bodyMetrics].filter(item => item.date < endOfSelectedDay).sort((a, b) => b.date - a.date)[0];
+  $("#overviewWeight").textContent = metric ? `${Number(metric.weight).toFixed(1)} kg` : "--";
+  $("#overviewWeightDetail").textContent = metric ? `${fmtMealDate(metric.date)}${metric.bodyFat ? ` · 体脂 ${Number(metric.bodyFat).toFixed(1)}%` : ""}` : "暂无身体记录";
+}
+
+function filteredMeals() {
+  const source = mealFilters.scope === "all" ? [...state.meals] : selectedMeals();
+  const query = mealFilters.query.trim().toLocaleLowerCase("zh-CN");
+  return source.filter(item => {
+    if (mealFilters.kind && item.kind !== mealFilters.kind) return false;
+    if (!query) return true;
+    return [item.name, item.note, item.kind, recordDateKey(item), fmtMealDate(item.date)]
+      .some(value => String(value || "").toLocaleLowerCase("zh-CN").includes(query));
+  });
 }
 
 function renderWeekRings() {
@@ -196,11 +242,13 @@ function renderWeekRings() {
 
 function renderMeals(meals) {
   const list = $("#mealList");
+  $("#mealResultCount").textContent = `${meals.length} 条`;
   if (!meals.length) {
-    list.innerHTML = `<div class="empty">这一天还没有餐食记录，点“记一餐”开始。</div>`;
+    const filtering = mealFilters.query || mealFilters.kind || mealFilters.scope === "all";
+    list.innerHTML = `<div class="empty">${filtering ? "没有找到符合条件的餐食记录。" : "这一天还没有餐食记录，点“记一餐”开始。"}</div>`;
     return;
   }
-  list.innerHTML = meals.sort((a, b) => b.date - a.date).map(item => {
+  list.innerHTML = [...meals].sort((a, b) => b.date - a.date).map(item => {
     const photoIDs = Array.isArray(item.photoIDs) ? item.photoIDs.filter(id => /^[a-f0-9]{32}$/.test(id)) : [];
     const leading = photoIDs.length
       ? `<button class="meal-photo" type="button" data-show-meal="${item.id}" aria-label="查看 ${escapeHtml(item.name)} 的 ${photoIDs.length} 张照片"><img loading="lazy" src="${API_BASE}/images/${photoIDs[0]}" alt="${escapeHtml(item.name)}"><em>${photoIDs.length}</em></button>`
@@ -208,7 +256,7 @@ function renderMeals(meals) {
     return `
     <div class="meal-item">
       ${leading}
-      <div class="meal-copy"><strong>${escapeHtml(item.name)}</strong><small>${item.kind} · 蛋白 ${Math.round(item.protein)}g · 碳水 ${Math.round(item.carbs)}g · 脂肪 ${Math.round(item.fat)}g</small></div>
+      <div class="meal-copy"><strong>${escapeHtml(item.name)}</strong><small>${mealFilters.scope === "all" ? `${fmtMealDate(item.date)} · ` : ""}${item.kind} · 蛋白 ${Math.round(item.protein)}g · 碳水 ${Math.round(item.carbs)}g · 脂肪 ${Math.round(item.fat)}g</small></div>
       <div class="meal-kcal"><strong>${Math.round(item.calories)}</strong><span>kcal</span><button class="delete-meal" data-delete-meal="${item.id}" aria-label="删除 ${escapeHtml(item.name)}">×</button></div>
     </div>`;
   }).join("");
@@ -306,6 +354,21 @@ function renderCalendar() {
   $("#calendarGrid").innerHTML = cells.join("");
 }
 
+function selectDate(value) {
+  selectedDate = value;
+  localStorage.setItem(UI_DATE_KEY, selectedDate);
+  render();
+}
+
+function moveSelectedDate(days) {
+  const date = parseDate(selectedDate);
+  date.setDate(date.getDate() + days);
+  selectDate(dateKey(date));
+}
+
+function openMealDialog() { $("#mealDialog").showModal(); }
+function openWeightDialog() { $("#weightDialog").showModal(); }
+
 renderWaterOptions();
 boot();
 
@@ -357,14 +420,29 @@ $("#prevMonth").addEventListener("click", () => { visibleMonth = new Date(visibl
 $("#nextMonth").addEventListener("click", () => { visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1); renderCalendar(); });
 $("#calendarGrid").addEventListener("click", event => {
   const button = event.target.closest("[data-date]"); if (!button) return;
-  selectedDate = button.dataset.date; localStorage.setItem(UI_DATE_KEY, selectedDate); render(); $("#calendarDialog").close();
+  selectDate(button.dataset.date); $("#calendarDialog").close();
 });
 $("#weekRings").addEventListener("click", event => {
   const button = event.target.closest("[data-week-date]"); if (!button) return;
-  selectedDate = button.dataset.weekDate; localStorage.setItem(UI_DATE_KEY, selectedDate); render();
+  selectDate(button.dataset.weekDate);
 });
 
-$("#addMealButton").addEventListener("click", () => $("#mealDialog").showModal());
+$("#previousDayButton").addEventListener("click", () => moveSelectedDate(-1));
+$("#nextDayButton").addEventListener("click", () => moveSelectedDate(1));
+$("#todayButton").addEventListener("click", () => selectDate(dateKey(new Date())));
+$("#syncButton").addEventListener("click", async () => {
+  if (await syncNow("已手动同步")) showToast("手机与电脑数据已同步");
+});
+$("#searchMealButton").addEventListener("click", () => {
+  $("#mealSearch").focus();
+  $("#mealSearch").scrollIntoView({ behavior: "smooth", block: "center" });
+});
+$("#mealSearch").addEventListener("input", event => { mealFilters.query = event.currentTarget.value; renderMeals(filteredMeals()); });
+$("#mealKindFilter").addEventListener("change", event => { mealFilters.kind = event.currentTarget.value; renderMeals(filteredMeals()); });
+$("#mealScopeFilter").addEventListener("change", event => { mealFilters.scope = event.currentTarget.value; renderMeals(filteredMeals()); });
+
+$("#addMealButton").addEventListener("click", openMealDialog);
+$("#quickMealButton").addEventListener("click", openMealDialog);
 $("#closeMeal").addEventListener("click", () => $("#mealDialog").close());
 $("#mealForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -389,7 +467,8 @@ $("#mealForm").addEventListener("submit", async event => {
   }
 });
 
-$("#addWeightButton").addEventListener("click", () => $("#weightDialog").showModal());
+$("#addWeightButton").addEventListener("click", openWeightDialog);
+$("#quickWeightButton").addEventListener("click", openWeightDialog);
 $("#closeWeight").addEventListener("click", () => $("#weightDialog").close());
 $("#weightForm").addEventListener("submit", async event => {
   event.preventDefault(); const data = new FormData(event.currentTarget); const bodyFat = Number(data.get("bodyFat"));
@@ -418,7 +497,32 @@ $("#exportButton").addEventListener("click", () => {
   link.href = url; link.download = `LifeRecord-${dateKey(new Date())}.json`; link.click(); URL.revokeObjectURL(url);
 });
 
+$("#changeKeyButton").addEventListener("click", async () => {
+  try { await api("/logout", { method: "POST", body: JSON.stringify({ action: "logout" }) }); } catch (_) {}
+  connected = false;
+  setSyncStatus("等待连接");
+  showAuth();
+});
+
 $("#closePhotos").addEventListener("click", () => $("#photoDialog").close());
+
+document.addEventListener("keydown", event => {
+  if (event.metaKey || event.ctrlKey || event.altKey || document.querySelector("dialog[open]")) return;
+  const tag = event.target.tagName;
+  const isEditing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target.isContentEditable;
+  if (event.key === "/" && !isEditing) {
+    event.preventDefault();
+    $("#mealSearch").focus();
+  } else if (!isEditing && event.key.toLowerCase() === "n") {
+    event.preventDefault(); openMealDialog();
+  } else if (!isEditing && event.key.toLowerCase() === "w") {
+    event.preventDefault(); openWeightDialog();
+  } else if (!isEditing && event.key === "ArrowLeft") {
+    moveSelectedDate(-1);
+  } else if (!isEditing && event.key === "ArrowRight") {
+    moveSelectedDate(1);
+  }
+});
 
 setInterval(() => { if (connected && document.visibilityState === "visible") syncNow("已自动同步", true); }, 15000);
 document.addEventListener("visibilitychange", () => { if (connected && document.visibilityState === "visible") syncNow("已自动同步", true); });

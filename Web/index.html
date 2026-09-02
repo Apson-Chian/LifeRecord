@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f4f4fb">
   <meta name="description" content="LifeRecord 与 iPhone 双向同步的饮食、营养、饮水与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
-  <link rel="stylesheet" href="styles.css?v=20260828-2">
+  <link rel="stylesheet" href="styles.css?v=20260902-1">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
@@ -27,7 +27,41 @@
       </div>
     </header>
 
+    <section class="desktop-toolbar" aria-label="桌面快捷操作">
+      <div class="date-navigator">
+        <button class="toolbar-icon" id="previousDayButton" type="button" aria-label="前一天">‹</button>
+        <button class="toolbar-date" id="todayButton" type="button">
+          <span>当前查看</span><strong id="toolbarDateLabel">今天</strong>
+        </button>
+        <button class="toolbar-icon" id="nextDayButton" type="button" aria-label="后一天">›</button>
+      </div>
+      <div class="toolbar-actions">
+        <button class="toolbar-button" id="syncButton" type="button"><span aria-hidden="true">↻</span>立即同步</button>
+        <button class="toolbar-button" id="searchMealButton" type="button"><span aria-hidden="true">⌕</span>查找记录 <kbd>/</kbd></button>
+        <button class="toolbar-button" id="quickWeightButton" type="button">＋ 体重 <kbd>W</kbd></button>
+        <button class="primary-button" id="quickMealButton" type="button">＋ 记一餐 <kbd>N</kbd></button>
+      </div>
+    </section>
+
     <section class="week-rings" id="weekRings" aria-label="本周每日营养进度"></section>
+
+    <section class="overview-grid" aria-label="所选日期概览">
+      <article class="overview-item calories-overview">
+        <span>热量摄入</span><strong id="overviewCalories">0</strong><small id="overviewCaloriesDetail">目标 2600 kcal</small>
+        <i><b id="overviewCaloriesBar"></b></i>
+      </article>
+      <article class="overview-item">
+        <span>蛋白质完成度</span><strong id="overviewProtein">0%</strong><small id="overviewProteinDetail">0 / 130 g</small>
+        <i><b id="overviewProteinBar"></b></i>
+      </article>
+      <article class="overview-item">
+        <span>饮水完成度</span><strong id="overviewWater">0%</strong><small id="overviewWaterDetail">0 / 2800 ml</small>
+        <i><b id="overviewWaterBar"></b></i>
+      </article>
+      <article class="overview-item weight-overview">
+        <span>最近体重</span><strong id="overviewWeight">--</strong><small id="overviewWeightDetail">暂无身体记录</small>
+      </article>
+    </section>
 
     <section class="hero-grid">
       <article class="card activity-card">
@@ -65,6 +99,16 @@
           <div><span class="eyebrow">饮食记录</span><h2 id="mealTitle">今天吃了什么</h2></div>
           <button class="primary-button" id="addMealButton" type="button">＋ 记一餐</button>
         </div>
+        <div class="meal-tools" role="search">
+          <label class="search-field"><span aria-hidden="true">⌕</span><input id="mealSearch" type="search" placeholder="搜索餐食名称、备注或日期" autocomplete="off"></label>
+          <select id="mealKindFilter" aria-label="筛选餐次">
+            <option value="">全部餐次</option><option value="早餐">早餐</option><option value="午餐">午餐</option><option value="晚餐">晚餐</option><option value="加餐">加餐</option>
+          </select>
+          <select id="mealScopeFilter" aria-label="筛选日期范围">
+            <option value="day">所选日期</option><option value="all">全部历史</option>
+          </select>
+          <span class="result-count" id="mealResultCount">0 条</span>
+        </div>
         <div class="meal-list" id="mealList"></div>
       </article>
 
@@ -98,6 +142,7 @@
           <div><span>饮水</span><strong id="goalWater">2800 ml</strong></div>
         </div>
         <button class="export-button" id="exportButton" type="button">导出全部记录 JSON</button>
+        <button class="key-button" id="changeKeyButton" type="button">更换网页登录密钥</button>
       </aside>
     </section>
   </main>
@@ -172,6 +217,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20260828-2"></script>
+  <script src="app.js?v=20260902-1"></script>
 </body>
 </html>
