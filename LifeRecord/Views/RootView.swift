@@ -8,6 +8,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
+    @EnvironmentObject private var router: AppRouter
     @Query private var meals: [MealEntry]
     @Query private var bodyMetrics: [BodyMetric]
     @Query private var waterEntries: [WaterEntry]
@@ -38,40 +39,6 @@ struct RootView: View {
                 .tag(3)
         }
         .environmentObject(coachTaskCenter)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if coachTaskCenter.isGenerating && selectedTab != 2 {
-                Button {
-                    selectedTab = 2
-                } label: {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                            .controlSize(.small)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("AI 教练正在生成回答")
-                                .font(.subheadline.weight(.semibold))
-                            Text("可以继续使用其他功能，完成后回到教练页查看")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .foregroundStyle(.primary)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(.white.opacity(0.16), lineWidth: 0.5)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 5)
-                }
-                .buttonStyle(.plain)
-            }
-        }
         .task {
             DemoDataService.installIfNeeded(context: modelContext)
             await syncCoordinator.sync(context: modelContext, settings: settings)
@@ -88,12 +55,26 @@ struct RootView: View {
             Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
         }
         .onChange(of: scenePhase) { _, phase in
+            updateCoachVisibility(for: phase)
             if phase == .active {
                 Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
             }
         }
+        .onChange(of: selectedTab) { _, _ in
+            updateCoachVisibility(for: scenePhase)
+        }
+        .onReceive(router.$coachRoute.compactMap { $0 }) { _ in
+            selectedTab = 2
+        }
+        .onAppear {
+            updateCoachVisibility(for: scenePhase)
+        }
         .fullScreenCover(isPresented: $showsOnboarding) {
             OnboardingView()
         }
+    }
+
+    private func updateCoachVisibility(for phase: ScenePhase) {
+        AIAnswerNotificationCenter.shared.isCoachVisible = selectedTab == 2 && phase == .active
     }
 }

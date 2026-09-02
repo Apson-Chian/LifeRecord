@@ -47,6 +47,7 @@ final class CoachTaskCenter: ObservableObject {
                 if statusMessages[conversationID] == nil {
                     statusMessages[conversationID] = "回答已完成"
                 }
+                AIAnswerNotificationCenter.shared.notifyAnswerReady(conversationID: conversationID)
             } catch is CancellationError {
                 statusMessages[conversationID] = "已停止生成"
             } catch {

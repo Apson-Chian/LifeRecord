@@ -8,6 +8,7 @@ struct CoachView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
     @EnvironmentObject private var coachTaskCenter: CoachTaskCenter
+    @EnvironmentObject private var router: AppRouter
     @Query(sort: \CoachMessage.date) private var allMessages: [CoachMessage]
     @Query(sort: \CoachConversation.updatedAt, order: .reverse) private var conversations: [CoachConversation]
     @Query(sort: \BodyMetric.date) private var bodyMetrics: [BodyMetric]
@@ -24,6 +25,7 @@ struct CoachView: View {
     @State private var confirmsClear = false
     @State private var showsConversationSidebar = false
     @State private var activeConversationID: UUID?
+    @State private var handledRouteID: UUID?
     @FocusState private var composerFocused: Bool
 
     private let suggestions = ["帮我记录今天晨重 64.2kg", "分析今天是否适合加餐", "看这张配料表是否适合增肌"]
@@ -120,6 +122,17 @@ struct CoachView: View {
                     }
             )
             .onAppear { prepareConversations() }
+            .onReceive(router.$coachRoute.compactMap { $0 }) { route in
+                guard handledRouteID != route.id else { return }
+                handledRouteID = route.id
+                if let conversationID = route.conversationID {
+                    activeConversationID = conversationID
+                }
+                if let draft = route.draft {
+                    input = draft
+                    composerFocused = true
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) { composer }
             .navigationTitle(activeConversation?.title ?? "AI 助手")
             .navigationBarTitleDisplayMode(.inline)
@@ -490,6 +503,7 @@ struct CoachView: View {
         imageData = []
 
         let conversationID = conversation.id
+        AIAnswerNotificationCenter.shared.requestAuthorizationIfNeeded()
         let context = systemContext
         let settings = settings
         let modelContext = modelContext

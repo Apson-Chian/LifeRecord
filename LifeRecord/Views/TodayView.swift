@@ -6,6 +6,7 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
+    @EnvironmentObject private var router: AppRouter
     @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
     @Query(sort: \BodyMetric.date, order: .reverse) private var bodyMetrics: [BodyMetric]
     @Query(sort: \WaterEntry.date, order: .reverse) private var waterEntries: [WaterEntry]
@@ -171,9 +172,6 @@ struct TodayView: View {
                         Label(settings.fitnessGoal.rawValue, systemImage: settings.fitnessGoal.symbol)
                             .font(.headline)
                             .foregroundStyle(AppTheme.accent)
-                        Text(settings.fitnessGoal.headline)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Text("\(Int(settings.height)) cm")
@@ -345,23 +343,72 @@ struct TodayView: View {
     }
 
     private var insightCard: some View {
-        GlassCard {
-            HStack(alignment: .top, spacing: 13) {
-                Image(systemName: "wand.and.sparkles")
+        Button {
+            router.openCoach(draft: "请结合我今天的记录，进一步分析这条今日提示并给出可执行建议：\n\(localInsight)")
+        } label: {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "lightbulb.max.fill")
                     .symbolRenderingMode(.hierarchical)
-                    .font(.title3)
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(width: 38, height: 38)
-                    .background(AppTheme.accent.opacity(0.12), in: Circle())
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("今日提示").font(.headline)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(
+                        LinearGradient(
+                            colors: [AppTheme.accentSoft, AppTheme.accent],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: Circle()
+                    )
+                    .shadow(color: AppTheme.accent.opacity(0.25), radius: 10, y: 5)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text("今日提示")
+                            .font(.headline)
+                        Spacer()
+                        Label("问 AI", systemImage: "sparkles")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.accent)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(AppTheme.accent.opacity(0.11), in: Capsule())
+                    }
                     Text(localInsight)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 5) {
+                        Text("继续和 AI 深入聊聊")
+                        Image(systemName: "arrow.right")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.accent)
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.regularMaterial)
+                    .overlay {
+                        LinearGradient(
+                            colors: [AppTheme.accent.opacity(0.12), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(AppTheme.accent.opacity(0.18), lineWidth: 0.75)
+            }
         }
+        .buttonStyle(PressScaleButtonStyle())
+        .foregroundStyle(.primary)
+        .accessibilityHint("打开 AI 助手并带入这条提示")
     }
 
     private var localInsight: String {
