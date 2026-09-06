@@ -71,6 +71,7 @@ struct MealDetailView: View {
     let meal: MealEntry
 
     @State private var isConfirmingDelete = false
+    @State private var isEditing = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -166,6 +167,8 @@ struct MealDetailView: View {
         .background(AppBackground())
         .navigationTitle("餐食详情")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .primaryAction) { Button("编辑") { isEditing = true } } }
+        .sheet(isPresented: $isEditing) { MealEditView(meal: meal) }
         .confirmationDialog("确定删除这条饮食记录？", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
             Button("删除", role: .destructive, action: deleteMeal)
             Button("取消", role: .cancel) {}
@@ -332,5 +335,93 @@ private struct NutritionDetailRow: View {
             Text("\(value.formatted(.number.precision(.fractionLength(0...1)))) \(unit)")
                 .font(.body.weight(.semibold).monospacedDigit())
         }
+    }
+}
+
+
+struct MealEditView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppSettings.self) private var settings
+    let meal: MealEntry
+    @State private var draft = MealDraft()
+    @State private var date = Date.now
+    @State private var kind = MealKind.snack
+    @State private var instruction = ""
+    @State private var originalUpdatedAt = Date.distantPast
+    @State private var busy = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("让 AI 修改") {
+                    TextField("例如：米饭只吃了一半，重新计算营养", text: $instruction, axis: .vertical)
+                    Button(busy ? "正在修改…" : "生成修改结果") { Task { await revise() } }
+                        .disabled(busy || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Text("AI 结果会填入下方表单，复核并保存后生效。原照片保留，饮水记录不变。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("餐食数据") {
+                    TextField("名称", text: $draft.name)
+                    Picker("餐次", selection: $kind) { ForEach(MealKind.allCases) { Text($0.rawValue).tag($0) } }
+                    DatePicker("时间", selection: $date)
+                    number("热量 kcal", value: $draft.calories)
+                    number("蛋白质 g", value: $draft.protein)
+                    number("碳水 g", value: $draft.carbs)
+                    number("脂肪 g", value: $draft.fat)
+                    number("膳食纤维 g", value: $draft.fiber)
+                    TextField("备注", text: $draft.note, axis: .vertical)
+                }.disabled(busy)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle("编辑餐食")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(busy) }
+                ToolbarItem(placement: .confirmationAction) { Button("保存", action: save).disabled(busy) }
+            }
+            .onAppear {
+                draft = MealDraft(name: meal.name, calories: meal.calories, protein: meal.protein, carbs: meal.carbs, fat: meal.fat, fiber: meal.fiber, note: meal.note)
+                date = meal.date; kind = meal.kind; originalUpdatedAt = meal.updatedAt
+            }
+            .alert("无法修改", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("好") { errorMessage = nil }
+            } message: { Text(errorMessage ?? "") }
+            .interactiveDismissDisabled(busy)
+        }
+    }
+
+    private func number(_ title: String, value: Binding<Double>) -> some View {
+        HStack {
+            Text(title)
+            TextField("0", value: value, format: .number)
+                .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+        }
+    }
+
+    @MainActor private func revise() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let current = String(data: try JSONEncoder().encode(draft), encoding: .utf8) ?? ""
+            draft = try await AIClient(settings: settings).analyzeMeal(
+                description: "修改已有餐食，原数据：\(current)。用户要求：\(instruction)。保留未涉及的内容，返回修改后的完整营养数据，waterML 为 0。", images: [], mode: .meal)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func save() {
+        guard !meal.isDeleted else { errorMessage = "该记录已被删除，请关闭编辑页。"; return }
+        guard meal.updatedAt == originalUpdatedAt else { errorMessage = "该记录已在其他设备更新，请关闭后重新编辑。"; return }
+        guard !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              [draft.calories, draft.protein, draft.carbs, draft.fat, draft.fiber].allSatisfy({ $0.isFinite && $0 >= 0 }) else {
+            errorMessage = "请填写名称和有效的非负营养数值。"; return
+        }
+        meal.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        meal.date = date; meal.kindRaw = kind.rawValue
+        meal.calories = draft.calories; meal.protein = draft.protein; meal.carbs = draft.carbs
+        meal.fat = draft.fat; meal.fiber = draft.fiber; meal.note = draft.note; meal.updatedAt = .now
+        do { try modelContext.save(); dismiss() }
+        catch { modelContext.rollback(); errorMessage = error.localizedDescription }
     }
 }

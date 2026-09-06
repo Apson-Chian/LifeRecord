@@ -632,6 +632,35 @@ struct CoachView: View {
                 .replacingOccurrences(of: "-", with: "_")
                 .replacingOccurrences(of: " ", with: "_")
             switch type {
+            case "update_meal", "edit_meal":
+                guard action.name != nil || action.mealKind != nil || action.calories != nil || action.protein != nil || action.carbs != nil || action.fat != nil || action.fiber != nil || action.note != nil || action.date != nil else {
+                    rejectedCount += 1
+                    continue
+                }
+                guard action.date.map({ ISO8601DateFormatter().date(from: $0) != nil }) ?? true else {
+                    rejectedCount += 1
+                    continue
+                }
+                guard let id = actionRecordID(action),
+                      let meal = meals.first(where: { $0.id == id && !$0.isDeleted }),
+                      [action.calories, action.protein, action.carbs, action.fat, action.fiber].compactMap({ $0 }).allSatisfy({ $0.isFinite && $0 >= 0 }),
+                      action.name.map({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? true,
+                      action.mealKind.map({ MealKind(rawValue: $0) != nil }) ?? true else {
+                    rejectedCount += 1
+                    continue
+                }
+                if let value = action.name { meal.name = value.trimmingCharacters(in: .whitespacesAndNewlines) }
+                if let value = action.mealKind { meal.kindRaw = value }
+                if let value = action.calories { meal.calories = value }
+                if let value = action.protein { meal.protein = value }
+                if let value = action.carbs { meal.carbs = value }
+                if let value = action.fat { meal.fat = value }
+                if let value = action.fiber { meal.fiber = value }
+                if let value = action.note { meal.note = value }
+                // 日期描述通常是在定位原记录；仅使用 AI 明确返回的修改时间。
+                if let value = action.date, let parsed = ISO8601DateFormatter().date(from: value) { meal.date = parsed }
+                meal.updatedAt = .now
+                receipts.append("修改餐食「\(meal.name)」· \(meal.calories.formatted()) kcal · \(receiptDate(meal.date))")
             case "add_meal", "record_meal", "log_meal":
                 guard let name = action.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
                       let calories = action.calories, calories >= 0 else {
@@ -866,7 +895,7 @@ struct CoachView: View {
         }.joined(separator: "，")
         let recentWater = waterEntries.filter { $0.date >= cutoff }.reduce(0) { $0 + $1.milliliters }
         let deletableMeals = recentMeals.sorted { $0.date > $1.date }.prefix(30).map {
-            "meal id=\($0.id.uuidString) | \(receiptDate($0.date)) | \($0.kind.rawValue) | \($0.name) | \(Int($0.calories))kcal"
+            "meal id=\($0.id.uuidString) | \(receiptDate($0.date)) | \($0.kind.rawValue) | \($0.name) | \(Int($0.calories))kcal | 蛋白质 \($0.protein)g | 碳水 \($0.carbs)g | 脂肪 \($0.fat)g | 纤维 \($0.fiber)g | \($0.note)"
         }.joined(separator: "\n")
         let deletableWeights = bodyMetrics.sorted { $0.date > $1.date }.prefix(20).map {
             "weight id=\($0.id.uuidString) | \(receiptDate($0.date)) | \($0.weight)kg"
@@ -879,11 +908,11 @@ struct CoachView: View {
         你是这个私人健身记录 App 内的通用 AI 助手。可以回答用户提出的任何正常问题，也应结合记录给出简洁、可执行、明确区分事实与估算的建议。
         用户身高 \(settings.height)cm，起始体重 \(settings.baselineWeight)kg，当前约 \(latestWeight)kg；目标为\(settings.fitnessGoal.rawValue)，目标体重 \(settings.targetWeight)kg，每周期望变化 \(settings.weeklyWeightTarget)kg。每日目标：\(Int(settings.calorieGoal))kcal、蛋白质 \(Int(settings.proteinGoal))g、碳水 \(Int(settings.carbsGoal))g、脂肪 \(Int(settings.fatGoal))g、饮水 \(Int(settings.waterGoal))ml。
         最近体重：\(weightSummary.isEmpty ? "暂无" : weightSummary)。最近饮食：\(foodSummary.isEmpty ? "暂无" : foodSummary)。近 30 天已记录饮水总量 \(Int(recentWater))ml。
-        当前可操作记录清单（删除只能使用这里的准确 id；找不到或有歧义就先询问）：
+        当前可操作记录清单（修改和删除只能使用这里的准确 id；找不到或有歧义就先询问）：
         \(deletableMeals.isEmpty ? "暂无餐食" : deletableMeals)
         \(deletableWeights.isEmpty ? "暂无体重" : deletableWeights)
         \(deletableWater.isEmpty ? "暂无饮水" : deletableWater)
-        当用户明确要求记录餐食、体重、饮水、调整目标或删除记录时，按约定返回 action；用户发送明显属于实际摄入的餐食或饮料照片且没有要求“只分析/不要记录”时，也必须识别营养并返回 add_meal action。不要把单独的配料表、商品包装或菜单误判为已经摄入。不要臆造用户没说的数据。删除动作必须与用户明确指定的类型、时间和内容一致。涉及伤病、进食障碍或异常体重变化时提示咨询专业人士，不做医疗诊断。
+        当用户明确要求记录餐食、体重、饮水、修改已保存餐食、调整目标或删除记录时，按约定返回 action；用户发送明显属于实际摄入的餐食或饮料照片且没有要求“只分析/不要记录”时，也必须识别营养并返回 add_meal action。不要把单独的配料表、商品包装或菜单误判为已经摄入。不要臆造用户没说的数据。删除动作必须与用户明确指定的类型、时间和内容一致。涉及伤病、进食障碍或异常体重变化时提示咨询专业人士，不做医疗诊断。
         """
     }
 }

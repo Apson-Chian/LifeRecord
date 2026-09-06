@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import UIKit
+import AVFoundation
 
 struct AddMealView: View {
     @Environment(\.dismiss) private var dismiss
@@ -21,6 +22,7 @@ struct AddMealView: View {
     @State private var isAnalyzing = false
     @State private var isSaving = false
     @State private var showsCamera = false
+    @State private var isRequestingCamera = false
     @State private var errorMessage: String?
     @State private var wasAIAnalyzed = false
     @FocusState private var focusedField: Field?
@@ -48,13 +50,13 @@ struct AddMealView: View {
                         .focused($focusedField, equals: .description)
                     HStack(spacing: 0) {
                         Button {
-                            showsCamera = true
+                            Task { await openCamera() }
                         } label: {
                             Label("拍照", systemImage: "camera.fill")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .disabled(
-                            isAnalyzing || isLoadingPhotos || imageData.count >= settings.maxPhotos
+                            isAnalyzing || isLoadingPhotos || isRequestingCamera || imageData.count >= settings.maxPhotos
                             || !UIImagePickerController.isSourceTypeAvailable(.camera)
                         )
 
@@ -69,8 +71,10 @@ struct AddMealView: View {
                             Label("从相册选择", systemImage: "photo.stack")
                                 .frame(maxWidth: .infinity, alignment: .trailing)
                         }
-                        .disabled(isAnalyzing || isLoadingPhotos || imageData.count >= settings.maxPhotos)
+                        .disabled(isAnalyzing || isLoadingPhotos || isRequestingCamera || imageData.count >= settings.maxPhotos)
                     }
+                    // Form 的自动按钮样式会把同一行的操作一起触发。
+                    .buttonStyle(.borderless)
                     .onChange(of: photoItems) { _, items in
                         guard !items.isEmpty else { return }
                         Task { await loadPhotos(items) }
@@ -230,10 +234,48 @@ struct AddMealView: View {
     }
 
     @MainActor
+    private func openCamera() async {
+        guard !isRequestingCamera, !showsCamera,
+              UIImagePickerController.isSourceTypeAvailable(.camera) else { return }
+        focusedField = nil
+        isRequestingCamera = true
+        defer { isRequestingCamera = false }
+
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            showsCamera = true
+        case .notDetermined:
+            if await AVCaptureDevice.requestAccess(for: .video) {
+                showsCamera = true
+            } else {
+                errorMessage = "未获得相机权限。请在系统设置中允许生活记录使用相机，或从相册选择照片。"
+            }
+        case .denied:
+            errorMessage = "相机权限已关闭。请在系统设置中允许生活记录使用相机，或从相册选择照片。"
+        case .restricted:
+            errorMessage = "此设备限制了相机使用，请从相册选择照片。"
+        @unknown default:
+            errorMessage = "相机暂时不可用，请从相册选择照片。"
+        }
+    }
+
+    @MainActor
     private func addCameraPhoto(_ image: UIImage) async {
-        guard imageData.count < settings.maxPhotos,
-              let original = image.jpegData(compressionQuality: 0.9) else { return }
-        imageData.append(AIClient.jpegImageData(forSending: original, maxDimension: 1280))
+        guard imageData.count < settings.maxPhotos else { return }
+        // 先缩小拍摄原图，避免全尺寸 JPEG 编码后再解码造成内存峰值。
+        let scale = min(1280 / max(image.size.width, image.size.height), 1)
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        guard let data = resized.jpegData(compressionQuality: 0.8) else {
+            errorMessage = "无法读取拍摄的照片，请重新拍摄。"
+            return
+        }
+        imageData.append(data)
         await analyze()
     }
 

@@ -143,12 +143,13 @@ function render() {
   const target = goals();
   $("#dateLabel").textContent = fmtDate(date);
   $("#toolbarDateLabel").textContent = relativeDateLabel(date);
-  $("#mealTitle").textContent = selectedDate === dateKey(new Date()) ? "今天吃了什么" : `${date.getMonth() + 1} 月 ${date.getDate()} 日记录`;
+  $("#mealTitle").textContent = selectedDate === dateKey(new Date()) ? "餐食记录" : `${date.getMonth() + 1} 月 ${date.getDate()} 日记录`;
   $("#mealSummary").textContent = `${meals.length} 餐 · ${Math.round(nutrition.calories)} kcal`;
   $("#waterTotal").textContent = (water / 1000).toFixed(1);
   renderOverview(nutrition, water, target);
   renderMealPreview(meals);
   renderWeekRings();
+  renderDailyRings(nutrition, meals.length, target);
 }
 
 function relativeDateLabel(date) {
@@ -180,6 +181,30 @@ function renderOverview(nutrition, water, target) {
   $("#overviewWeightDetail").textContent = metric ? `${fmtMealDate(metric.date)}${metric.bodyFat ? ` · 体脂 ${Number(metric.bodyFat).toFixed(1)}%` : ""}` : "暂无身体记录";
 }
 
+// SVG strokes keep the ring spacing and rounded ends crisp at every size.
+function nutritionRings(values) {
+  const colors = ["protein", "carbs", "meals"];
+  return `<svg viewBox="0 0 200 200" aria-hidden="true">${values.map((value, index) => {
+    const radius = 89 - index * 19;
+    const fraction = Number.isFinite(value) ? Math.max(0, Math.min(value, 1)) : 0;
+    return `<circle class="nutrition-track ${colors[index]}" cx="100" cy="100" r="${radius}"/><circle class="nutrition-progress ${colors[index]}" cx="100" cy="100" r="${radius}" pathLength="100" stroke-dasharray="${fraction * 100} 100" transform="rotate(-90 100 100)" ${fraction === 0 ? 'visibility="hidden"' : ""}/>`;
+  }).join("")}</svg>`;
+}
+
+function renderDailyRings(nutrition, mealCount, target) {
+  const values = [progress(nutrition.protein, target.proteinGoal), progress(nutrition.carbs, target.carbsGoal), progress(mealCount, 4)];
+  const percent = Math.round(values.reduce((sum, value) => sum + value, 0) / 3 * 100);
+  const ring = $("#dailyRings");
+  ring.setAttribute("role", "img");
+  ring.setAttribute("aria-label", `营养目标平均完成 ${percent}%，蛋白质 ${Math.round(values[0] * 100)}%，碳水 ${Math.round(values[1] * 100)}%，用餐 ${mealCount} 次`);
+  ring.innerHTML = `${nutritionRings(values)}<div class="daily-ring-center"><strong>${percent}<small>%</small></strong><span>平均完成</span></div>`;
+  $("#nutritionLegend").innerHTML = [
+    ["protein", "蛋白质", Math.round(nutrition.protein), Math.round(target.proteinGoal), "g"],
+    ["carbs", "碳水化合物", Math.round(nutrition.carbs), Math.round(target.carbsGoal), "g"],
+    ["meals", "用餐次数", mealCount, 4, "次"]
+  ].map(([color, label, value, goal, unit]) => `<div><i class="legend-dot ${color}"></i><span>${label}<small><b>${value}</b> / ${goal} ${unit}</small></span><em>${Math.round(values[["protein", "carbs", "meals"].indexOf(color)] * 100)}%</em></div>`).join("");
+}
+
 function renderWeekRings() {
   const selected = parseDate(selectedDate);
   const mondayOffset = (selected.getDay() + 6) % 7;
@@ -195,34 +220,26 @@ function renderWeekRings() {
     const protein = meals.reduce((sum, item) => sum + Number(item.protein || 0), 0);
     const carbs = meals.reduce((sum, item) => sum + Number(item.carbs || 0), 0);
     const hasRecord = recordedDates().has(key);
-    html.push(`<button class="week-day ${key === selectedDate ? "selected" : ""} ${hasRecord ? "recorded" : ""}" type="button" data-week-date="${key}" aria-label="${fmtDate(date)}${hasRecord ? "，已有记录" : ""}">
+    html.push(`<button class="week-day ${key === selectedDate ? "selected" : ""} ${hasRecord ? "recorded" : ""}" type="button" data-week-date="${key}" aria-pressed="${key === selectedDate}" aria-label="${fmtDate(date)}${hasRecord ? "，已有记录" : ""}">
       <span>${labels[index]}</span>
-      <i class="mini-rings" aria-hidden="true">
-        <i class="mini-ring mini-protein" style="--progress:${progress(protein, target.proteinGoal)}"></i>
-        <i class="mini-ring mini-carbs" style="--progress:${progress(carbs, target.carbsGoal)}"></i>
-        <i class="mini-ring mini-meals" style="--progress:${progress(meals.length, 4)}"></i>
-        <b class="mini-day-number">${date.getDate()}</b>
-      </i>
+      <i class="mini-rings" aria-hidden="true">${nutritionRings([progress(protein, target.proteinGoal), progress(carbs, target.carbsGoal), progress(meals.length, 4)])}<b class="mini-day-number">${date.getDate()}</b></i>
+      <small>${hasRecord ? "已记录" : "待记录"}</small>
     </button>`);
   }
   $("#weekRings").innerHTML = html.join("");
 }
 
-function renderMealPreview(meals) {
-  const list = $("#mealPreview");
-  if (!meals.length) {
-    list.innerHTML = `<div class="empty">这一天还没有餐食记录，点“记一餐”开始。</div>`;
-    return;
-  }
-  list.innerHTML = [...meals].sort((a, b) => b.date - a.date).slice(0, 4).map(item => {
-    const photoIDs = Array.isArray(item.photoIDs) ? item.photoIDs.filter(id => /^[a-f0-9]{32}$/.test(id)) : [];
-    return `
-    <button class="meal-item" type="button" data-show-meal="${item.id}">
-      <span class="meal-symbol" aria-hidden="true">${symbols[item.kind] || "◇"}</span>
-      <span class="meal-copy"><strong>${escapeHtml(item.name)}</strong><small>${item.kind} · 蛋白 ${Math.round(item.protein)}g · 碳水 ${Math.round(item.carbs)}g${photoIDs.length ? ` · ${photoIDs.length} 张照片` : ""}</small></span>
-      <span class="meal-kcal"><strong>${Math.round(item.calories)}</strong><span>kcal · 详情 ›</span></span>
-    </button>`;
-  }).join("");
+function renderMealPreview() {
+  const query = $("#mealSearch").value.trim().toLowerCase();
+  const kind = $("#mealKindFilter").value;
+  const meals = ($("#mealScope").value === "all" ? state.meals : selectedMeals())
+    .filter(item => (!kind || item.kind === kind) && `${item.name} ${item.note || ""}`.toLowerCase().includes(query))
+    .sort((a, b) => b.date - a.date);
+  $("#mealPreview").innerHTML = meals.length ? meals.map(item => `<tr>
+    <td><button class="record-name" data-show-meal="${item.id}">${escapeHtml(item.name)}</button><small>${fmtShortDate(item.date)} · ${escapeHtml(recordSource(item, "meal"))}</small></td>
+    <td><span class="kind-badge">${escapeHtml(item.kind)}</span></td><td>${Math.round(item.calories)} <small>kcal</small></td><td>${Number(item.protein).toFixed(1)} g</td><td>${Number(item.carbs).toFixed(1)} g</td>
+    <td><button class="text-button" data-edit-meal="${item.id}">编辑</button></td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">没有匹配的餐食记录</div></td></tr>`;
+  $("#tableSummary").textContent = `共 ${meals.length} 条记录 · 点击名称查看照片与详情`;
 }
 
 function escapeHtml(value) { const node = document.createElement("span"); node.textContent = String(value); return node.innerHTML; }
@@ -335,7 +352,7 @@ function showMealDetail(meal) {
     eyebrow: `${meal.kind} · ${recordSource(meal, "meal")}`,
     title: meal.name,
     subtitle: fmtShortDate(meal.date),
-    html: `<div class="detail-kpis"><div><span>热量</span><strong>${Math.round(meal.calories)} kcal</strong></div><div><span>蛋白质</span><strong>${Math.round(meal.protein)} g</strong></div><div><span>碳水</span><strong>${Math.round(meal.carbs)} g</strong></div><div><span>脂肪</span><strong>${Math.round(meal.fat)} g</strong></div></div>${meal.note ? `<section class="detail-note"><h3>记录说明</h3><p>${escapeHtml(meal.note)}</p></section>` : ""}<div class="detail-actions"><button class="delete-record" type="button" data-delete-meal="${meal.id}">删除这条记录</button></div>${photos}`
+    html: `<div class="detail-kpis"><div><span>热量</span><strong>${Math.round(meal.calories)} kcal</strong></div><div><span>蛋白质</span><strong>${Math.round(meal.protein)} g</strong></div><div><span>碳水</span><strong>${Math.round(meal.carbs)} g</strong></div><div><span>脂肪</span><strong>${Math.round(meal.fat)} g</strong></div></div>${meal.note ? `<section class="detail-note"><h3>记录说明</h3><p>${escapeHtml(meal.note)}</p></section>` : ""}<div class="detail-actions"><button class="primary-button" type="button" data-edit-meal="${meal.id}">编辑记录</button><button class="delete-record" type="button" data-delete-meal="${meal.id}">删除这条记录</button></div>${photos}`
   });
 }
 
@@ -379,10 +396,27 @@ function moveSelectedDate(days) {
   selectDate(dateKey(date));
 }
 
-function openMealDialog() { $("#mealDialog").showModal(); }
+let editingMealID = null;
+let editingMealVersion = null;
+let editingDateInput = null;
+function openMealDialog(meal = null) {
+  // Click handlers pass an Event; only a stored record can be edited.
+  if (!meal || !state.meals.includes(meal)) meal = null;
+  editingMealID = meal?.id || null;
+  editingMealVersion = meal?.updatedAt ?? null;
+  const form = $("#mealForm"); form.reset();
+  $("#mealFormTitle").textContent = meal ? "编辑餐食" : "记一餐";
+  $("#mealFormEyebrow").textContent = meal ? "修改原记录 · 保留已有照片" : "新增记录";
+  const date = meal ? new Date(meal.date * 1000) : parseDate(selectedDate);
+  form.elements.date.value = `${dateKey(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  editingDateInput = form.elements.date.value;
+  if (meal) for (const key of ["kind", "name", "calories", "protein", "carbs", "fat", "fiber", "note"]) form.elements[key].value = meal[key] ?? "";
+  $("#mealDialog").showModal();
+}
 function openWeightDialog() { $("#weightDialog").showModal(); }
 
 renderWaterOptions();
+render();
 boot();
 
 $("#authForm").addEventListener("submit", async event => {
@@ -415,6 +449,8 @@ $("#mealPreview").addEventListener("click", event => {
 });
 
 document.addEventListener("click", event => {
+  const edit = event.target.closest("[data-edit-meal]");
+  if (edit) { const meal = state.meals.find(item => item.id === edit.dataset.editMeal); if (meal) openMealDialog(meal); return; }
   const button = event.target.closest("[data-open-detail]");
   if (button) showColumnDetail(button.dataset.openDetail);
 });
@@ -467,7 +503,7 @@ $("#todayButton").addEventListener("click", () => selectDate(dateKey(new Date())
 $("#syncButton").addEventListener("click", async () => {
   if (await syncNow("已手动同步")) showToast("手机与电脑数据已同步");
 });
-$("#searchMealButton").addEventListener("click", () => showColumnDetail("meals"));
+$("#searchMealButton").addEventListener("click", () => { $("#records").scrollIntoView(); $("#mealSearch").focus(); });
 $("#showMealsButton").addEventListener("click", () => showColumnDetail("meals"));
 
 $("#addMealButton").addEventListener("click", openMealDialog);
@@ -475,20 +511,34 @@ $("#quickMealButton").addEventListener("click", openMealDialog);
 $("#closeMeal").addEventListener("click", () => $("#mealDialog").close());
 $("#mealForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const form = event.currentTarget; const data = new FormData(form); const timestamp = nowSeconds(); const id = newID();
+  const form = event.currentTarget; const data = new FormData(form); const timestamp = nowSeconds(); const id = editingMealID || newID();
   const submit = form.querySelector('[type="submit"]'); const originalLabel = submit.textContent;
   submit.disabled = true; submit.textContent = "正在保存照片…";
   try {
     const files = Array.from(form.elements.photos.files || []);
-    if (files.length > 6) throw new Error("一次最多保存 6 张照片");
+    const existing = editingMealID ? state.meals.find(item => item.id === editingMealID) : null;
+    if (editingMealID && !existing) throw new Error("该记录已被删除，请关闭后重试");
+    if (files.length + (existing?.photoIDs?.length || 0) > 6) throw new Error("每餐合计最多保存 6 张照片");
+    if (existing && existing.updatedAt !== editingMealVersion) throw new Error("该记录已在其他设备更新，请关闭后重新编辑");
+    const date = existing && data.get("date") === editingDateInput ? existing.date : new Date(data.get("date")).getTime() / 1000;
+    if (!Number.isFinite(date) || !data.get("name").trim()) throw new Error("请填写有效的名称和时间");
+    for (const key of ["calories", "protein", "carbs", "fat", "fiber"]) if (!Number.isFinite(Number(data.get(key))) || Number(data.get(key)) < 0) throw new Error("营养数据必须为非负数字");
     const photoIDs = await uploadMealPhotos(id, files);
-    state.meals.push({
-      id, date: epochForDateKey(selectedDate), kind: data.get("kind"), name: data.get("name").trim(),
+    const record = {
+      ...(existing || {}), id, date, kind: data.get("kind"), name: data.get("name").trim(),
       calories: Number(data.get("calories")), protein: Number(data.get("protein")), carbs: Number(data.get("carbs")),
-      fat: Number(data.get("fat")), fiber: 0, note: "网页版记录", source: "手动", createdAt: timestamp, updatedAt: timestamp, photoIDs
-    });
+      fat: Number(data.get("fat")), fiber: Number(data.get("fiber")), note: data.get("note").trim(),
+      source: existing?.source || "手动", createdAt: existing?.createdAt || timestamp, updatedAt: timestamp,
+      photoIDs: [...(existing?.photoIDs || []), ...photoIDs]
+    };
+    if (existing) {
+      const index = state.meals.findIndex(item => item.id === id);
+      if (index < 0) throw new Error("该记录已被删除");
+      if (state.meals[index].updatedAt !== editingMealVersion) throw new Error("该记录已更新，请关闭后重新编辑");
+      state.meals[index] = record;
+    } else state.meals.push(record);
     touchLocalState();
-    render(); form.reset(); $("#mealDialog").close(); await syncNow(); showToast("餐食与照片已保存");
+    render(); form.reset(); $("#mealDialog").close(); $("#detailDialog").close(); const synced = await syncNow(); showToast(synced ? "餐食已保存并同步" : "修改待同步，请保持页面打开并重试同步");
   } catch (error) {
     showToast(error.message || "照片保存失败");
   } finally {
@@ -541,7 +591,7 @@ document.addEventListener("keydown", event => {
   const isEditing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target.isContentEditable;
   if (event.key === "/" && !isEditing) {
     event.preventDefault();
-    showColumnDetail("meals");
+    $("#records").scrollIntoView(); $("#mealSearch").focus();
   } else if (!isEditing && event.key.toLowerCase() === "n") {
     event.preventDefault(); openMealDialog();
   } else if (!isEditing && event.key.toLowerCase() === "w") {
@@ -556,3 +606,6 @@ document.addEventListener("keydown", event => {
 setInterval(() => { if (connected && document.visibilityState === "visible") syncNow("已自动同步", true); }, 15000);
 document.addEventListener("visibilitychange", () => { if (connected && document.visibilityState === "visible") syncNow("已自动同步", true); });
 window.addEventListener("focus", () => { if (connected) syncNow("已自动同步", true); });
+
+for (const id of ["mealSearch", "mealScope", "mealKindFilter"]) $("#" + id).addEventListener("input", renderMealPreview);
+$("#sidebarGoals").addEventListener("click", () => $("#editGoalsButton").click());

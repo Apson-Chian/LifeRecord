@@ -3,19 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f4fb">
+  <meta name="theme-color" content="#f6f7f9">
   <meta name="description" content="LifeRecord 与 iPhone 双向同步的饮食、营养、饮水与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
-  <link rel="stylesheet" href="styles.css?v=20260902-2">
+  <link rel="stylesheet" href="styles.css?v=20260906-2">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
   <div class="ambient ambient-b"></div>
-  <main class="app-shell">
+  <aside class="sidebar" aria-label="主导航">
+    <a class="brand" href="./"><span class="brand-mark">L</span><span><strong>LifeRecord</strong><small>个人健康管理</small></span></a>
+    <span class="nav-label">工作空间</span>
+    <a class="nav-item active" href="#dashboard">▦ <span>数据总览</span></a>
+    <a class="nav-item" href="#records">≡ <span>餐食管理</span></a>
+    <button class="nav-item" data-open-detail="water">◉ <span>饮水记录</span></button>
+    <button class="nav-item" data-open-detail="weight">↗ <span>身体数据</span></button>
+    <button class="nav-item" id="sidebarGoals">⚙ <span>目标设置</span></button>
+    <div class="sidebar-bottom"><span class="nav-label">PRIVATE WORKSPACE</span><p>你的记录，井井有条。</p><small>与 iPhone 自动同步</small></div>
+  </aside>
+  <main class="app-shell" id="dashboard">
     <header class="topbar">
       <a class="brand" href="./" aria-label="LifeRecord 首页">
         <span class="brand-mark">L</span>
-        <span><strong>LifeRecord</strong><small>生活记录</small></span>
+        <span><strong>管理后台</strong><small>工作空间 / 数据总览</small></span>
       </a>
       <div class="top-actions">
         <span class="sync-pill" id="syncStatus"><i></i>正在连接</span>
@@ -26,6 +36,8 @@
         </button>
       </div>
     </header>
+
+    <section class="page-intro"><div><span class="eyebrow">OVERVIEW</span><h1>数据总览</h1><p>查看每日营养进度，管理餐食与身体记录。</p></div><span class="intro-note">饮食 · 饮水 · 身体</span></section>
 
     <section class="desktop-toolbar" aria-label="桌面快捷操作">
       <div class="date-navigator">
@@ -43,7 +55,13 @@
       </div>
     </section>
 
-    <section class="week-rings" id="weekRings" aria-label="本周每日营养进度"></section>
+    <section class="balance-card" aria-label="营养与本周记录">
+      <div class="balance-main">
+        <div class="balance-heading"><span class="eyebrow">每日营养</span><h2>营养目标完成度</h2><p>蛋白质、碳水与用餐次数</p></div>
+        <div class="balance-visual"><div id="dailyRings" class="daily-rings"></div><div class="nutrition-legend" id="nutritionLegend"></div></div>
+      </div>
+      <div class="week-panel"><div class="week-heading"><h2>本周记录</h2><span>点击日期查看</span></div><section class="week-rings" id="weekRings" aria-label="本周每日营养进度"></section><p class="week-note">外环蛋白质 · 中环碳水 · 内环用餐次数</p></div>
+    </section>
 
     <section class="overview-grid" aria-label="所选日期概览">
       <button class="overview-item calories-overview" type="button" data-open-detail="calories"><span>热量</span><strong id="overviewCalories">0</strong><small id="overviewCaloriesDetail">目标 2600 kcal</small><i><b id="overviewCaloriesBar"></b></i><em>查看来源 →</em></button>
@@ -53,20 +71,21 @@
     </section>
 
     <section class="home-grid">
-      <article class="card meal-card">
+      <article class="card meal-card" id="records">
         <div class="section-heading compact">
           <div><span class="eyebrow">饮食记录</span><h2 id="mealTitle">今天吃了什么</h2><p class="section-subtitle" id="mealSummary">0 餐</p></div>
           <div class="heading-actions"><button class="text-button" id="showMealsButton" type="button">查看详情</button><button class="primary-button" id="addMealButton" type="button">＋ 记一餐</button></div>
         </div>
-        <div class="meal-list meal-preview" id="mealPreview"></div>
+        <div class="record-filters"><label><span class="sr-only">搜索餐食</span><input id="mealSearch" type="search" placeholder="搜索名称或备注…"></label><select id="mealScope" aria-label="日期范围"><option value="day">所选日期</option><option value="all">全部历史</option></select><select id="mealKindFilter" aria-label="筛选餐次"><option value="">全部餐次</option><option>早餐</option><option>午餐</option><option>晚餐</option><option>加餐</option></select></div>
+        <div class="table-scroll"><table class="meal-table"><thead><tr><th>餐食 / 时间</th><th>餐次</th><th>热量</th><th>蛋白质</th><th>碳水</th><th>操作</th></tr></thead><tbody id="mealPreview"></tbody></table></div><p class="table-summary" id="tableSummary"></p>
       </article>
 
       <aside class="card quick-card">
-        <div class="section-heading compact"><div><span class="eyebrow">快捷记录</span><h2>今天还要记什么</h2></div></div>
-        <button class="quick-detail water-quick" type="button" data-open-detail="water"><span class="quick-icon">●</span><span><small>今日饮水</small><strong><b id="waterTotal">0.0</b> L</strong></span><span class="quick-chevron">›</span></button>
+        <div class="section-heading compact"><div><span class="eyebrow">快捷记录</span><h2>快捷录入</h2></div></div>
+        <button class="quick-detail water-quick" type="button" data-open-detail="water"><span class="quick-icon" aria-hidden="true"><svg width="22" height="26" viewBox="0 0 24 28" fill="none"><path d="M12 3S4 12 4 17a8 8 0 0 0 16 0c0-5-8-14-8-14Z" stroke="currentColor" stroke-width="1.7"/><path d="M8 17a4 4 0 0 0 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span><small>今日饮水</small><strong><b id="waterTotal">0.0</b> L</strong></span><span class="quick-chevron">›</span></button>
         <div class="water-options compact-water-options" id="waterOptions" aria-label="常用饮水量"></div>
         <div class="quick-actions-grid"><button class="secondary-button" id="addWeightButton" type="button">＋ 记体重</button><button class="secondary-button" id="editGoalsButton" type="button">调整目标</button></div>
-        <p class="privacy-note">首页只显示摘要。点击任一栏目可查看明细、记录时间与数据来源。</p>
+        <p class="privacy-note">少量多次，记得给身体补充水分。</p>
       </aside>
     </section>
 
@@ -95,16 +114,18 @@
 
   <dialog id="mealDialog" class="modal">
     <form id="mealForm" class="modal-sheet">
-      <div class="modal-top"><div><span class="eyebrow">新增记录</span><h2>记一餐</h2></div><button class="icon-button" id="closeMeal" type="button" aria-label="关闭">×</button></div>
+      <div class="modal-top"><div><span class="eyebrow" id="mealFormEyebrow">新增记录</span><h2 id="mealFormTitle">记一餐</h2></div><button class="icon-button" id="closeMeal" type="button" aria-label="关闭">×</button></div>
+      <label>记录时间<input name="date" type="datetime-local" required></label>
       <label>餐次<select name="kind"><option>早餐</option><option>午餐</option><option>晚餐</option><option>加餐</option></select></label>
       <label>餐食名称<input name="name" required placeholder="例如：鸡胸肉拌饭"></label>
       <div class="form-grid">
-        <label>热量 kcal<input name="calories" required type="number" min="0" step="1" value="500"></label>
-        <label>蛋白质 g<input name="protein" required type="number" min="0" step="1" value="30"></label>
-        <label>碳水 g<input name="carbs" required type="number" min="0" step="1" value="60"></label>
-        <label>脂肪 g<input name="fat" required type="number" min="0" step="1" value="15"></label>
+        <label>热量 kcal<input name="calories" required type="number" min="0" step="any" value="500"></label>
+        <label>蛋白质 g<input name="protein" required type="number" min="0" step="any" value="30"></label>
+        <label>碳水 g<input name="carbs" required type="number" min="0" step="any" value="60"></label>
+        <label>脂肪 g<input name="fat" required type="number" min="0" step="any" value="15"></label>
       </div>
-      <label>餐食照片（可选，最多 6 张）<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
+      <label>膳食纤维 g<input name="fiber" type="number" min="0" step="any" value="0"></label><label>备注<input name="note" placeholder="份量、烹饪方式或修改说明"></label>
+      <label>追加餐食照片（合计最多 6 张）<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
       <p class="upload-hint">照片会加密传输并保存在你的私有服务器，浏览器只在查看历史记录时加载。</p>
       <button class="primary-button submit-button" type="submit">保存记录</button>
     </form>
@@ -143,6 +164,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20260902-2"></script>
+  <script src="app.js?v=20260906-2"></script>
 </body>
 </html>
