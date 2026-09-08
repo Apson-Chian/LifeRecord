@@ -174,7 +174,7 @@ struct TodayView: View {
                             .foregroundStyle(AppTheme.accent)
                     }
                     Spacer()
-                    Text("\(Int(settings.height)) cm")
+                    Text("每日目标")
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -210,9 +210,14 @@ struct TodayView: View {
                     }
                 }
 
-                Label(calorieStatusText, systemImage: "flame.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Divider().overlay(AppTheme.accent.opacity(0.05))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(nutrition.calories.formatted(.number.precision(.fractionLength(0))))
+                        .font(.system(.largeTitle, design: .rounded).weight(.semibold)).monospacedDigit()
+                    Text("千卡").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(calorieStatusText).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                }
             }
         }
     }

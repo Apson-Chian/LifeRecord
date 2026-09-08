@@ -25,19 +25,27 @@ struct AppBackground: View {
 
 struct GlassCard<Content: View>: View {
     @ViewBuilder let content: Content
+    var tint: Color
 
-    init(@ViewBuilder content: () -> Content) {
+    init(tint: Color = AppTheme.accent, @ViewBuilder content: () -> Content) {
+        self.tint = tint
         self.content = content()
     }
 
     var body: some View {
         content
-            .padding(16)
+            .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(LinearGradient(colors: [tint.opacity(0.065), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
+            .shadow(color: tint.opacity(0.045), radius: 16, y: 6)
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(.white.opacity(0.22), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(tint.opacity(0.08), lineWidth: 0.5)
             }
     }
 }
