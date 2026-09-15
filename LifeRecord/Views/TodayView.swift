@@ -11,6 +11,8 @@ struct TodayView: View {
     @Query(sort: \BodyMetric.date, order: .reverse) private var bodyMetrics: [BodyMetric]
     @Query(sort: \WaterEntry.date, order: .reverse) private var waterEntries: [WaterEntry]
 
+    @Query(sort: \WorkoutEntry.date, order: .reverse) private var workouts: [WorkoutEntry]
+
     @State private var selectedDate = Date.now
     @State private var activeSheet: SheetDestination?
     @State private var lifeTrackActivity = SharedProfileStore.lifeTrackActivity()
@@ -38,7 +40,7 @@ struct TodayView: View {
     private var recordedDates: Set<Date> {
         let calendar = Calendar.current
         return Set(
-            (meals.map(\.date) + bodyMetrics.map(\.date) + waterEntries.map(\.date))
+            (meals.map(\.date) + bodyMetrics.map(\.date) + waterEntries.map(\.date) + workouts.map(\.date))
                 .map(calendar.startOfDay(for:))
         )
     }
@@ -59,6 +61,7 @@ struct TodayView: View {
                         demoDataBanner
                         goalHero
                         quickActions
+                        WorkoutDayCard(date: selectedDate)
                         lifeTrackCard
                         macroCard
                         mealLog

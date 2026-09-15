@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>健身数据仪表盘 - 奥特雷</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #0f0f1a;
+  color: #e0e0e0;
+  min-height: 100vh;
+  padding: 20px;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+.header {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border-radius: 16px;
+  padding: 30px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.header-top { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+.avatar {
+  width: 60px; height: 60px; border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; font-weight: bold; color: #fff;
+}
+.user-info h1 { font-size: 24px; color: #fff; }
+.user-info p { font-size: 14px; color: #8892b0; margin-top: 4px; }
+.stats-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.stat-item {
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+  padding: 12px 20px;
+  text-align: center;
+  min-width: 120px;
+}
+.stat-item .label { font-size: 12px; color: #8892b0; }
+.stat-item .value { font-size: 22px; font-weight: bold; color: #64ffda; margin-top: 4px; }
+.card {
+  background: #1a1a2e;
+  border-radius: 14px;
+  padding: 24px;
+  border: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 24px;
+}
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #ccd6f6;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nutrition-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.nutrition-card {
+  background: rgba(255,255,255,0.03);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: transform 0.2s;
+}
+.nutrition-card:hover { transform: translateY(-2px); }
+.nutrition-card .name { font-size: 14px; color: #8892b0; }
+.nutrition-card .values { display: flex; justify-content: space-between; align-items: baseline; margin: 8px 0; }
+.nutrition-card .actual { font-size: 24px; font-weight: bold; color: #fff; }
+.nutrition-card .target { font-size: 13px; color: #8892b0; }
+.progress-bar { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+.progress-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+.progress-fill.red { background: linear-gradient(90deg, #ff6b6b, #ee5a24); }
+.progress-fill.yellow { background: linear-gradient(90deg, #feca57, #ff9f43); }
+.progress-fill.green { background: linear-gradient(90deg, #00d2d3, #64ffda); }
+.percent { font-size: 14px; font-weight: bold; margin-top: 6px; }
+.percent.red { color: #ff6b6b; }
+.percent.yellow { color: #feca57; }
+.percent.green { color: #64ffda; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+.water-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding-top: 10px; }
+.water-bar {
+  flex: 1;
+  background: linear-gradient(180deg, #64ffda, #0f3460);
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  position: relative;
+  transition: opacity 0.2s;
+}
+.water-bar:hover { opacity: 0.8; }
+.water-bar .tip {
+  display: none;
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.water-bar:hover .tip { display: block; }
+.water-labels { display: flex; gap: 6px; margin-top: 4px; }
+.water-labels span { flex: 1; text-align: center; font-size: 10px; color: #8892b0; }
+.water-summary { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.water-summary .item { background: rgba(255,255,255,0.05); padding: 8px 14px; border-radius: 8px; font-size: 13px; }
+.water-summary .item .val { color: #64ffda; font-weight: bold; }
+.body-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.body-stat {
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.body-stat .label { font-size: 12px; color: #8892b0; }
+.body-stat .val { font-size: 28px; font-weight: bold; color: #64ffda; margin: 6px 0; }
+.body-stat .sub { font-size: 12px; color: #8892b0; }
+.meal-bars { margin-bottom: 20px; }
+.meal-bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.meal-bar-row .meal-name { width: 50px; font-size: 13px; color: #8892b0; text-align: right; }
+.meal-bar-row .bar-bg { flex: 1; height: 24px; background: rgba(255,255,255,0.05); border-radius: 6px; overflow: hidden; }
+.meal-bar-row .bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 8px; font-size: 12px; color: #fff; font-weight: 600; }
+.bar-breakfast { background: linear-gradient(90deg, #ff9a9e, #fad0c4); }
+.bar-lunch { background: linear-gradient(90deg, #a18cd1, #fbc2eb); }
+.bar-dinner { background: linear-gradient(90deg, #667eea, #764ba2); }
+.bar-snack { background: linear-gradient(90deg, #f093fb, #f5576c); }
+.food-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.food-tag {
+  background: rgba(100,255,218,0.1);
+  color: #64ffda;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  border: 1px solid rgba(100,255,218,0.2);
+}
+.trend-chart { width: 100%; height: 160px; }
+.issue-list { list-style: none; }
+.issue-list li {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.issue-list li.warning { background: rgba(255,107,107,0.1); border-left: 3px solid #ff6b6b; }
+.issue-icon { font-size: 18px; flex-shrink: 0; }
+.suggest-list { list-style: none; counter-reset: suggest; }
+.suggest-list li {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  counter-increment: suggest;
+  display: flex;
+  gap: 10px;
+}
+.suggest-list li::before {
+  content: counter(suggest);
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: bold;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-top">
+      <div class="avatar">奥</div>
+      <div class="user-info">
+        <h1>奥特雷</h1>
+        <p>身高 181cm · 目标：增肌至 70kg · 每周增重 0.1kg</p>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-item"><div class="label">记录天数</div><div class="value">11天</div></div>
+      <div class="stat-item"><div class="label">总餐数</div><div class="value">34餐</div></div>
+      <div class="stat-item"><div class="label">平均体重</div><div class="value">62.8kg</div></div>
+      <div class="stat-item"><div class="label">起始体重</div><div class="value">61.0kg</div></div>
+      <div class="stat-item"><div class="label">目标体重</div><div class="value">70.0kg</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🍽️ 每日营养达成率（日均）</div>
+    <div class="nutrition-grid">
+      <div class="nutrition-card">
+        <div class="name">热量</div>
+        <div class="values"><span class="actual">1,403</span><span class="target">/ 2,700 kcal</span></div>
+        <div class="progress-bar"><div class="progress-fill red" style="width:52%"></div></div>
+        <div class="percent red">52% 达成</div>
+      </div>
+      <div class="nutrition-card">
+        <div class="name">蛋白质</div>
+        <div class="values"><span class="actual">71.1g</span><span class="target">/ 115g</span></div>
+        <div class="progress-bar"><div class="progress-fill yellow" style="width:62%"></div></div>
+        <div class="percent yellow">62% 达成</div>
+      </div>
+      <div class="nutrition-card">
+        <div class="name">碳水化合物</div>
+        <div class="values"><span class="actual">143.1g</span><span class="target">/ 390g</span></div>
+        <div class="progress-bar"><div class="progress-fill red" style="width:37%"></div></div>
+        <div class="percent red">37% 达成</div>
+      </div>
+      <div class="nutrition-card">
+        <div class="name">脂肪</div>
+        <div class="values"><span class="actual">54.7g</span><span class="target">/ 70g</span></div>
+        <div class="progress-bar"><div class="progress-fill green" style="width:78%"></div></div>
+        <div class="percent green">78% 达成</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">💧 饮水记录</div>
+      <div style="text-align:center;margin-bottom:12px;">
+        <span style="font-size:36px;font-weight:bold;color:#64ffda;">39%</span>
+        <span style="font-size:14px;color:#8892b0;margin-left:8px;">日均达成率（1,003 / 2,600 ml）</span>
+      </div>
+      <div class="water-chart">
+        <div class="water-bar" style="height:29%"><span class="tip">8-25: 750ml</span></div>
+        <div class="water-bar" style="height:100%"><span class="tip">8-27: 3400ml ✓</span></div>
+        <div class="water-bar" style="height:29%"><span class="tip">8-28: 750ml</span></div>
+        <div class="water-bar" style="height:26%"><span class="tip">8-29: 700ml</span></div>
+        <div class="water-bar" style="height:26%"><span class="tip">8-30: 700ml</span></div>
+        <div class="water-bar" style="height:50%"><span class="tip">8-31: 1300ml</span></div>
+        <div class="water-bar" style="height:41%"><span class="tip">9-01: 1100ml</span></div>
+        <div class="water-bar" style="height:38%"><span class="tip">9-02: 1000ml</span></div>
+        <div class="water-bar" style="height:23%"><span class="tip">9-03: 600ml</span></div>
+        <div class="water-bar" style="height:8%"><span class="tip">9-04: 200ml</span></div>
+        <div class="water-bar" style="height:48%"><span class="tip">9-06: 1230ml</span></div>
+      </div>
+      <div class="water-labels">
+        <span>25</span><span>27</span><span>28</span><span>29</span><span>30</span><span>31</span><span>1</span><span>2</span><span>3</span><span>4</span><span>6</span>
+      </div>
+      <div class="water-summary">
+        <div class="item">最高日 <span class="val">3,400ml</span>（8-27）</div>
+        <div class="item">最低日 <span class="val">200ml</span>（9-04）</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 身体指标</div>
+      <div class="body-stats">
+        <div class="body-stat"><div class="label">当前体重</div><div class="val">63.3</div><div class="sub">kg（最新）</div></div>
+        <div class="body-stat"><div class="label">平均体脂率</div><div class="val">10.0</div><div class="sub">%</div></div>
+        <div class="body-stat"><div class="label">体重范围</div><div class="val" style="font-size:20px;">61.6~64.2</div><div class="sub">kg</div></div>
+        <div class="body-stat"><div class="label">体脂范围</div><div class="val" style="font-size:20px;">9.4~10.6</div><div class="sub">%</div></div>
+      </div>
+      <svg class="trend-chart" viewBox="0 0 400 140" style="margin-top:16px;">
+        <line x1="40" y1="10" x2="40" y2="120" stroke="#333" stroke-width="1"/>
+        <line x1="40" y1="120" x2="390" y2="120" stroke="#333" stroke-width="1"/>
+        <line x1="40" y1="65" x2="390" y2="65" stroke="#222" stroke-width="0.5" stroke-dasharray="4"/>
+        <text x="35" y="18" fill="#8892b0" font-size="10" text-anchor="end">65</text>
+        <text x="35" y="68" fill="#8892b0" font-size="10" text-anchor="end">63</text>
+        <text x="35" y="123" fill="#8892b0" font-size="10" text-anchor="end">61</text>
+        <polyline fill="none" stroke="#64ffda" stroke-width="2"
+          points="60,54 92,82 124,93 156,98 188,93 220,87 252,82 284,87 316,93 348,98 370,82"/>
+        <circle cx="60" cy="54" r="3" fill="#64ffda"/>
+        <circle cx="92" cy="82" r="3" fill="#64ffda"/>
+        <circle cx="124" cy="93" r="3" fill="#64ffda"/>
+        <circle cx="156" cy="98" r="3" fill="#64ffda"/>
+        <circle cx="188" cy="93" r="3" fill="#64ffda"/>
+        <circle cx="220" cy="87" r="3" fill="#64ffda"/>
+        <circle cx="252" cy="82" r="3" fill="#64ffda"/>
+        <circle cx="284" cy="87" r="3" fill="#64ffda"/>
+        <circle cx="316" cy="93" r="3" fill="#64ffda"/>
+        <circle cx="348" cy="98" r="3" fill="#64ffda"/>
+        <circle cx="370" cy="82" r="3" fill="#64ffda"/>
+        <text x="60" y="135" fill="#8892b0" font-size="9" text-anchor="middle">8-25</text>
+        <text x="124" y="135" fill="#8892b0" font-size="9" text-anchor="middle">8-28</text>
+        <text x="188" y="135" fill="#8892b0" font-size="9" text-anchor="middle">8-31</text>
+        <text x="252" y="135" fill="#8892b0" font-size="9" text-anchor="middle">9-02</text>
+        <text x="316" y="135" fill="#8892b0" font-size="9" text-anchor="middle">9-04</text>
+        <text x="370" y="135" fill="#8892b0" font-size="9" text-anchor="middle">9-06</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">🍱 各餐热量分布</div>
+      <div class="meal-bars">
+        <div class="meal-bar-row">
+          <span class="meal-name">早餐</span>
+          <div class="bar-bg"><div class="bar-fill bar-breakfast" style="width:23%">1,445 kcal</div></div>
+        </div>
+        <div class="meal-bar-row">
+          <span class="meal-name">午餐</span>
+          <div class="bar-bg"><div class="bar-fill bar-lunch" style="width:93%">5,780 kcal</div></div>
+        </div>
+        <div class="meal-bar-row">
+          <span class="meal-name">晚餐</span>
+          <div class="bar-bg"><div class="bar-fill bar-dinner" style="width:100%">6,250 kcal</div></div>
+        </div>
+        <div class="meal-bar-row">
+          <span class="meal-name">加餐</span>
+          <div class="bar-bg"><div class="bar-fill bar-snack" style="width:31%">1,962 kcal</div></div>
+        </div>
+      </div>
+      <div class="card-title" style="font-size:14px;margin-top:8px;">高频食物</div>
+      <div class="food-tags">
+        <span class="food-tag">🍌 香蕉 ×3</span>
+        <span class="food-tag">🥛 蛋白粉 ×2</span>
+        <span class="food-tag">🥛 纯牛奶 ×2</span>
+        <span class="food-tag">🍼 奶粉 ×2</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚠️ 问题诊断</div>
+      <ul class="issue-list">
+        <li class="warning"><span class="issue-icon">🔴</span><span><strong>热量严重不足</strong>：日均仅 1,403 kcal，距目标 2,700 kcal 差 1,297 kcal</span></li>
+        <li class="warning"><span class="issue-icon">🔴</span><span><strong>碳水严重偏低</strong>：仅达成 37%，增肌期需充足碳水供能</span></li>
+        <li class="warning"><span class="issue-icon">🟡</span><span><strong>饮水严重不足</strong>：日均 1,003ml，仅达成 39%，且波动极大</span></li>
+        <li class="warning"><span class="issue-icon">🟡</span><span><strong>饮食记录不规律</strong>：部分天数仅 1 餐，餐次波动大</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💡 改善建议</div>
+    <ul class="suggest-list">
+      <li><span><strong>大幅增加主食摄入</strong>：每餐增加米饭/面条/馒头等碳水来源，每日至少 390g 碳水，可分 5-6 餐摄入以减轻单次负担</span></li>
+      <li><span><strong>提升蛋白质总量</strong>：每餐保证 25-30g 优质蛋白（鸡胸肉、鸡蛋、鱼虾、豆制品），配合蛋白粉补充</span></li>
+      <li><span><strong>定时定量饮水</strong>：设置每小时 200ml 的饮水提醒，随身携带水杯，逐步从当前水平提升至 2,600ml/天</span></li>
+      <li><span><strong>规律记录饮食</strong>：每天至少记录早中晚三餐，避免漏记；可利用拍照快速记录，保持数据连续性</span></li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

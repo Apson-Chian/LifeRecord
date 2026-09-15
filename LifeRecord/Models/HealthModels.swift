@@ -234,3 +234,21 @@ extension Calendar {
         isDate(lhs, inSameDayAs: rhs)
     }
 }
+
+@Model
+final class WorkoutEntry {
+    @Attribute(.unique) var id: UUID
+    var date: Date
+    var endDate: Date?
+    var note: String
+    var updatedAt: Date = Date.now
+
+    init(id: UUID = UUID(), date: Date = .now, endDate: Date? = nil, note: String = "") {
+        self.id = id
+        self.date = date
+        self.endDate = endDate
+        self.note = note
+        self.updatedAt = .now
+    }
+    var minutes: Double { max(0, (endDate ?? .now).timeIntervalSince(date) / 60) }
+}

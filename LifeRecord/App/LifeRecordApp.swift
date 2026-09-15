@@ -16,6 +16,6 @@ struct LifeRecordApp: App {
                 .environmentObject(router)
                 .tint(AppTheme.accent)
         }
-        .modelContainer(for: [MealEntry.self, BodyMetric.self, WaterEntry.self, SyncTombstone.self, CoachConversation.self, CoachMessage.self])
+        .modelContainer(for: [MealEntry.self, BodyMetric.self, WaterEntry.self, WorkoutEntry.self, SyncTombstone.self, CoachConversation.self, CoachMessage.self])
     }
 }

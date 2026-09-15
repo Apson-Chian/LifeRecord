@@ -128,6 +128,7 @@ struct AddMealView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .keyboardDismissControl()
             .navigationTitle("记录餐食")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -405,10 +406,11 @@ struct AddWeightView: View {
 
     @State private var date: Date
     @State private var weight: Double
-    @State private var bodyFat = 0.0
+    @State private var bodyFatText = ""
     @State private var note = ""
     @State private var errorMessage: String?
-    @FocusState private var isEditing: Bool
+    private enum Field: Hashable { case weight, bodyFat, note }
+    @FocusState private var focusedField: Field?
 
     init(defaultDate: Date, lastWeight: Double?) {
         self.defaultDate = defaultDate
@@ -426,19 +428,35 @@ struct AddWeightView: View {
                             .font(.system(size: 42, weight: .bold, design: .rounded))
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.center)
-                            .focused($isEditing)
+                            .focused($focusedField, equals: .weight)
                         Text("kg").font(.title3).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity)
                     DatePicker("测量时间", selection: $date)
                 }
                 Section("可选数据") {
-                    metricField("体脂率", value: $bodyFat, unit: "%")
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("体脂率", systemImage: "figure.arms.open").font(.headline)
+                        HStack(alignment: .firstTextBaseline) {
+                            TextField("例如 18.5", text: $bodyFatText)
+                                .font(.system(.largeTitle, design: .rounded).weight(.semibold))
+                                .keyboardType(.decimalPad)
+                                .focused($focusedField, equals: .bodyFat)
+                                .accessibilityLabel("体脂率，百分比，可选")
+                                .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+                            Text("%").font(.title2).foregroundStyle(.secondary)
+                        }
+                        Text("可选，留空表示未测量").font(.caption).foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                    .onTapGesture { focusedField = .bodyFat }
                     TextField("备注，例如：晨起空腹", text: $note)
-                        .focused($isEditing)
+                        .focused($focusedField, equals: .note)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .keyboardDismissControl()
             .navigationTitle("记录身体数据")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -450,7 +468,7 @@ struct AddWeightView: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("收起键盘") { isEditing = false }.fontWeight(.semibold)
+                    Button("收起键盘") { focusedField = nil }.fontWeight(.semibold)
                 }
             }
             .alert("无法保存身体数据", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -462,10 +480,17 @@ struct AddWeightView: View {
     }
 
     private func save() {
+        let normalized = bodyFatText.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+        let bodyFat = Double(normalized)
+        guard weight.isFinite, (20...400).contains(weight), normalized.isEmpty || bodyFat.map({ $0.isFinite && (1...80).contains($0) }) == true else {
+            errorMessage = "请输入有效的体重（20–400 kg）和体脂率（1–80%），未测体脂请留空。"
+            return
+        }
+        focusedField = nil
         let entry = BodyMetric(
             date: date,
             weight: weight,
-            bodyFat: bodyFat > 0 ? bodyFat : nil,
+            bodyFat: bodyFat,
             note: note
         )
         modelContext.insert(entry)
@@ -480,17 +505,6 @@ struct AddWeightView: View {
         }
     }
 
-    private func metricField(_ title: String, value: Binding<Double>, unit: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            TextField("未填写", value: value, format: .number.precision(.fractionLength(1)))
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .focused($isEditing)
-            Text(unit).foregroundStyle(.secondary)
-        }
-    }
 }
 
 struct AddWaterView: View {

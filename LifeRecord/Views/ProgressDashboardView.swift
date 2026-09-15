@@ -8,6 +8,8 @@ struct ProgressDashboardView: View {
     @Query(sort: \MealEntry.date) private var meals: [MealEntry]
     @Query(sort: \WaterEntry.date) private var waterEntries: [WaterEntry]
 
+    @Query(sort: \WorkoutEntry.date) private var workouts: [WorkoutEntry]
+
     @State private var selectedRecordDay = Calendar.current.startOfDay(for: Date.now)
     @State private var range: TrendRange = .month
     @State private var report = ""
@@ -93,6 +95,7 @@ struct ProgressDashboardView: View {
                         bodyCompositionCard
                         calorieChart
                         waterChart
+                        workoutChart
                         aiReportCard
                     }
                     .padding(16)
@@ -177,13 +180,13 @@ struct ProgressDashboardView: View {
 
     private var weightChart: some View {
         InspectableTrendCard(title: "体重趋势", unit: "kg", tint: AppTheme.accent,
-            points: dailyMetrics.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.trend, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1)))) kg · \($0.count) 次测量") },
-            goal: settings.targetWeight)
+            points: dailyMetrics.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1)))) kg · \($0.count) 次测量") },
+            goal: settings.targetWeight, samples: bodyMetrics.map { .init(date: $0.date, value: $0.weight) }, cutoff: cutoff)
     }
 
     private var bodyCompositionCard: some View {
         InspectableTrendCard(title: "体脂趋势", unit: "%", tint: AppTheme.fat,
-            points: bodyFatPoints.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.trend, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1))))% · \($0.count) 次测量") })
+            points: bodyFatPoints.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1))))% · \($0.count) 次测量") }, samples: bodyMetrics.compactMap { metric in metric.bodyFat.map { .init(date: metric.date, value: $0) } }, cutoff: cutoff)
     }
 
     private var measurementList: some View {
@@ -242,6 +245,10 @@ struct ProgressDashboardView: View {
     private var waterChart: some View {
         InspectableTrendCard(title: "每日饮水", unit: "ml", tint: AppTheme.water,
             points: dailyWater.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当天所有饮水记录合计") }, goal: settings.waterGoal, bars: true)
+    }
+
+    private var workoutChart: some View {
+        WorkoutTrendCard(workouts: workouts.filter { cutoff == nil || $0.date >= cutoff! }, cutoff: cutoff)
     }
 
     private var calendarDays: [Date] {
@@ -338,7 +345,7 @@ struct ProgressDashboardView: View {
                     }.padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent).buttonBorderShape(.roundedRectangle(radius: 14))
-                .disabled(isGenerating || (bodyMetrics.isEmpty && meals.isEmpty && waterEntries.isEmpty))
+                .disabled(isGenerating || (bodyMetrics.isEmpty && meals.isEmpty && waterEntries.isEmpty && workouts.isEmpty))
             }
         }
     }
@@ -489,7 +496,10 @@ struct ProgressDashboardView: View {
         let water = waterGroups.keys.sorted().map { day in
             "\(day.formatted(date: .numeric, time: .omitted)): \(Int(waterGroups[day]!.reduce(0) { $0 + $1.milliliters }))ml"
         }.joined(separator: ", ")
-        let context = "最近7天（含今天）。目标体重 \(settings.targetWeight)kg，热量目标 \(settings.calorieGoal)kcal，饮水目标 \(settings.waterGoal)ml。体重：\(recentWeights)。体脂：\(fat)。每日营养：\(calories)。每日饮水：\(water)。身体数据每日中位数后指数平滑；无记录不代表零，不要把日内波动解释为脂肪变化。"
+        let workoutContext = WorkoutSummary.context(workouts.filter { $0.date >= weekStart }.map {
+            .init(date: $0.date, endDate: $0.endDate, note: $0.note)
+        })
+        let context = "健身记录：\(workoutContext)。最近7天（含今天）。目标体重 \(settings.targetWeight)kg，热量目标 \(settings.calorieGoal)kcal，饮水目标 \(settings.waterGoal)ml。体重：\(recentWeights)。体脂：\(fat)。每日营养：\(calories)。每日饮水：\(water)。身体数据每日中位数后指数平滑；无记录不代表零，不要把日内波动解释为脂肪变化。"
         do {
             report = try await AIClient(settings: settings).coachText(
                 system: "你是克制、循证的健身记录教练。根据有限数据指出趋势和不确定性，用中文给出 3 条可执行建议，不做医疗诊断，不鼓励极端热量缺口。",
@@ -551,6 +561,10 @@ private struct InspectableTrendCard: View {
     let points: [TrendPoint]
     var goal: Double? = nil
     var bars = false
+    var samples: [BodyTrend.Sample]? = nil
+    var cutoff: Date? = nil
+    var isDetail = false
+    var smoothed = false
     @State private var selection: Date?
 
     private var selected: TrendPoint? {
@@ -568,9 +582,19 @@ private struct InspectableTrendCard: View {
         return first.addingTimeInterval(-43200)...last.addingTimeInterval(43200)
     }
     var body: some View {
-        GlassCard {
+        GlassCard(tint: tint) {
             VStack(alignment: .leading, spacing: 14) {
-                HStack { Text(title).font(.headline); Spacer(); Text(unit).font(.subheadline).foregroundStyle(.secondary) }
+                HStack {
+                    Image(systemName: bars ? "chart.bar.fill" : "waveform.path.ecg")
+                        .foregroundStyle(tint).frame(width: 36, height: 36)
+                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    Text(title).font(.headline)
+                    Spacer()
+                    if !isDetail {
+                        NavigationLink { detail } label: { Image(systemName: "arrow.up.right").frame(width: 44, height: 44) }
+                            .accessibilityLabel("查看\(title)详情")
+                    }
+                }
                 if let selected {
                     HStack(alignment: .firstTextBaseline) {
                         Text(selected.value.formatted(.number.precision(.fractionLength(bars ? 0 : 1))))
@@ -625,9 +649,13 @@ private struct InspectableTrendCard: View {
                         }
                     }
                     HStack {
-                        Text(bars ? "每日合计" : "每日中位数 · 平滑趋势")
+                        Text(bars ? "每日合计" : (smoothed ? "每日中位数 · 指数平滑" : "每日中位数"))
                         Spacer()
-                        Button("查看数据") { selection = points.last?.date }
+                        if isDetail {
+                            Button("查看数据") { selection = points.last?.date }
+                        } else {
+                            NavigationLink("查看详情") { detail }
+                        }
                     }.font(.caption).foregroundStyle(.secondary)
                 } else {
                     ContentUnavailableView("暂无数据", systemImage: "chart.xyaxis.line", description: Text("记录后即可查看数值和变化。"))
@@ -636,8 +664,88 @@ private struct InspectableTrendCard: View {
         }
         .onChange(of: points.map(\.id)) { _, _ in selection = nil }
     }
+    private var detail: some View {
+        TrendDetailView(title: title, unit: unit, tint: tint, points: points, goal: goal, bars: bars, samples: samples, cutoff: cutoff)
+    }
     private func move(_ step: Int) {
         guard let selected, let index = points.firstIndex(where: { $0.id == selected.id }) else { return }
         selection = points[min(max(index + step, 0), points.count - 1)].date
+    }
+}
+
+private struct TrendDetailView: View {
+    let title: String
+    let unit: String
+    let tint: Color
+    let points: [TrendPoint]
+    let goal: Double?
+    let bars: Bool
+    let samples: [BodyTrend.Sample]?
+    let cutoff: Date?
+    @State private var period: BodyTrend.Period = .all
+    @State private var smooth = false
+
+    private var matching: [BodyTrend.Sample] {
+        (samples ?? []).filter { period.includes($0.date) }
+    }
+    private var visibleSamples: [BodyTrend.Sample] {
+        matching.filter { cutoff == nil || $0.date >= cutoff! }.sorted { $0.date > $1.date }
+    }
+    private var displayed: [TrendPoint] {
+        guard samples != nil else { return points }
+        return BodyTrend.series(matching).filter { cutoff == nil || $0.date >= cutoff! }.map {
+            TrendPoint(id: $0.date.description, date: $0.date, value: smooth ? $0.trend : $0.value,
+                       note: "中位数 \($0.value.formatted()) \(unit) · \($0.count) 次测量")
+        }
+    }
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                if samples != nil {
+                    GlassCard(tint: tint) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Picker("测量时段", selection: $period) {
+                                ForEach(BodyTrend.Period.allCases) { Text($0.rawValue).tag($0) }
+                            }.pickerStyle(.segmented)
+                            Text("早上 05–12 时 · 下午 12–18 时 · 晚上 18–24 时 · 凌晨 00–05 时")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Toggle("平滑趋势", isOn: $smooth)
+                            Text("默认展示每天的中位数，减少单次极端值影响。筛选时段后重新计算；缺测不补零。平滑趋势仅供观察长期变化。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                InspectableTrendCard(title: smooth ? "平滑趋势" : title, unit: unit, tint: tint, points: displayed, goal: goal, bars: bars, isDetail: true, smoothed: smooth)
+                GlassCard(tint: tint) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(samples == nil ? "每日明细" : "原始测量").font(.headline)
+                        if samples != nil {
+                            if visibleSamples.isEmpty { Text("此时段暂无测量").foregroundStyle(.secondary) }
+                            ForEach(Array(visibleSamples.enumerated()), id: \.offset) { _, sample in
+                                HStack {
+                                    Text(sample.date.formatted(date: .abbreviated, time: .shortened)).font(.subheadline)
+                                    Spacer()
+                                    Text("\(sample.value.formatted()) \(unit)").monospacedDigit()
+                                }
+                                Divider()
+                            }
+                        } else {
+                            if points.isEmpty { Text("当前范围暂无记录").foregroundStyle(.secondary) }
+                            ForEach(points.reversed()) { point in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text(point.date.formatted(date: .abbreviated, time: .omitted))
+                                        Spacer()
+                                        Text("\(point.value.formatted(.number.precision(.fractionLength(0)))) \(unit)").monospacedDigit()
+                                    }
+                                    Text(point.note).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            }.padding(16)
+        }.background(AppBackground()).navigationTitle(title)
     }
 }

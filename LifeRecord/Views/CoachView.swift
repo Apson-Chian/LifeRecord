@@ -13,6 +13,7 @@ struct CoachView: View {
     @Query(sort: \CoachConversation.updatedAt, order: .reverse) private var conversations: [CoachConversation]
     @Query(sort: \BodyMetric.date) private var bodyMetrics: [BodyMetric]
     @Query(sort: \MealEntry.date) private var meals: [MealEntry]
+    @Query(sort: \WorkoutEntry.date) private var workouts: [WorkoutEntry]
     @Query(sort: \WaterEntry.date) private var waterEntries: [WaterEntry]
 
     @State private var input = ""
@@ -331,7 +332,7 @@ struct CoachView: View {
                         }
                     }
                     .foregroundStyle(visionEnabled ? AppTheme.accent : .secondary)
-                    .frame(width: 38, height: 38)
+                    .frame(width: 44, height: 44)
                     .background(Color(.tertiarySystemFill), in: Circle())
                 }
                 .disabled(isSending || isLoadingPhotos || !settings.supportsVision)
@@ -352,7 +353,7 @@ struct CoachView: View {
                         Image(systemName: "keyboard.chevron.compact.down")
                             .font(.body.weight(.medium))
                             .foregroundStyle(.secondary)
-                            .frame(width: 38, height: 38)
+                            .frame(width: 44, height: 44)
                             .background(Color(.tertiarySystemFill), in: Circle())
                     }
                     .buttonStyle(PressScaleButtonStyle())
@@ -370,7 +371,7 @@ struct CoachView: View {
                     Image(systemName: isSending ? "stop.fill" : "arrow.up")
                         .font(.body.weight(.bold))
                         .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
+                        .frame(width: 44, height: 44)
                         .background(
                             Group {
                                 if canSend {
@@ -893,6 +894,9 @@ struct CoachView: View {
         let weightSummary = bodyMetrics.suffix(12).map {
             "\($0.date.formatted(date: .numeric, time: .omitted)) \($0.weight)kg"
         }.joined(separator: "，")
+        let workoutContext = WorkoutSummary.context(workouts.map {
+            .init(date: $0.date, endDate: $0.endDate, note: $0.note)
+        })
         let recentWater = waterEntries.filter { $0.date >= cutoff }.reduce(0) { $0 + $1.milliliters }
         let deletableMeals = recentMeals.sorted { $0.date > $1.date }.prefix(30).map {
             "meal id=\($0.id.uuidString) | \(receiptDate($0.date)) | \($0.kind.rawValue) | \($0.name) | \(Int($0.calories))kcal | 蛋白质 \($0.protein)g | 碳水 \($0.carbs)g | 脂肪 \($0.fat)g | 纤维 \($0.fiber)g | \($0.note)"
@@ -908,6 +912,9 @@ struct CoachView: View {
         你是这个私人健身记录 App 内的通用 AI 助手。可以回答用户提出的任何正常问题，也应结合记录给出简洁、可执行、明确区分事实与估算的建议。
         用户身高 \(settings.height)cm，起始体重 \(settings.baselineWeight)kg，当前约 \(latestWeight)kg；目标为\(settings.fitnessGoal.rawValue)，目标体重 \(settings.targetWeight)kg，每周期望变化 \(settings.weeklyWeightTarget)kg。每日目标：\(Int(settings.calorieGoal))kcal、蛋白质 \(Int(settings.proteinGoal))g、碳水 \(Int(settings.carbsGoal))g、脂肪 \(Int(settings.fatGoal))g、饮水 \(Int(settings.waterGoal))ml。
         最近体重：\(weightSummary.isEmpty ? "暂无" : weightSummary)。最近饮食：\(foodSummary.isEmpty ? "暂无" : foodSummary)。近 30 天已记录饮水总量 \(Int(recentWater))ml。
+        当前本地时间：\(Date.now.formatted(date: .complete, time: .shortened))。
+        以下是本机全部健身记录（可读取并分析；目前不支持通过 action 修改健身记录）：
+        \(workoutContext)
         当前可操作记录清单（修改和删除只能使用这里的准确 id；找不到或有歧义就先询问）：
         \(deletableMeals.isEmpty ? "暂无餐食" : deletableMeals)
         \(deletableWeights.isEmpty ? "暂无体重" : deletableWeights)

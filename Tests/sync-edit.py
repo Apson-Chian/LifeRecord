@@ -26,3 +26,21 @@ with tempfile.TemporaryDirectory() as folder:
     server.merge_snapshot({'meals': [edited]})
     assert server.current_snapshot()['meals'] == []
     print('PASS: same-ID update, photos preserved, stale snapshots ignored, deletion preserved')
+
+    workout = dict(id='workout-test', date=4000, endDate=None, note='深蹲 4 组', updatedAt=4000)
+    server.merge_snapshot({'workoutEntries': [workout]})
+    assert server.current_snapshot()['workoutEntries'] == [workout]
+    finished = {**workout, 'endDate': 7600, 'updatedAt': 7600}
+    server.merge_snapshot({'workoutEntries': [finished]})
+    server.merge_snapshot({'workoutEntries': [workout]})
+    server.merge_snapshot({'meals': []})  # Old clients omit workouts without deleting them.
+    assert server.current_snapshot()['workoutEntries'] == [finished]
+    try:
+        server.merge_snapshot({'workoutEntries': [{**finished, 'endDate': 3999}]})
+        raise AssertionError('invalid interval accepted')
+    except ValueError:
+        pass
+    server.merge_snapshot({'deletions': [dict(id='workout-test', recordType='workout', deletedAt=8000)]})
+    server.merge_snapshot({'workoutEntries': [finished]})
+    assert server.current_snapshot()['workoutEntries'] == []
+    print('PASS: workout start/end, stale updates, old clients, validation and deletion')

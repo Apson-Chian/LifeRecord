@@ -246,6 +246,7 @@ private struct LegacySettingsView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .keyboardDismissControl()
             .navigationTitle("设置")
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
@@ -382,6 +383,8 @@ struct SyncKeyEditorView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
+            .keyboardDismissControl()
             .navigationTitle("跨设备同步")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -517,6 +520,7 @@ struct APIKeyEditorView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .keyboardDismissControl()
             .navigationTitle("API Key")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -2,6 +2,20 @@ import Foundation
 
 /// Pure daily aggregation, shared by charts and reports. Never changes stored measurements.
 enum BodyTrend {
+    enum Period: String, CaseIterable, Identifiable {
+        case all = "全部", morning = "早上", afternoon = "下午", evening = "晚上", overnight = "凌晨"
+        var id: String { rawValue }
+        func includes(_ date: Date, calendar: Calendar = .current) -> Bool {
+            let hour = calendar.component(.hour, from: date)
+            switch self {
+            case .all: return true
+            case .morning: return (5..<12).contains(hour)
+            case .afternoon: return (12..<18).contains(hour)
+            case .evening: return (18..<24).contains(hour)
+            case .overnight: return (0..<5).contains(hour)
+            }
+        }
+    }
     struct Sample {
         let date: Date
         let value: Double

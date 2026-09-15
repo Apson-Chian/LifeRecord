@@ -40,12 +40,13 @@ struct GlassCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
                     .fill(Color(.secondarySystemGroupedBackground))
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(LinearGradient(colors: [tint.opacity(0.065), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .fill(LinearGradient(colors: [tint.opacity(0.10), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
             }
-            .shadow(color: tint.opacity(0.045), radius: 16, y: 6)
+            .shadow(color: Color.black.opacity(0.035), radius: 3, y: 2)
+            .shadow(color: tint.opacity(0.07), radius: 20, y: 8)
             .overlay {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(tint.opacity(0.08), lineWidth: 0.5)
+                    .stroke(LinearGradient(colors: [tint.opacity(0.18), tint.opacity(0.04)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.75)
             }
     }
 }
@@ -137,7 +138,7 @@ struct PressScaleButtonStyle: ButtonStyle {
 
 extension View {
     func keyboardDoneButton() -> some View {
-        toolbar {
+        keyboardDismissControl().toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Button("收起") { dismissKeyboard() }
                     .fontWeight(.semibold)
@@ -155,4 +156,34 @@ extension View {
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
+}
+
+
+/// A visible fallback above the keyboard, independent of SwiftUI keyboard-toolbar delivery.
+private struct KeyboardDismissControl: ViewModifier {
+    @State private var keyboardVisible = false
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if keyboardVisible {
+                    HStack {
+                        Spacer()
+                        Button {
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        } label: {
+                            Label("收起键盘", systemImage: "keyboard.chevron.compact.down")
+                                .font(.subheadline.weight(.semibold)).frame(minHeight: 44)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .background(.bar)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in keyboardVisible = true }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
+    }
+}
+
+extension View {
+    func keyboardDismissControl() -> some View { modifier(KeyboardDismissControl()) }
 }

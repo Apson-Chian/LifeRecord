@@ -150,6 +150,7 @@ function render() {
   renderMealPreview(meals);
   renderWeekRings();
   renderDailyRings(nutrition, meals.length, target);
+  if (typeof renderAdmin === "function") renderAdmin();
 }
 
 function relativeDateLabel(date) {
@@ -328,7 +329,7 @@ function showColumnDetail(type) {
     const html = entries.length ? `<div class="source-list">${entries.map(item => `
       <div class="source-row">
         <span><strong>${escapeHtml(item.note || "饮水记录")}</strong><small>${fmtShortDate(item.date)} · ${escapeHtml(recordSource(item, "water"))}</small></span>
-        <b>${Math.round(item.milliliters)} ml<button class="delete-record" type="button" data-delete-water="${item.id}" aria-label="删除这条饮水记录">删除</button></b>
+        <b>${Math.round(item.milliliters)} ml<button class="text-button" type="button" data-admin-edit="water" data-record-id="${item.id}">编辑</button><button class="delete-record" type="button" data-delete-water="${item.id}" aria-label="删除这条饮水记录">删除</button></b>
       </div>`).join("")}</div>` : emptyDetail("所选日期还没有饮水记录。");
     openDetail({ title: "饮水来源", subtitle: `${date} · ${Math.round(total)} / ${Math.round(target.waterGoal)} ml`, html: `<p class="calculation-note">计算方式：当天所有饮水记录的毫升数直接相加。AI 只会为明确饮用的饮料新增来源，不计算菜肴、米饭、蔬果本身的水分。</p>${html}` });
   } else if (type === "weight") {
@@ -337,7 +338,7 @@ function showColumnDetail(type) {
     const html = entries.length ? `<div class="source-list">${entries.map(item => `
       <div class="source-row">
         <span><strong>${Number(item.weight).toFixed(1)} kg${item.bodyFat ? ` · 体脂 ${Number(item.bodyFat).toFixed(1)}%` : ""}</strong><small>${fmtShortDate(item.date)} · ${escapeHtml(recordSource(item, "body"))}${item.note ? ` · ${escapeHtml(item.note)}` : ""}</small></span>
-        <b><button class="delete-record" type="button" data-delete-body="${item.id}" aria-label="删除这条身体记录">删除</button></b>
+        <b><button class="text-button" type="button" data-admin-edit="body" data-record-id="${item.id}">编辑</button><button class="delete-record" type="button" data-delete-body="${item.id}" aria-label="删除这条身体记录">删除</button></b>
       </div>`).join("")}</div>` : emptyDetail("这一天之前还没有身体记录。");
     openDetail({ title: "体重记录", subtitle: `截至 ${date} 的最近记录`, html });
   } else if (type === "meals") {
@@ -399,6 +400,7 @@ function moveSelectedDate(days) {
 let editingMealID = null;
 let editingMealVersion = null;
 let editingDateInput = null;
+let retainedPhotoIDs = [];
 function openMealDialog(meal = null) {
   // Click handlers pass an Event; only a stored record can be edited.
   if (!meal || !state.meals.includes(meal)) meal = null;
@@ -410,10 +412,13 @@ function openMealDialog(meal = null) {
   const date = meal ? new Date(meal.date * 1000) : parseDate(selectedDate);
   form.elements.date.value = `${dateKey(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   editingDateInput = form.elements.date.value;
-  if (meal) for (const key of ["kind", "name", "calories", "protein", "carbs", "fat", "fiber", "note"]) form.elements[key].value = meal[key] ?? "";
+  retainedPhotoIDs = [...(meal?.photoIDs || [])];
+  $("#mealEditError").textContent = "";
+  renderEditablePhotos();
+  if (meal) for (const key of ["kind", "name", "calories", "protein", "carbs", "fat", "fiber", "note", "source"]) form.elements[key].value = meal[key] ?? "";
   $("#mealDialog").showModal();
 }
-function openWeightDialog() { $("#weightDialog").showModal(); }
+function openWeightDialog() { editBodyRecord(); }
 
 renderWaterOptions();
 render();
@@ -437,9 +442,10 @@ $("#authForm").addEventListener("submit", async event => {
 $("#waterOptions").addEventListener("click", async event => {
   const button = event.target.closest("[data-water]"); if (!button) return;
   const amount = Number(button.dataset.water);
-  state.waterEntries.push({ id: newID(), date: epochForDateKey(selectedDate), milliliters: amount, note: "网页版快速记录", updatedAt: nowSeconds() });
-  touchLocalState();
-  render(); await syncNow(); showToast(`已记录 ${amount} ml 饮水`);
+  try {
+    await saveAdminActions([recordAction("water", null, {date: epochForDateKey(selectedDate), milliliters:amount, note:"网页版快速记录"})]);
+    showToast(`已记录 ${amount} ml 饮水`);
+  } catch(error) { showToast(error.message); }
 });
 
 $("#mealPreview").addEventListener("click", event => {
@@ -465,24 +471,9 @@ $("#detailContent").addEventListener("click", async event => {
   const mealButton = event.target.closest("[data-delete-meal]");
   const bodyButton = event.target.closest("[data-delete-body]");
   const waterButton = event.target.closest("[data-delete-water]");
-  if (mealButton) {
-    addDeletion(mealButton.dataset.deleteMeal, "meal");
-    state.meals = state.meals.filter(item => item.id !== mealButton.dataset.deleteMeal);
-    showToast("已删除餐食记录");
-  } else if (bodyButton) {
-    addDeletion(bodyButton.dataset.deleteBody, "body");
-    state.bodyMetrics = state.bodyMetrics.filter(item => item.id !== bodyButton.dataset.deleteBody);
-    showToast("已删除身体记录");
-  } else if (waterButton) {
-    addDeletion(waterButton.dataset.deleteWater, "water");
-    state.waterEntries = state.waterEntries.filter(item => item.id !== waterButton.dataset.deleteWater);
-    showToast("已删除饮水记录");
-  } else {
-    return;
-  }
-  $("#detailDialog").close();
-  render();
-  await syncNow();
+  if (mealButton) await deleteAdminRecord("meal", mealButton.dataset.deleteMeal);
+  else if (bodyButton) await deleteAdminRecord("body", bodyButton.dataset.deleteBody);
+  else if (waterButton) await deleteAdminRecord("water", waterButton.dataset.deleteWater);
 });
 
 $("#dateButton").addEventListener("click", () => { visibleMonth = parseDate(selectedDate); renderCalendar(); $("#calendarDialog").showModal(); });
@@ -518,7 +509,7 @@ $("#mealForm").addEventListener("submit", async event => {
     const files = Array.from(form.elements.photos.files || []);
     const existing = editingMealID ? state.meals.find(item => item.id === editingMealID) : null;
     if (editingMealID && !existing) throw new Error("该记录已被删除，请关闭后重试");
-    if (files.length + (existing?.photoIDs?.length || 0) > 6) throw new Error("每餐合计最多保存 6 张照片");
+    if (files.length + retainedPhotoIDs.length > 6) throw new Error("每餐合计最多保存 6 张照片");
     if (existing && existing.updatedAt !== editingMealVersion) throw new Error("该记录已在其他设备更新，请关闭后重新编辑");
     const date = existing && data.get("date") === editingDateInput ? existing.date : new Date(data.get("date")).getTime() / 1000;
     if (!Number.isFinite(date) || !data.get("name").trim()) throw new Error("请填写有效的名称和时间");
@@ -528,19 +519,14 @@ $("#mealForm").addEventListener("submit", async event => {
       ...(existing || {}), id, date, kind: data.get("kind"), name: data.get("name").trim(),
       calories: Number(data.get("calories")), protein: Number(data.get("protein")), carbs: Number(data.get("carbs")),
       fat: Number(data.get("fat")), fiber: Number(data.get("fiber")), note: data.get("note").trim(),
-      source: existing?.source || "手动", createdAt: existing?.createdAt || timestamp, updatedAt: timestamp,
-      photoIDs: [...(existing?.photoIDs || []), ...photoIDs]
+      source: data.get("source"), createdAt: existing?.createdAt || timestamp, updatedAt: timestamp,
+      photoIDs: [...retainedPhotoIDs, ...photoIDs]
     };
-    if (existing) {
-      const index = state.meals.findIndex(item => item.id === id);
-      if (index < 0) throw new Error("该记录已被删除");
-      if (state.meals[index].updatedAt !== editingMealVersion) throw new Error("该记录已更新，请关闭后重新编辑");
-      state.meals[index] = record;
-    } else state.meals.push(record);
-    touchLocalState();
-    render(); form.reset(); $("#mealDialog").close(); $("#detailDialog").close(); const synced = await syncNow(); showToast(synced ? "餐食已保存并同步" : "修改待同步，请保持页面打开并重试同步");
+    const {id: recordID, updatedAt, createdAt, ...fields} = record;
+    await saveAdminActions([{...recordAction("meal", existing, fields), recordID}]);
+    form.reset(); $("#mealDialog").close(); $("#detailDialog").close(); showToast("餐食已保存并同步");
   } catch (error) {
-    showToast(error.message || "照片保存失败");
+    $("#mealEditError").textContent = error.message || "保存失败";
   } finally {
     submit.disabled = false; submit.textContent = originalLabel;
   }
@@ -550,24 +536,27 @@ $("#addWeightButton").addEventListener("click", openWeightDialog);
 $("#quickWeightButton").addEventListener("click", openWeightDialog);
 $("#closeWeight").addEventListener("click", () => $("#weightDialog").close());
 $("#weightForm").addEventListener("submit", async event => {
-  event.preventDefault(); const data = new FormData(event.currentTarget); const bodyFat = Number(data.get("bodyFat"));
-  state.bodyMetrics.push({ id: newID(), date: epochForDateKey(selectedDate), weight: Number(data.get("weight")), bodyFat: bodyFat || null, waist: null, note: data.get("note").trim(), updatedAt: nowSeconds() });
-  touchLocalState();
-  render(); event.currentTarget.reset(); $("#weightDialog").close(); await syncNow(); showToast("身体数据已保存");
+  event.preventDefault(); const form=event.currentTarget, data=new FormData(form), button=form.querySelector('[type="submit"]'); button.disabled=true;
+  try {
+    await saveAdminActions([recordAction("body", bodyEdit, {date:timestampFromForm(data.get("date"),bodyEdit), weight:Number(data.get("weight")), bodyFat:data.get("bodyFat")===""?null:Number(data.get("bodyFat")), waist:data.get("waist")===""?null:Number(data.get("waist")), note:data.get("note").trim()})]);
+    form.reset(); $("#weightDialog").close(); showToast("身体数据已保存并同步");
+  } catch(error) { showToast(error.message); } finally {button.disabled=false;}
 });
 
 $("#editGoalsButton").addEventListener("click", () => {
-  const target = goals(); const form = $("#goalsForm");
-  for (const key of ["calorieGoal", "proteinGoal", "carbsGoal", "fatGoal", "waterGoal", "targetWeight"]) form.elements[key].value = target[key];
+  const target = goals(), form = $("#goalsForm"); profileVersion=state.settings?.updatedAt??null;
+  for (const key of profileFields) form.elements[key].value = target[key];
   $("#goalsDialog").showModal();
 });
 $("#closeGoals").addEventListener("click", () => $("#goalsDialog").close());
 $("#goalsForm").addEventListener("submit", async event => {
-  event.preventDefault(); const data = new FormData(event.currentTarget); const base = goals();
-  state.settings = { ...base, id: "profile", updatedAt: nowSeconds() };
-  for (const key of ["calorieGoal", "proteinGoal", "carbsGoal", "fatGoal", "waterGoal", "targetWeight"]) state.settings[key] = Number(data.get(key));
-  touchLocalState();
-  render(); $("#goalsDialog").close(); await syncNow(); showToast("目标已同步到 App");
+  event.preventDefault(); const form=event.currentTarget, data=new FormData(form), button=form.querySelector('[type="submit"]'); button.disabled=true;
+  try {
+    const fields={};
+    for(const key of profileFields) fields[key] = ["displayName","fitnessGoal"].includes(key)?data.get(key):Number(data.get(key));
+    await saveAdminActions([{recordType:"settings",operation:"update",recordID:"profile",expectedUpdatedAt:profileVersion,fields}]);
+    $("#goalsDialog").close(); showToast("档案与目标已同步到 App");
+  } catch(error) {showToast(error.message);} finally {button.disabled=false;}
 });
 
 $("#exportButton").addEventListener("click", () => {
@@ -609,3 +598,8 @@ window.addEventListener("focus", () => { if (connected) syncNow("已自动同步
 
 for (const id of ["mealSearch", "mealScope", "mealKindFilter"]) $("#" + id).addEventListener("input", renderMealPreview);
 $("#sidebarGoals").addEventListener("click", () => $("#editGoalsButton").click());
+
+function renderEditablePhotos() {
+  $("#editablePhotos").innerHTML = retainedPhotoIDs.length ? `<p class="upload-hint">已有照片（保存后移除选中的照片）</p><div class="editable-photos">${retainedPhotoIDs.map(id=>`<div><img src="${API_BASE}/images/${id}" alt="已有餐食照片"><button type="button" class="text-button" data-remove-photo="${id}">移除</button></div>`).join("")}</div>` : "";
+}
+$("#editablePhotos").addEventListener("click",event=>{const button=event.target.closest("[data-remove-photo]"); if(button){retainedPhotoIDs=retainedPhotoIDs.filter(id=>id!==button.dataset.removePhoto);renderEditablePhotos();}});

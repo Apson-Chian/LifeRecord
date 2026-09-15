@@ -375,6 +375,7 @@ struct MealEditView: View {
                 }.disabled(busy)
             }
             .scrollDismissesKeyboard(.interactively)
+            .keyboardDismissControl()
             .navigationTitle("编辑餐食")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

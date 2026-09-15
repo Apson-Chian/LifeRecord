@@ -25,6 +25,15 @@ struct BodyTrendChecks {
         assert(fat.count == 2 && fat[1].value == 21)
         // A UTC date on the prior day still belongs to this local day.
         assert(points[0].date == start)
+        for hour in 0..<24 {
+            let date = sample(0, hour, 70).date
+            let matching = BodyTrend.Period.allCases.filter { $0 != .all && $0.includes(date, calendar: calendar) }
+            assert(matching.count == 1)
+            assert(BodyTrend.Period.morning.includes(date, calendar: calendar) == (5..<12).contains(hour))
+            assert(BodyTrend.Period.evening.includes(date, calendar: calendar) == (18..<24).contains(hour))
+        }
+        let morning = samples.filter { BodyTrend.Period.morning.includes($0.date, calendar: calendar) }
+        assert(BodyTrend.series(morning, calendar: calendar)[0].value == 70)
         print("BodyTrend: all checks passed")
     }
 }
