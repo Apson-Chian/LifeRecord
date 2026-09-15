@@ -143,6 +143,22 @@ def validate_record(record_type: str, item: dict) -> None:
             raise ValueError("invalid workout end")
         if not isinstance(item.get("note", ""), str) or len(item.get("note", "")) > 10000:
             raise ValueError("invalid workout note")
+        exercises = item.get("exercises", [])
+        if not isinstance(exercises, list) or len(exercises) > 50:
+            raise ValueError("invalid workout exercises")
+        for exercise in exercises:
+            if not isinstance(exercise, dict) or not isinstance(exercise.get("name"), str) or not exercise["name"].strip() or len(exercise["name"]) > 100:
+                raise ValueError("invalid exercise name")
+            sets = exercise.get("sets")
+            if not isinstance(sets, list) or not 1 <= len(sets) <= 100:
+                raise ValueError("invalid exercise sets")
+            for group in sets:
+                if not isinstance(group, dict):
+                    raise ValueError("invalid exercise set")
+                for field, low, high in (("reps", 1, 10000), ("weight", 0, 2000), ("durationSeconds", 1, 86400)):
+                    value = group.get(field)
+                    if value is not None and (not valid_number(value, low, high) or (field != "weight" and (not isinstance(value, int) or isinstance(value, bool)))):
+                        raise ValueError("invalid exercise " + field)
     elif record_type == "water":
         if not valid_number(item.get("milliliters"), 1, 10_000):
             raise ValueError("invalid water amount")
@@ -189,7 +205,21 @@ def merge_snapshot(snapshot: dict) -> None:
     deleted_image_files: list[str] = []
     deleted_meal_ids = [record_id for record_type, record_id, _, _, deleted in operations if record_type == "meal" and deleted]
     with _db_lock, connect() as connection:
-        connection.executemany(statement, operations)
+        # Older clients omit structured details. Preserve them on a newer edit;
+        # an explicit empty list from a new client intentionally clears the exercises.
+        preserved = []
+        for kind, record_id, payload, stamp, deleted in operations:
+            if kind == "workout" and not deleted:
+                incoming = json.loads(payload)
+                if "exercises" not in incoming:
+                    row = connection.execute("SELECT payload FROM records WHERE record_type = ? AND record_id = ? AND deleted = 0", (kind, record_id)).fetchone()
+                    if row:
+                        previous = json.loads(row["payload"])
+                        if "exercises" in previous:
+                            incoming["exercises"] = previous["exercises"]
+                            payload = json.dumps(incoming, ensure_ascii=False, separators=(",", ":"))
+            preserved.append((kind, record_id, payload, stamp, deleted))
+        connection.executemany(statement, preserved)
         for meal_id in deleted_meal_ids:
             record = connection.execute(
                 "SELECT deleted FROM records WHERE record_type = 'meal' AND record_id = ?",
@@ -282,7 +312,7 @@ PROFILE_DEFAULTS = dict(displayName="", fitnessGoal="增肌", height=181, baseli
 FIELDS = {
     "meal": {"date", "kind", "name", "calories", "protein", "carbs", "fat", "fiber", "note", "source", "photoIDs"},
     "body": {"date", "weight", "bodyFat", "waist", "note"},
-    "workout": {"date", "endDate", "note"},
+    "workout": {"date", "endDate", "note", "exercises"},
     "water": {"date", "milliliters", "note"},
     "settings": set(PROFILE_DEFAULTS),
 }

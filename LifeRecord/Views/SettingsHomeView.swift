@@ -56,6 +56,15 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("训练与提醒") {
+                    NavigationLink { ExerciseLibraryView() } label: {
+                        SettingsDestinationLabel(title: "我的动作库", subtitle: "自定义动作与默认组数", symbol: "dumbbell.fill", tint: .teal)
+                    }
+                    NavigationLink { ReminderSettingsView() } label: {
+                        SettingsDestinationLabel(title: "漏记提醒", subtitle: "提醒时间、记录类别与训练日", symbol: "bell.badge.fill", tint: .orange)
+                    }
+                }
+
                 Section("应用") {
                     NavigationLink {
                         PrivacyAndDataSettingsView()

@@ -12,6 +12,8 @@ struct RootView: View {
     @Query private var meals: [MealEntry]
     @Query private var bodyMetrics: [BodyMetric]
     @Query private var waterEntries: [WaterEntry]
+    @AppStorage(ReminderPreferences.key) private var reminderRaw = ""
+    @Query private var workouts: [WorkoutEntry]
     @Query private var tombstones: [SyncTombstone]
     @State private var showsOnboarding = !OnboardingState.hasSeenOnboarding
 
@@ -19,8 +21,9 @@ struct RootView: View {
         let mealStamp = meals.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
         let bodyStamp = bodyMetrics.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
         let waterStamp = waterEntries.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
+        let workoutStamp = workouts.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
         let deletionStamp = tombstones.map(\.deletedAt.timeIntervalSince1970).max() ?? 0
-        return "\(meals.count):\(mealStamp):\(bodyMetrics.count):\(bodyStamp):\(waterEntries.count):\(waterStamp):\(tombstones.count):\(deletionStamp)"
+        return "\(workouts.count):\(workoutStamp):\(meals.count):\(mealStamp):\(bodyMetrics.count):\(bodyStamp):\(waterEntries.count):\(waterStamp):\(tombstones.count):\(deletionStamp)"
     }
 
     var body: some View {
@@ -41,6 +44,7 @@ struct RootView: View {
         .environmentObject(coachTaskCenter)
         .task {
             DemoDataService.installIfNeeded(context: modelContext)
+            refreshReminders()
             await syncCoordinator.sync(context: modelContext, settings: settings)
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(15))
@@ -49,6 +53,7 @@ struct RootView: View {
             }
         }
         .onChange(of: syncFingerprint) { _, _ in
+            refreshReminders()
             Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
         }
         .onChange(of: settings.profileUpdatedAt) { _, _ in
@@ -56,10 +61,14 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             updateCoachVisibility(for: phase)
+            refreshReminders()
             if phase == .active {
                 Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
             }
         }
+        .onChange(of: reminderRaw) { _, _ in refreshReminders() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in refreshReminders() }
+        .onReceive(router.$reminderRoute.compactMap { $0 }) { _ in selectedTab = 0 }
         .onChange(of: selectedTab) { _, _ in
             updateCoachVisibility(for: scenePhase)
         }
@@ -72,6 +81,12 @@ struct RootView: View {
         .fullScreenCover(isPresented: $showsOnboarding) {
             OnboardingView()
         }
+    }
+
+    private func refreshReminders() {
+        RecordReminderCenter.shared.refresh(preferences: .decode(reminderRaw), records: .init(
+            meals: meals.filter { !$0.isDemo }.map(\.date), water: waterEntries.filter { !$0.isDemo }.map(\.date),
+            body: bodyMetrics.filter { !$0.isDemo }.map(\.date), workouts: workouts.map(\.date)))
     }
 
     private func updateCoachVisibility(for phase: ScenePhase) {

@@ -241,6 +241,7 @@ final class WorkoutEntry {
     var date: Date
     var endDate: Date?
     var note: String
+    var exercisesRaw: String = "[]"
     var updatedAt: Date = Date.now
 
     init(id: UUID = UUID(), date: Date = .now, endDate: Date? = nil, note: String = "") {
@@ -251,4 +252,15 @@ final class WorkoutEntry {
         self.updatedAt = .now
     }
     var minutes: Double { max(0, (endDate ?? .now).timeIntervalSince(date) / 60) }
+}
+
+
+extension WorkoutEntry {
+    var exercises: [WorkoutExercise] {
+        get { (try? JSONDecoder().decode([WorkoutExercise].self, from: Data(exercisesRaw.utf8))) ?? [] }
+        set { exercisesRaw = (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]" }
+    }
+    var contentSummary: String {
+        ([note] + exercises.map(\.summary)).filter { !$0.isEmpty }.joined(separator: "\n")
+    }
 }

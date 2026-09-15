@@ -107,6 +107,7 @@ struct TodayView: View {
                     .accessibilityLabel("添加记录")
                 }
             }
+            .onReceive(router.$reminderRoute.compactMap { $0 }) { _ in selectedDate = .now }
             .onAppear {
                 publishSharedDailySummary()
                 lifeTrackActivity = SharedProfileStore.lifeTrackActivity()

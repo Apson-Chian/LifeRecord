@@ -13,6 +13,9 @@ struct CoachRoute: Identifiable, Equatable {
 final class AppRouter: ObservableObject {
     static let shared = AppRouter()
 
+    @Published private(set) var reminderRoute: UUID?
+    func openReminder() { reminderRoute = UUID() }
+
     @Published private(set) var coachRoute: CoachRoute?
 
     private init() {}
@@ -87,6 +90,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        if response.notification.request.content.userInfo["recordReminder"] as? Bool == true {
+            Task { @MainActor in AppRouter.shared.openReminder() }
+        }
         let value = response.notification.request.content.userInfo["conversationID"] as? String
         if let value, let conversationID = UUID(uuidString: value) {
             Task { @MainActor in

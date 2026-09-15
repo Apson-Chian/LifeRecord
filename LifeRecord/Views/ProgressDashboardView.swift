@@ -497,7 +497,7 @@ struct ProgressDashboardView: View {
             "\(day.formatted(date: .numeric, time: .omitted)): \(Int(waterGroups[day]!.reduce(0) { $0 + $1.milliliters }))ml"
         }.joined(separator: ", ")
         let workoutContext = WorkoutSummary.context(workouts.filter { $0.date >= weekStart }.map {
-            .init(date: $0.date, endDate: $0.endDate, note: $0.note)
+            .init(date: $0.date, endDate: $0.endDate, note: $0.contentSummary)
         })
         let context = "健身记录：\(workoutContext)。最近7天（含今天）。目标体重 \(settings.targetWeight)kg，热量目标 \(settings.calorieGoal)kcal，饮水目标 \(settings.waterGoal)ml。体重：\(recentWeights)。体脂：\(fat)。每日营养：\(calories)。每日饮水：\(water)。身体数据每日中位数后指数平滑；无记录不代表零，不要把日内波动解释为脂肪变化。"
         do {

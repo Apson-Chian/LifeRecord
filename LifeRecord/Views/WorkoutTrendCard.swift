@@ -112,7 +112,7 @@ struct WorkoutTrendCard: View {
                                     Spacer()
                                     Text(entry.endDate == nil ? "进行中" : "\(entry.minutes.formatted(.number.precision(.fractionLength(1)))) 分钟").font(.subheadline.monospacedDigit()).foregroundStyle(tint)
                                 }
-                                Text(entry.note.isEmpty ? "未填写训练内容" : entry.note).font(.subheadline).foregroundStyle(.secondary)
+                                Text(entry.contentSummary.isEmpty ? "未填写训练内容" : entry.contentSummary).font(.subheadline).foregroundStyle(.secondary)
                                 HStack {
                                     Text("\(entry.date.formatted(date: .abbreviated, time: .shortened)) → \(entry.endDate?.formatted(date: .abbreviated, time: .shortened) ?? "尚未结束")").font(.caption).foregroundStyle(.secondary)
                                     Spacer()

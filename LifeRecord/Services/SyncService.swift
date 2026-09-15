@@ -54,6 +54,7 @@ private struct SyncedWater: Codable {
 }
 
 private struct SyncedWorkout: Codable {
+    var exercises: [WorkoutExercise]? = nil
     var id: String
     var date: Double
     var endDate: Double?
@@ -251,7 +252,7 @@ final class SyncCoordinator {
                 )
             }
         let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>()).map {
-            SyncedWorkout(id: $0.id.uuidString.lowercased(), date: $0.date.timeIntervalSince1970,
+            SyncedWorkout(exercises: $0.exercises, id: $0.id.uuidString.lowercased(), date: $0.date.timeIntervalSince1970,
                           endDate: $0.endDate?.timeIntervalSince1970, note: $0.note,
                           updatedAt: $0.updatedAt.timeIntervalSince1970)
         }
@@ -428,6 +429,10 @@ final class SyncCoordinator {
             record.date = Date(timeIntervalSince1970: remote.date)
             record.endDate = remote.endDate.map { Date(timeIntervalSince1970: $0) }
             record.note = remote.note
+            if let exercises = remote.exercises {
+                try WorkoutExercise.validate(exercises)
+                record.exercises = exercises
+            }
             record.updatedAt = updated
         }
 

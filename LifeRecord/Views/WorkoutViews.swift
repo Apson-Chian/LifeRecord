@@ -45,7 +45,7 @@ struct WorkoutDayCard: View {
                         HStack(spacing: 12) {
                             Image(systemName: entry.endDate == nil ? "timer" : "checkmark.circle.fill").foregroundStyle(.teal)
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(entry.note.isEmpty ? "健身训练" : entry.note).font(.subheadline.weight(.medium)).lineLimit(2)
+                                Text(entry.contentSummary.isEmpty ? "健身训练" : entry.contentSummary).font(.subheadline.weight(.medium)).lineLimit(2)
                                 Text("\(entry.date.formatted(date: .omitted, time: .shortened)) → \(entry.endDate?.formatted(date: .abbreviated, time: .shortened) ?? "进行中")").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -78,6 +78,13 @@ struct WorkoutEditor: View {
     @State private var note: String
     @State private var error: String?
     @State private var confirmDelete = false
+    @State private var exercises: [WorkoutExercise]
+    @AppStorage(ExerciseLibrary.key) private var libraryRaw = "[]"
+    @State private var aiInput = ""
+    @State private var aiDraft: WorkoutAIDraft?
+    @State private var isGenerating = false
+    @State private var aiTask: Task<Void, Never>?
+
 
     init(entry: WorkoutEntry?, date: Date) {
         self.entry = entry
@@ -86,6 +93,7 @@ struct WorkoutEditor: View {
         _end = State(initialValue: entry?.endDate ?? min(start.addingTimeInterval(3600), .now))
         _finished = State(initialValue: entry == nil || entry?.endDate != nil)
         _note = State(initialValue: entry?.note ?? "")
+        _exercises = State(initialValue: entry?.exercises ?? [])
     }
     var body: some View {
         NavigationStack {
@@ -99,6 +107,31 @@ struct WorkoutEditor: View {
                         else { LabeledContent("时长", value: "\(Int(end.timeIntervalSince(start) / 60)) 分钟") }
                     }
                 }
+                Section {
+                    Menu("从动作库添加", systemImage: "list.bullet") {
+                        ForEach(ExerciseLibrary.decode(libraryRaw)) { template in
+                            Button(template.name) { exercises.append(.init(name: template.name, sets: (0..<template.sets).map { _ in WorkoutSet() })) }
+                        }
+                    }.disabled(ExerciseLibrary.decode(libraryRaw).isEmpty || exercises.count >= 50)
+                    Button("添加自定义动作", systemImage: "plus") { exercises.append(.init(name: "", sets: [WorkoutSet()])) }.disabled(exercises.count >= 50)
+                    NavigationLink("管理我的动作库") { ExerciseLibraryView() }
+                } header: { Text("训练动作与组数") } footer: { Text("每组可分别填写次数、重量和时长；不适用的数值留空。") }
+                ForEach($exercises) { $exercise in
+                    WorkoutExerciseFields(exercise: $exercise) { exercises.removeAll { $0.id == exercise.id } }
+                }
+                Section {
+                    TextField("例如：卧推 3 组，每组 8 次 40 kg；平板支撑 2 组各 60 秒", text: $aiInput, axis: .vertical).lineLimit(3...6)
+                    Button(isGenerating ? "正在整理…" : "AI 整理动作", systemImage: "sparkles") { generateDraft() }
+                        .disabled(isGenerating || aiInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if let draft = aiDraft {
+                        Text(draft.explanation).font(.subheadline).foregroundStyle(.secondary)
+                        ForEach(draft.exercises) { exercise in Text(exercise.summary).font(.subheadline) }
+                        Button("将草稿追加到本次训练") {
+                            exercises.append(contentsOf: draft.exercises); aiDraft = nil
+                        }.disabled(draft.exercises.isEmpty || exercises.count + draft.exercises.count > 50)
+                        Button("放弃草稿", role: .destructive) { aiDraft = nil }
+                    }
+                } header: { Text("AI 录入") } footer: { Text("AI 使用设置中的接口，只整理你提供的数据；追加后仍可编辑，保存训练后才会写入记录。") }
                 Section("健身内容") {
                     TextField("例如：深蹲 4 组 × 8 次，慢跑 20 分钟", text: $note, axis: .vertical).lineLimit(4...10)
                 }
@@ -107,6 +140,8 @@ struct WorkoutEditor: View {
             .scrollDismissesKeyboard(.interactively)
             .keyboardDismissControl()
             .navigationTitle(entry == nil ? "补记训练" : "训练详情")
+            .onChange(of: aiInput) { _, _ in aiTask?.cancel(); isGenerating = false; aiDraft = nil }
+            .onDisappear { aiTask?.cancel(); isGenerating = false }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button("保存") { save() }.disabled(finished && end < start) }
@@ -123,9 +158,24 @@ struct WorkoutEditor: View {
             .alert("保存失败", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("好") {} } message: { Text(error ?? "") }
         }
     }
+    private func generateDraft() {
+        isGenerating = true; aiDraft = nil
+        aiTask = Task {
+            do {
+                let draft = try await AIClient(settings: settings).workoutDraft(description: aiInput, library: ExerciseLibrary.decode(libraryRaw).map(\.name))
+                guard !Task.isCancelled else { return }
+                aiDraft = draft
+            } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+            if !Task.isCancelled { isGenerating = false }
+        }
+    }
     private func save() {
+        do { try WorkoutExercise.validate(exercises) } catch { self.error = error.localizedDescription; return }
+        guard note.count <= 10000 else { error = "训练备注最多 10000 字。"; return }
+        guard start <= .now, !finished || (end >= start && end <= .now) else { error = "请检查训练起止时间。"; return }
         let record = entry ?? WorkoutEntry()
         if entry == nil { context.insert(record) }
+        record.exercises = exercises
         record.date = start
         record.endDate = finished ? end : nil
         record.note = note.trimmingCharacters(in: .whitespacesAndNewlines)

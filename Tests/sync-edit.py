@@ -44,3 +44,25 @@ with tempfile.TemporaryDirectory() as folder:
     server.merge_snapshot({'workoutEntries': [finished]})
     assert server.current_snapshot()['workoutEntries'] == []
     print('PASS: workout start/end, stale updates, old clients, validation and deletion')
+
+    # Structured exercise data survives an older client updating only notes.
+    structured = dict(id='structured-workout', date=1000, endDate=2000, note='', updatedAt=9000,
+                      exercises=[dict(name='卧推', sets=[dict(reps=8, weight=40), dict(reps=6, weight=45)]),
+                                 dict(name='平板支撑', sets=[dict(durationSeconds=60)])])
+    server.merge_snapshot({'workoutEntries': [structured]})
+    assert server.current_snapshot()['workoutEntries'][0]['exercises'] == structured['exercises']
+    old = {k:v for k,v in structured.items() if k != 'exercises'}
+    old.update(note='older client edit', updatedAt=9001)
+    server.merge_snapshot({'workoutEntries': [old]})
+    assert server.current_snapshot()['workoutEntries'][0]['exercises'] == structured['exercises']
+    for exercises in [[dict(name='', sets=[{}])], [dict(name='蹲', sets=[])],
+                      [dict(name='蹲', sets=[dict(reps=-1)])], [dict(name='蹲', sets=[dict(reps=1.5)])],
+                      [dict(name='蹲', sets=[dict(weight=True)])], [dict(name='蹲', sets=[dict(durationSeconds=0)])]]:
+        try:
+            server.merge_snapshot({'workoutEntries': [{**structured, 'exercises': exercises, 'updatedAt': 9002}]})
+            raise AssertionError('Invalid exercises accepted')
+        except ValueError:
+            pass
+    server.merge_snapshot({'workoutEntries': [{**structured, 'exercises': [], 'updatedAt': 9003}]})
+    assert server.current_snapshot()['workoutEntries'][0]['exercises'] == []
+    print('PASS: structured sets round-trip, old-client preservation, explicit clearing and validation')
