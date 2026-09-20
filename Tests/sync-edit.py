@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory() as folder:
     old.update(note='older client edit', updatedAt=9001)
     server.merge_snapshot({'workoutEntries': [old]})
     assert server.current_snapshot()['workoutEntries'][0]['exercises'] == structured['exercises']
-    for exercises in [[dict(name='', sets=[{}])], [dict(name='蹲', sets=[])],
+    for exercises in [[dict(name='', sets=[{}])], [dict(name='蹲', sets=[{}] * 101)],
                       [dict(name='蹲', sets=[dict(reps=-1)])], [dict(name='蹲', sets=[dict(reps=1.5)])],
                       [dict(name='蹲', sets=[dict(weight=True)])], [dict(name='蹲', sets=[dict(durationSeconds=0)])]]:
         try:
@@ -66,3 +66,8 @@ with tempfile.TemporaryDirectory() as folder:
     server.merge_snapshot({'workoutEntries': [{**structured, 'exercises': [], 'updatedAt': 9003}]})
     assert server.current_snapshot()['workoutEntries'][0]['exercises'] == []
     print('PASS: structured sets round-trip, old-client preservation, explicit clearing and validation')
+
+    name_only = [{"name": "深蹲", "sets": []}]
+    server.merge_snapshot({'workoutEntries': [{**structured, 'exercises': name_only, 'updatedAt': 9004}]})
+    assert server.current_snapshot()['workoutEntries'][0]['exercises'] == name_only
+    print('PASS: name-only exercises sync without sets')

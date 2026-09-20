@@ -110,14 +110,18 @@ struct WorkoutEditor: View {
                 Section {
                     Menu("从动作库添加", systemImage: "list.bullet") {
                         ForEach(ExerciseLibrary.decode(libraryRaw)) { template in
-                            Button(template.name) { exercises.append(.init(name: template.name, sets: (0..<template.sets).map { _ in WorkoutSet() })) }
+                            Button(template.name) { exercises.append(.init(name: template.name, sets: [])) }
                         }
                     }.disabled(ExerciseLibrary.decode(libraryRaw).isEmpty || exercises.count >= 50)
-                    Button("添加自定义动作", systemImage: "plus") { exercises.append(.init(name: "", sets: [WorkoutSet()])) }.disabled(exercises.count >= 50)
+                    Button("添加自定义动作", systemImage: "plus") { exercises.append(.init(name: "", sets: [])) }.disabled(exercises.count >= 50)
                     NavigationLink("管理我的动作库") { ExerciseLibraryView() }
-                } header: { Text("训练动作与组数") } footer: { Text("每组可分别填写次数、重量和时长；不适用的数值留空。") }
-                ForEach($exercises) { $exercise in
-                    WorkoutExerciseFields(exercise: $exercise) { exercises.removeAll { $0.id == exercise.id } }
+                } header: { Text("训练动作") } footer: { Text("选中动作即可保存；需要记录组数、次数、重量或时长时，展开动作填写。") }
+                if !exercises.isEmpty {
+                    Section("已选动作") {
+                        ForEach($exercises) { $exercise in
+                            WorkoutExerciseFields(exercise: $exercise) { exercises.removeAll { $0.id == exercise.id } }
+                        }
+                    }
                 }
                 Section {
                     TextField("例如：卧推 3 组，每组 8 次 40 kg；平板支撑 2 组各 60 秒", text: $aiInput, axis: .vertical).lineLimit(3...6)

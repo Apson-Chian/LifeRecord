@@ -150,7 +150,7 @@ def validate_record(record_type: str, item: dict) -> None:
             if not isinstance(exercise, dict) or not isinstance(exercise.get("name"), str) or not exercise["name"].strip() or len(exercise["name"]) > 100:
                 raise ValueError("invalid exercise name")
             sets = exercise.get("sets")
-            if not isinstance(sets, list) or not 1 <= len(sets) <= 100:
+            if not isinstance(sets, list) or not 0 <= len(sets) <= 100:
                 raise ValueError("invalid exercise sets")
             for group in sets:
                 if not isinstance(group, dict):

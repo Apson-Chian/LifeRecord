@@ -20,10 +20,7 @@ struct ExerciseLibraryView: View {
             } header: { Text("添加自定义动作") } footer: { Text("动作库保存在这台设备。修改或删除模板不会改变已保存的训练。") }
             Section("我的动作（\(templates.count)）") {
                 ForEach($templates) { $template in
-                    VStack(alignment: .leading, spacing: 12) {
-                        TextField("动作名称", text: $template.name).onSubmit { save() }
-                        Stepper("默认 \(template.sets) 组", value: $template.sets, in: 1...100)
-                    }.padding(.vertical, 4)
+                    TextField("动作名称", text: $template.name).onSubmit { save() }
                 }.onDelete { indices in templates.remove(atOffsets: indices); save() }
                 if templates.isEmpty { Text("添加常练的动作，记录训练时一键选用。").foregroundStyle(.secondary) }
             }
@@ -51,7 +48,7 @@ struct WorkoutExerciseFields: View {
     @Binding var exercise: WorkoutExercise
     let remove: () -> Void
     var body: some View {
-        Section {
+        DisclosureGroup {
             TextField("动作名称", text: $exercise.name)
             ForEach(Array(exercise.sets.indices), id: \.self) { index in
                 VStack(alignment: .leading, spacing: 8) {
@@ -59,7 +56,6 @@ struct WorkoutExerciseFields: View {
                         Text("第 \(index + 1) 组").font(.subheadline.weight(.semibold))
                         Spacer()
                         Button("删除组", role: .destructive) { exercise.sets.remove(at: index) }
-                            .disabled(exercise.sets.count == 1)
                     }
                     HStack {
                         Text("次数").frame(width: 60, alignment: .leading)
@@ -79,6 +75,14 @@ struct WorkoutExerciseFields: View {
                 var set = exercise.sets.last ?? WorkoutSet(); set.id = UUID(); exercise.sets.append(set)
             }.disabled(exercise.sets.count >= 100)
             Button("移除此动作", role: .destructive, action: remove)
-        } header: { Text(exercise.name.isEmpty ? "自定义动作" : exercise.name) }
+        } label: {
+            HStack {
+                Text(exercise.name.isEmpty ? "自定义动作（点击填写）" : exercise.name)
+                Spacer()
+                if !exercise.sets.isEmpty {
+                    Text("\(exercise.sets.count) 组").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }

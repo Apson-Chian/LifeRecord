@@ -207,9 +207,9 @@ struct TodayView: View {
                             color: AppTheme.carbs
                         )
                         RingLegend(
-                            title: "饮水",
-                            value: "\(Int(water)) / \(Int(settings.waterGoal)) ml",
-                            color: AppTheme.water
+                            title: "体重",
+                            value: bodyMetrics.first.map { "\($0.weight.formatted(.number.precision(.fractionLength(1)))) kg" } ?? "暂无记录",
+                            color: AppTheme.accent
                         )
                     }
                 }
