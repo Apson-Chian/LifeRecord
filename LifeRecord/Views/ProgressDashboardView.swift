@@ -344,7 +344,7 @@ struct ProgressDashboardView: View {
                         if !isGenerating { Image(systemName: "arrow.right") }
                     }.padding(.vertical, 6)
                 }
-                .buttonStyle(.borderedProminent).buttonBorderShape(.roundedRectangle(radius: 14))
+                .buttonStyle(AppButtonStyle())
                 .disabled(isGenerating || (bodyMetrics.isEmpty && meals.isEmpty && waterEntries.isEmpty && workouts.isEmpty))
             }
         }

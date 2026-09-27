@@ -1,7 +1,12 @@
 import SwiftUI
 
 enum AppTheme {
-    static let accent = Color(red: 0.34, green: 0.32, blue: 0.96)
+    static let accentFill = Color(red: 0.34, green: 0.32, blue: 0.96)
+    static let accent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.65, green: 0.62, blue: 1, alpha: 1)
+            : UIColor(red: 0.34, green: 0.32, blue: 0.96, alpha: 1)
+    })
     static let accentSoft = Color(red: 0.48, green: 0.43, blue: 1.00)
     static let protein = Color(red: 0.20, green: 0.55, blue: 0.98)
     static let carbs = Color(red: 0.95, green: 0.64, blue: 0.22)
@@ -36,18 +41,64 @@ struct GlassCard<Content: View>: View {
         content
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(LinearGradient(colors: [tint.opacity(0.10), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
-            }
-            .shadow(color: Color.black.opacity(0.035), radius: 3, y: 2)
-            .shadow(color: tint.opacity(0.07), radius: 20, y: 8)
+            .background(CardSurface(tint: tint))
+    }
+}
+
+/// Shared surface keeps dashboard cards and action tiles consistent in both appearances.
+struct CardSurface: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    var tint: Color = AppTheme.accent
+    var radius: CGFloat = 26
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(Color(.secondarySystemGroupedBackground))
             .overlay {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(LinearGradient(colors: [tint.opacity(0.18), tint.opacity(0.04)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.75)
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [tint.opacity(colorScheme == .dark ? 0.13 : 0.055), .clear],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ))
             }
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(tint.opacity(contrast == .increased ? 0.5 : 0.13), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0 : 0.025), radius: 2, y: 2)
+            .shadow(color: tint.opacity(colorScheme == .dark ? 0 : 0.045), radius: 16, y: 7)
+    }
+}
+
+struct AppButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var tint: Color = AppTheme.accentFill
+    var prominent = true
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(minHeight: 44)
+            .foregroundStyle(prominent ? Color.white : tint)
+            .background {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: prominent ? [tint, tint.opacity(0.85)] : [tint.opacity(0.12), tint.opacity(0.07)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(prominent ? Color.white.opacity(0.16) : tint.opacity(0.16), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
     }
 }
 
@@ -92,34 +143,32 @@ struct ActionTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: symbol)
-                    .symbolRenderingMode(.hierarchical)
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 44, height: 44)
-                    .background {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [tint.opacity(0.24), tint.opacity(0.08)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .overlay {
-                                Circle().stroke(.white.opacity(0.24), lineWidth: 0.5)
-                            }
-                            .shadow(color: tint.opacity(0.17), radius: 8, y: 4)
-                    }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Image(systemName: symbol)
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 44, height: 44)
+                        .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    Spacer(minLength: 8)
+                    Image(systemName: "plus")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                        .frame(width: 26, height: 26)
+                        .background(tint.opacity(0.08), in: Circle())
+                }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(.headline).foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(14)
+            .padding(17)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(CardSurface(tint: tint, radius: 22))
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(PressScaleButtonStyle())
     }
@@ -127,11 +176,12 @@ struct ActionTile: View {
 
 struct PressScaleButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.86 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.86 : 1) : 0.45)
             .animation(reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 1), value: configuration.isPressed)
     }
 }

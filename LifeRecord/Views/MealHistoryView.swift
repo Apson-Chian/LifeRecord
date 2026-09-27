@@ -72,6 +72,7 @@ struct MealDetailView: View {
 
     @State private var isConfirmingDelete = false
     @State private var isEditing = false
+    @State private var selectedPhoto: PhotoSelection?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -143,9 +144,19 @@ struct MealDetailView: View {
                             ScrollView(.horizontal) {
                                 HStack(spacing: 12) {
                                     ForEach(meal.photoIDs, id: \.self) { imageID in
-                                        MealPhotoView(imageID: imageID)
-                                            .frame(width: 210, height: 180)
-                                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                        Button {
+                                            selectedPhoto = PhotoSelection(id: imageID)
+                                        } label: {
+                                            MealPhotoView(imageID: imageID)
+                                                .frame(width: 210, height: 180)
+                                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                                .overlay(alignment: .bottomTrailing) {
+                                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                                        .padding(9).background(.ultraThinMaterial, in: Circle()).padding(8)
+                                                }
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("查看餐食照片")
                                     }
                                 }
                             }
@@ -169,6 +180,9 @@ struct MealDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .primaryAction) { Button("编辑") { isEditing = true } } }
         .sheet(isPresented: $isEditing) { MealEditView(meal: meal) }
+        .fullScreenCover(item: $selectedPhoto) { photo in
+            MealPhotoViewer(imageIDs: meal.photoIDs, initialID: photo.id)
+        }
         .confirmationDialog("确定删除这条饮食记录？", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
             Button("删除", role: .destructive, action: deleteMeal)
             Button("取消", role: .cancel) {}
@@ -224,54 +238,8 @@ private struct MealHistoryRow: View {
     }
 }
 
-struct MealPhotoView: View {
-    @Environment(SyncCoordinator.self) private var syncCoordinator
-    let imageID: String
-
-    @State private var image: UIImage?
-    @State private var failed = false
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.tertiarySystemFill))
-
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else if failed {
-                Image(systemName: "photo.badge.exclamationmark")
-                    .foregroundStyle(.secondary)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.white.opacity(0.16), lineWidth: 0.5)
-        }
-        .task(id: imageID) {
-            image = nil
-            failed = false
-            do {
-                let data = try await syncCoordinator.mealPhotoData(imageID: imageID)
-                guard let decoded = UIImage(data: data) else {
-                    failed = true
-                    return
-                }
-                image = decoded
-            } catch {
-                failed = true
-            }
-        }
-        .accessibilityLabel("餐食照片")
-    }
-}
-
 struct MealPhotoGalleryView: View {
+    @State private var selectedPhoto: PhotoSelection?
     @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
 
     private var items: [MealPhotoItem] {
@@ -298,8 +266,8 @@ struct MealPhotoGalleryView: View {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 3) {
                         ForEach(items) { item in
-                            NavigationLink {
-                                MealDetailView(meal: item.meal)
+                            Button {
+                                selectedPhoto = PhotoSelection(id: item.id)
                             } label: {
                                 MealPhotoView(imageID: item.id)
                                     .aspectRatio(1, contentMode: .fit)
@@ -310,6 +278,9 @@ struct MealPhotoGalleryView: View {
                     .padding(3)
                 }
             }
+        }
+        .fullScreenCover(item: $selectedPhoto) { photo in
+            MealPhotoViewer(imageIDs: items.map(\.id), initialID: photo.id)
         }
         .navigationTitle("餐食照片")
         .navigationBarTitleDisplayMode(.inline)

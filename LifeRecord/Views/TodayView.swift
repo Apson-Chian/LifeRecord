@@ -234,7 +234,7 @@ struct TodayView: View {
 
     private var quickActions: some View {
         HStack(spacing: 10) {
-            ActionTile(title: "记一餐", subtitle: "多图/配料表", symbol: "fork.knife.circle.fill", tint: AppTheme.accent) {
+            ActionTile(title: "记一餐", subtitle: "拍照识别 · 手动记录", symbol: "fork.knife", tint: AppTheme.accent) {
                 activeSheet = .meal
             }
             ActionTile(title: "记体重", subtitle: "追踪趋势", symbol: "scalemass.fill", tint: AppTheme.protein) {
@@ -337,7 +337,7 @@ struct TodayView: View {
                         Text("用文字、照片或手动方式记录第一餐。")
                     } actions: {
                         Button("添加餐食") { activeSheet = .meal }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(AppButtonStyle())
                     }
                 }
             } else {
@@ -458,9 +458,11 @@ private struct DateNavigator: View {
             HStack(spacing: 10) {
                 Button { moveDay(-1) } label: {
                     Image(systemName: "chevron.left")
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
+                        .background(AppTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(PressScaleButtonStyle())
+                .accessibilityLabel("前一天")
 
                 Button {
                     isShowingCalendar = true
@@ -470,7 +472,7 @@ private struct DateNavigator: View {
                         Text(selectedDate.formatted(.dateTime.year().month().day().weekday()))
                             .font(.subheadline.weight(.semibold))
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -486,9 +488,11 @@ private struct DateNavigator: View {
 
                 Button { moveDay(1) } label: {
                     Image(systemName: "chevron.right")
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
+                        .background(AppTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(PressScaleButtonStyle())
+                .accessibilityLabel("后一天")
             }
 
             HStack(spacing: 2) {
@@ -688,14 +692,14 @@ private struct RecordCalendarView: View {
             VStack(spacing: 14) {
                 HStack {
                     Button { moveMonth(-1) } label: {
-                        Image(systemName: "chevron.left").frame(width: 40, height: 40)
+                        Image(systemName: "chevron.left").frame(width: 44, height: 44)
                     }
                     Spacer()
                     Text(visibleMonth.formatted(.dateTime.year().month(.wide)))
                         .font(.headline)
                     Spacer()
                     Button { moveMonth(1) } label: {
-                        Image(systemName: "chevron.right").frame(width: 40, height: 40)
+                        Image(systemName: "chevron.right").frame(width: 44, height: 44)
                     }
                 }
 

@@ -21,7 +21,7 @@
 - 视觉：遵循原生 iOS 层级、材质和动效，使用蓝紫主题并适配深浅色模式
 - 隐私：健康记录保存在本机 SwiftData，API Key 保存在 iOS Keychain
 - 私有同步：餐食、身体数据、饮水、删除记录和每日目标通过配对密钥与浏览器自动双向合并；App 离线时仍可使用
-- 私有照片：餐食照片压缩后保存到自己的服务器，App 本机只保存图片编号；Web 历史餐食按需加载照片，删除餐食时服务器图片一并清理
+- 私有照片：餐食照片压缩后保存到自己的服务器，App 记录中保存图片编号，已查看照片使用按同步密钥隔离的本地缓存（内存 24 MB、磁盘 128 MB），缩略图后台解码，详情和相册支持全屏查看、缩放与失败重试；Web 历史餐食按需加载照片，删除餐食时服务器图片一并清理
 - LifeTrack 联动：通过 App Group 共享身体档案、今日饮食与运动摘要，并支持两个 App 之间一键跳转
 - 首次启动引导：自动写入 30 天示例数据，并展示真实的首页、趋势、教练和隐私效果，可随时在设置中重看或清除
 
@@ -69,3 +69,11 @@ AI 营养结果会在保存前保持可编辑；它仅用于日常记录参考�
 - 提醒按本机记录安排未来 30 天，每次打开 App、保存记录、同步及时间变化后更新；每天最多一条汇总。App 关闭后已安排通知仍可触发，其他设备的记录需同步到本机才能取消；超过 30 天未打开不会继续安排新通知。点击提醒打开今日页。
 
 新增回归检查：`Tests/workout-details.swift`（逐组数据与 AI JSON）、`Tests/workout-storage.swift`（SwiftData 内存保存读取）、`Tests/reminder-plan.swift`（漏记取消、训练星期、跨天和夏令时）。分别与 `WorkoutDetails.swift`、`WorkoutDetails.swift + HealthModels.swift`、`ReminderPlan.swift` 一起用 `swiftc` 编译运行。
+
+## 同步兼容与照片回归
+
+若 iOS 显示 `HTTP 400: invalid deletion type`，而网页仍可同步，请检查线上后端是否支持 `workout` 删除标记；旧后端会拒绝包含训练删除标记的整批请求。需要升级后端训练同步逻辑，不能丢弃手机待同步的删除标记。设置中的同步页面现在显示完整 HTTP 错误、网络失败原因及返回字段格式问题。
+
+- `swiftc LifeRecord/Services/MealPhotoStore.swift Tests/meal-photo-cache.swift -o /tmp/meal-photo-cache-test && /tmp/meal-photo-cache-test`：隔离检查并发下载合并、跨实例离线缓存、密钥隔离、无效数据重试、取消与磁盘容量限制。
+- `swiftc LifeRecord/Services/SyncFailureDescription.swift Tests/sync-failure-description.swift -o /tmp/sync-failure-test && /tmp/sync-failure-test`：检查数据格式错误位置、网络错误文案及响应内容不泄露。
+- `python3 Tests/sync-edit.py`：验证训练记录及删除标记、旧客户端兼容与过期数据不覆盖。

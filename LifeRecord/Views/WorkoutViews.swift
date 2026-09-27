@@ -19,7 +19,8 @@ struct WorkoutDayCard: View {
                 HStack {
                     Label("健身记录", systemImage: "figure.strengthtraining.traditional").font(.headline).foregroundStyle(.teal)
                     Spacer()
-                    Button("补记") { adding = true }.font(.subheadline)
+                    Button("补记", systemImage: "plus") { adding = true }
+                        .buttonStyle(AppButtonStyle(tint: .teal, prominent: false))
                 }
                 if let active {
                     Text("训练进行中").font(.subheadline).foregroundStyle(.secondary)
@@ -30,12 +31,12 @@ struct WorkoutDayCard: View {
                         active.updatedAt = .now
                         persist()
                         editing = active
-                    }.buttonStyle(.borderedProminent).tint(.teal)
+                    }.buttonStyle(AppButtonStyle(tint: Color(red: 0.05, green: 0.43, blue: 0.43)))
                 } else if Calendar.current.isDateInToday(date) {
                     Text("留一点时间，给更好的自己").font(.subheadline).foregroundStyle(.secondary)
                     Button { context.insert(WorkoutEntry()); persist() } label: {
-                        Label("开始训练", systemImage: "play.fill").frame(maxWidth: .infinity).padding(.vertical, 6)
-                    }.buttonStyle(.borderedProminent).tint(.teal)
+                        Label("开始训练", systemImage: "play.fill").frame(maxWidth: .infinity)
+                    }.buttonStyle(AppButtonStyle(tint: Color(red: 0.05, green: 0.43, blue: 0.43)))
                 }
                 if entries.isEmpty && active == nil {
                     Text("当天还没有训练记录").font(.caption).foregroundStyle(.secondary)
@@ -43,7 +44,10 @@ struct WorkoutDayCard: View {
                 ForEach(entries) { entry in
                     Button { editing = entry } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: entry.endDate == nil ? "timer" : "checkmark.circle.fill").foregroundStyle(.teal)
+                            Image(systemName: entry.endDate == nil ? "timer" : "checkmark.circle.fill")
+                                .font(.title3).foregroundStyle(.teal)
+                                .frame(width: 40, height: 40)
+                                .background(.teal.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(entry.contentSummary.isEmpty ? "健身训练" : entry.contentSummary).font(.subheadline.weight(.medium)).lineLimit(2)
                                 Text("\(entry.date.formatted(date: .omitted, time: .shortened)) → \(entry.endDate?.formatted(date: .abbreviated, time: .shortened) ?? "进行中")").font(.caption).foregroundStyle(.secondary)
@@ -51,8 +55,12 @@ struct WorkoutDayCard: View {
                             Spacer()
                             if entry.endDate != nil { Text("\(Int(entry.minutes)) 分钟").font(.subheadline.monospacedDigit()) }
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                        }.padding(.vertical, 6).contentShape(Rectangle())
-                    }.buttonStyle(.plain)
+                        }
+                        .padding(12)
+                        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                        .contentShape(RoundedRectangle(cornerRadius: 16))
+                    }.buttonStyle(PressScaleButtonStyle())
+                        .foregroundStyle(.primary)
                 }
             }
         }

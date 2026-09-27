@@ -78,6 +78,8 @@ struct SettingsView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background { AppBackground() }
             .navigationTitle("设置")
             .onAppear { syncCoordinator.refreshConfiguration() }
         }
@@ -96,8 +98,9 @@ private struct SettingsDestinationLabel: View {
                 .symbolRenderingMode(.hierarchical)
                 .font(.headline)
                 .foregroundStyle(tint)
-                .frame(width: 34, height: 34)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(width: 42, height: 42)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 13).strokeBorder(tint.opacity(0.12), lineWidth: 1) }
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.body.weight(.medium))
                 Text(subtitle)
@@ -106,7 +109,7 @@ private struct SettingsDestinationLabel: View {
                     .lineLimit(2)
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 7)
     }
 }
 
@@ -339,6 +342,14 @@ private struct SyncAndIntegrationSettingsView: View {
                 }
                 Label(syncCoordinator.statusMessage, systemImage: syncCoordinator.lastError == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .foregroundStyle(syncCoordinator.lastError == nil ? AppTheme.recorded : .orange)
+                if let error = syncCoordinator.lastError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("同步失败原因：\(error)")
+                }
                 if let date = syncCoordinator.lastSyncedAt {
                     Text("最近同步：\(date.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption)

@@ -101,7 +101,7 @@ final class SyncCoordinator {
     private static let endpoint = URL(string: "https://apsonchian.ltd/liferecord-api/sync")!
     private static let imageEndpoint = URL(string: "https://apsonchian.ltd/liferecord-api/images")!
     private var needsAnotherSync = false
-    private let photoCache = NSCache<NSString, NSData>()
+    private let photoStore = MealPhotoStore()
 
     var isSyncing = false
     var isConfigured = KeychainStore.hasSyncKey
@@ -144,7 +144,7 @@ final class SyncCoordinator {
                 lastSyncedAt = .now
                 statusMessage = "所有设备已同步"
             } catch {
-                lastError = error.localizedDescription
+                lastError = SyncFailureDescription.message(for: error)
                 statusMessage = "同步失败"
                 break
             }
@@ -175,7 +175,7 @@ final class SyncCoordinator {
             guard let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let imageID = payload["id"] as? String else { throw SyncServiceError.invalidResponse }
             imageIDs.append(imageID)
-            photoCache.setObject(image as NSData, forKey: imageID as NSString)
+            await photoStore.store(image, imageID: imageID, credential: key)
         }
         return imageIDs
     }
@@ -186,24 +186,20 @@ final class SyncCoordinator {
               normalizedID.allSatisfy({ $0.isHexDigit }) else {
             throw SyncServiceError.invalidResponse
         }
-        if let cached = photoCache.object(forKey: normalizedID as NSString) {
-            return cached as Data
-        }
-
         let key = KeychainStore.loadSyncKey().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw SyncServiceError.notConfigured }
-        var request = URLRequest(url: Self.imageEndpoint.appendingPathComponent(normalizedID))
-        request.timeoutInterval = 30
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw SyncServiceError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            throw SyncServiceError.server(payload?["error"] as? String ?? "照片读取失败（\(http.statusCode)）")
+        let endpoint = Self.imageEndpoint.appendingPathComponent(normalizedID)
+        return try await photoStore.data(imageID: normalizedID, credential: key) {
+            var request = URLRequest(url: endpoint)
+            request.timeoutInterval = 30
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw SyncServiceError.invalidResponse }
+            guard (200..<300).contains(http.statusCode) else {
+                throw MealPhotoStore.PhotoError.unavailable(http.statusCode)
+            }
+            return data
         }
-        guard !data.isEmpty else { throw SyncServiceError.invalidResponse }
-        photoCache.setObject(data as NSData, forKey: normalizedID as NSString)
-        return data
     }
 
     private func makeSnapshot(context: ModelContext, settings: AppSettings) throws -> SyncSnapshot {
@@ -300,12 +296,9 @@ final class SyncCoordinator {
         guard (200..<300).contains(http.statusCode) else {
             let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let message = payload?["error"] as? String ?? "同步服务器错误 \(http.statusCode)"
-            throw SyncServiceError.server(message)
+            throw SyncServiceError.server("HTTP \(http.statusCode)：\(message)")
         }
-        guard let result = try? JSONDecoder().decode(SyncSnapshot.self, from: data) else {
-            throw SyncServiceError.invalidResponse
-        }
-        return result
+        return try JSONDecoder().decode(SyncSnapshot.self, from: data)
     }
 
     private func apply(_ snapshot: SyncSnapshot, context: ModelContext, settings: AppSettings) throws {
