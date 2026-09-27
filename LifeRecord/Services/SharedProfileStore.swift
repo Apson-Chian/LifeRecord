@@ -18,7 +18,6 @@ enum SharedProfileStore {
         static let dailyProtein = "daily.protein"
         static let dailyCarbs = "daily.carbs"
         static let dailyFat = "daily.fat"
-        static let dailyWater = "daily.water"
         static let dailyUpdatedAt = "daily.updatedAt"
         static let activityDate = "activity.date"
         static let activityDistance = "activity.distance"
@@ -33,7 +32,6 @@ enum SharedProfileStore {
         static let proteinGoal = "profile.proteinGoal"
         static let carbsGoal = "profile.carbsGoal"
         static let fatGoal = "profile.fatGoal"
-        static let waterGoal = "profile.waterGoal"
         static let updatedAt = "profile.updatedAt"
     }
 
@@ -42,6 +40,7 @@ enum SharedProfileStore {
     @MainActor
     static func publish(_ settings: AppSettings) {
         guard let suite else { return }
+        suite.removeObject(forKey: "profile.waterGoal")
         suite.set(settings.height, forKey: Key.height)
         suite.set(settings.baselineWeight, forKey: Key.weight)
         suite.set(settings.targetWeight, forKey: Key.targetWeight)
@@ -50,7 +49,6 @@ enum SharedProfileStore {
         suite.set(settings.proteinGoal, forKey: Key.proteinGoal)
         suite.set(settings.carbsGoal, forKey: Key.carbsGoal)
         suite.set(settings.fatGoal, forKey: Key.fatGoal)
-        suite.set(settings.waterGoal, forKey: Key.waterGoal)
         suite.set(Date().timeIntervalSince1970, forKey: Key.updatedAt)
     }
 
@@ -60,14 +58,14 @@ enum SharedProfileStore {
     }
 
     @MainActor
-    static func publishDailySummary(date: Date, nutrition: DailyNutrition, water: Double) {
+    static func publishDailySummary(date: Date, nutrition: DailyNutrition) {
         guard let suite else { return }
+        suite.removeObject(forKey: "daily.water")
         suite.set(date.timeIntervalSince1970, forKey: Key.dailyDate)
         suite.set(nutrition.calories, forKey: Key.dailyCalories)
         suite.set(nutrition.protein, forKey: Key.dailyProtein)
         suite.set(nutrition.carbs, forKey: Key.dailyCarbs)
         suite.set(nutrition.fat, forKey: Key.dailyFat)
-        suite.set(water, forKey: Key.dailyWater)
         suite.set(Date().timeIntervalSince1970, forKey: Key.dailyUpdatedAt)
     }
 

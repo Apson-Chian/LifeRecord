@@ -113,12 +113,6 @@ struct AddMealView: View {
                     numberField("碳水", value: $draft.carbs, unit: "g")
                     numberField("脂肪", value: $draft.fat, unit: "g")
                     numberField("膳食纤维", value: $draft.fiber, unit: "g")
-                    numberField("计入饮水", value: $draft.waterML, unit: "ml")
-                    if draft.waterML > 0 {
-                        Label("保存后会同时增加一条饮水记录", systemImage: "drop.fill")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.water)
-                    }
                 }
 
                 Section("备注") {
@@ -137,11 +131,6 @@ struct AddMealView: View {
                     Button(isSaving ? "保存中…" : "保存") { Task { await save() } }
                         .fontWeight(.semibold)
                         .disabled(isAnalyzing || isLoadingPhotos || isSaving)
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("收起键盘") { focusedField = nil }
-                        .fontWeight(.semibold)
                 }
             }
             .alert("无法完成", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -291,9 +280,8 @@ struct AddMealView: View {
             return
         }
         let hasNutrition = draft.calories > 0 || draft.protein > 0 || draft.carbs > 0 || draft.fat > 0
-        let hasWater = draft.waterML > 0
-        guard hasNutrition || hasWater else {
-            errorMessage = "请填写营养或饮水数据；也可以先点“用 AI 估算营养”，复核结果后再保存。"
+        guard hasNutrition else {
+            errorMessage = "请填写营养数据；也可以先点“用 AI 估算营养”，复核结果后再保存。"
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
             return
         }
@@ -302,7 +290,6 @@ struct AddMealView: View {
         defer { isSaving = false }
 
         var mealEntry: MealEntry?
-        var waterEntry: WaterEntry?
         var photoUploadError: Error?
         if hasNutrition {
             let mealID = UUID()
@@ -331,15 +318,6 @@ struct AddMealView: View {
             mealEntry = entry
             modelContext.insert(entry)
         }
-        if hasWater {
-            let entry = WaterEntry(
-                date: date,
-                milliliters: min(draft.waterML, 10_000),
-                note: "来自\(wasAIAnalyzed ? " AI 识别" : "餐食记录")：\(name)"
-            )
-            waterEntry = entry
-            modelContext.insert(entry)
-        }
         do {
             try modelContext.save()
             await syncCoordinator.sync(context: modelContext, settings: settings)
@@ -350,7 +328,6 @@ struct AddMealView: View {
             dismiss()
         } catch {
             if let mealEntry { modelContext.delete(mealEntry) }
-            if let waterEntry { modelContext.delete(waterEntry) }
             errorMessage = "餐食保存失败：\(error.localizedDescription)"
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
@@ -466,10 +443,6 @@ struct AddWeightView: View {
                     .fontWeight(.semibold)
                     .disabled(weight < 20 || weight > 400)
                 }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("收起键盘") { focusedField = nil }.fontWeight(.semibold)
-                }
             }
             .alert("无法保存身体数据", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("好") { errorMessage = nil }
@@ -505,77 +478,4 @@ struct AddWeightView: View {
         }
     }
 
-}
-
-struct AddWaterView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    let defaultDate: Date
-    @State private var amount = 250.0
-    @State private var errorMessage: String?
-
-    private let columns = [GridItem(.adaptive(minimum: 92), spacing: 12)]
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Image(systemName: "drop.fill")
-                    .font(.system(size: 54))
-                    .foregroundStyle(AppTheme.water)
-                    .padding(.top, 28)
-                Text("\(amount, specifier: "%.0f") ml")
-                    .font(.largeTitle.bold().monospacedDigit())
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(WaterEntry.commonAmounts, id: \.self) { value in
-                        Button {
-                            amount = value
-                        } label: {
-                            Text("\(Int(value)) ml")
-                                .font(.subheadline.weight(.semibold).monospacedDigit())
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .foregroundStyle(amount == value ? Color.white : AppTheme.water)
-                                .background(
-                                    amount == value ? AppTheme.water : AppTheme.water.opacity(0.11),
-                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                )
-                        }
-                        .buttonStyle(PressScaleButtonStyle())
-                    }
-                }
-                .padding(.horizontal)
-                Text("选择常见杯量或瓶装容量")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .navigationTitle("记录饮水")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存", action: save).fontWeight(.semibold)
-                }
-            }
-            .alert("无法保存饮水记录", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("好") { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "未知错误")
-            }
-        }
-    }
-
-    private func save() {
-        let entry = WaterEntry(date: defaultDate, milliliters: amount)
-        modelContext.insert(entry)
-        do {
-            try modelContext.save()
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            dismiss()
-        } catch {
-            modelContext.delete(entry)
-            errorMessage = error.localizedDescription
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
-        }
-    }
 }

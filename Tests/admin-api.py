@@ -29,12 +29,12 @@ with tempfile.TemporaryDirectory() as folder:
     except ValueError:
         pass
     try:
-        server.apply_admin_actions([action('water','add',milliliters=250), action('body','update',changed,bodyFat=101)])
+        server.apply_admin_actions([action('unknown','add',amount=250), action('body','update',changed,bodyFat=101)])
         raise AssertionError('invalid batch accepted')
     except ValueError:
-        assert not server.current_snapshot()['waterEntries']
-    profile=server.apply_admin_actions([action('settings','update',displayName='测试',waterGoal=3000)])['settings']
-    assert profile['height']==181 and profile['waterGoal']==3000
+        pass
+    profile=server.apply_admin_actions([action('settings','update',displayName='测试')])['settings']
+    assert profile['height']==181
 
     class Response:
         def __enter__(self): return self

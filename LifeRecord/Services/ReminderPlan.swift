@@ -4,7 +4,6 @@ struct ReminderPreferences: Codable, Equatable {
     static let key = "reminders.preferences"
     var enabled = false
     var meals = true
-    var water = false
     var body = false
     var workout = false
     var hour = 21
@@ -24,7 +23,6 @@ struct ReminderPreferences: Codable, Equatable {
 struct ReminderPlan {
     struct Records {
         var meals: [Date] = []
-        var water: [Date] = []
         var body: [Date] = []
         var workouts: [Date] = []
     }
@@ -42,7 +40,6 @@ struct ReminderPlan {
             func has(_ dates: [Date]) -> Bool { dates.contains { calendar.isDate($0, inSameDayAs: day) && $0 <= now } }
             var missing: [String] = []
             if preferences.meals && !has(records.meals) { missing.append("餐食") }
-            if preferences.water && !has(records.water) { missing.append("饮水") }
             if preferences.body && !has(records.body) { missing.append("身体数据") }
             if preferences.workout && preferences.workoutDays.contains(calendar.component(.weekday, from: day)) && !has(records.workouts) { missing.append("训练") }
             guard !missing.isEmpty else { return nil }

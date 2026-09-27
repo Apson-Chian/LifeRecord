@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6f7f9">
-  <meta name="description" content="LifeRecord 与 iPhone 双向同步的饮食、营养、饮水与身体记录页面。">
+  <meta name="description" content="LifeRecord 与 iPhone 双向同步的饮食、营养与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
   <link rel="stylesheet" href="styles.css?v=20260906-3">
 </head>
@@ -38,7 +38,7 @@
       </div>
     </header>
 
-    <section class="page-intro"><div><span class="eyebrow">OVERVIEW</span><h1>数据总览</h1><p>查看每日营养进度，管理餐食与身体记录。</p></div><span class="intro-note">饮食 · 饮水 · 身体</span></section>
+    <section class="page-intro"><div><span class="eyebrow">OVERVIEW</span><h1>数据总览</h1><p>查看每日营养进度，管理餐食与身体记录。</p></div><span class="intro-note">饮食 · 身体</span></section>
 
     <section class="desktop-toolbar" aria-label="桌面快捷操作">
       <div class="date-navigator">
@@ -67,7 +67,6 @@
     <section class="overview-grid" aria-label="所选日期概览">
       <button class="overview-item calories-overview" type="button" data-open-detail="calories"><span>热量</span><strong id="overviewCalories">0</strong><small id="overviewCaloriesDetail">目标 2600 kcal</small><i><b id="overviewCaloriesBar"></b></i><em>查看来源 →</em></button>
       <button class="overview-item" type="button" data-open-detail="protein"><span>蛋白质</span><strong id="overviewProtein">0%</strong><small id="overviewProteinDetail">0 / 130 g</small><i><b id="overviewProteinBar"></b></i><em>查看来源 →</em></button>
-      <button class="overview-item" type="button" data-open-detail="water"><span>饮水</span><strong id="overviewWater">0%</strong><small id="overviewWaterDetail">0 / 2800 ml</small><i><b id="overviewWaterBar"></b></i><em>查看来源 →</em></button>
       <button class="overview-item weight-overview" type="button" data-open-detail="weight"><span>体重</span><strong id="overviewWeight">--</strong><small id="overviewWeightDetail">暂无身体记录</small><em>查看来源 →</em></button>
     </section>
 
@@ -87,22 +86,20 @@
 
       <aside class="card quick-card">
         <div class="section-heading compact"><div><span class="eyebrow">快捷记录</span><h2>快捷录入</h2></div></div>
-        <button class="quick-detail water-quick" type="button" data-open-detail="water"><span class="quick-icon" aria-hidden="true"><svg width="22" height="26" viewBox="0 0 24 28" fill="none"><path d="M12 3S4 12 4 17a8 8 0 0 0 16 0c0-5-8-14-8-14Z" stroke="currentColor" stroke-width="1.7"/><path d="M8 17a4 4 0 0 0 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span><small>今日饮水</small><strong><b id="waterTotal">0.0</b> L</strong></span><span class="quick-chevron">›</span></button>
-        <div class="water-options compact-water-options" id="waterOptions" aria-label="常用饮水量"></div>
         <div class="quick-actions-grid"><button class="secondary-button" id="addWeightButton" type="button">＋ 记体重</button><button class="secondary-button" id="editGoalsButton" type="button">调整目标</button></div>
-        <p class="privacy-note">少量多次，记得给身体补充水分。</p>
+        <p class="privacy-note">在记录中查看你的身体与饮食变化。</p>
       </aside>
     </section>
 
     <section class="admin-section card" id="adminRecords">
-      <div class="section-heading"><div><h2>全部记录管理</h2><p class="section-subtitle">所有历史记录 · 编辑时间、数据与备注</p></div><div class="heading-actions"><button class="secondary-button" id="newWaterRecord">＋ 饮水</button><button class="primary-button" id="newBodyRecord">＋ 身体测量</button></div></div>
-      <div class="record-filters"><label><span class="sr-only">搜索记录</span><input type="search" id="adminSearch" placeholder="搜索日期、数值或备注…"></label><select id="adminRecordType" aria-label="记录类型"><option value="body">身体测量</option><option value="water">饮水记录</option></select></div>
+      <div class="section-heading"><div><h2>全部记录管理</h2><p class="section-subtitle">所有历史记录 · 编辑时间、数据与备注</p></div><div class="heading-actions"><button class="primary-button" id="newBodyRecord">＋ 身体测量</button></div></div>
+      <div class="record-filters"><label><span class="sr-only">搜索记录</span><input type="search" id="adminSearch" placeholder="搜索日期、数值或备注…"></label><select id="adminRecordType" aria-label="记录类型"><option value="body">身体测量</option></select></div>
       <div class="table-scroll"><table class="meal-table"><thead id="adminHead"></thead><tbody id="adminRows"></tbody></table></div><p id="adminCount" class="table-summary"></p>
     </section>
     <section class="workspace-grid">
       <article class="card" id="recordCalendarPanel"><h2>记录日历</h2><p class="section-subtitle">最近 30 天 · 从左到右、从上到下按时间排列</p><div id="recordCalendar"></div><p id="recordDayDetail" class="selection-detail" aria-live="polite"></p></article>
       <article class="card ai-workspace" id="aiWorkspace">
-        <div class="section-heading"><div><h2>AI 管理助手</h2><p class="section-subtitle">可新增、修改和删除餐食、身体、饮水与目标</p></div><span class="kind-badge">管理员</span></div>
+        <div class="section-heading"><div><h2>AI 管理助手</h2><p class="section-subtitle">可新增、修改和删除餐食、身体与目标</p></div><span class="kind-badge">管理员</span></div>
         <form id="aiForm">
           <details class="ai-config"><summary>AI 服务配置</summary><div class="form-grid"><label>服务商<select id="aiProvider"><option value="deepseek">DeepSeek</option><option value="glm">智谱 GLM</option><option value="dots">Dots</option></select></label><label>模型<input id="aiModel" placeholder="填写模型名称"></label></div><label>API Key<input id="aiKey" type="password" autocomplete="off" placeholder="仅本次页面使用；已配置服务器密钥可留空"></label><p class="upload-hint">将记录与要求发送给所选 AI 服务。密钥不写入浏览器存储。</p></details>
           <label>告诉 AI 你想改什么<textarea id="aiInstruction" required rows="3" maxlength="8000" placeholder="例如：把昨天午餐的热量改成 650 kcal；把 9 月 5 日的体脂率改为 18.5%"></textarea></label>
@@ -177,7 +174,6 @@
         <label>蛋白质 g<input name="proteinGoal" required type="number" min="1" max="600"></label>
         <label>碳水 g<input name="carbsGoal" required type="number" min="1" max="1200"></label>
         <label>脂肪 g<input name="fatGoal" required type="number" min="1" max="500"></label>
-        <label>饮水 ml<input name="waterGoal" required type="number" min="500" max="10000"></label>
         <label>目标体重 kg<input name="targetWeight" required type="number" min="20" max="400" step="0.1"></label>
       </div>
       <button class="primary-button submit-button" type="submit">保存并同步</button>
@@ -190,8 +186,6 @@
       <div class="detail-content" id="detailContent"></div>
     </div>
   </dialog>
-
-  <dialog id="waterEditDialog" class="modal"><form class="modal-sheet" id="waterEditForm"><div class="modal-top"><h2 id="waterEditTitle">饮水记录</h2><button class="icon-button" type="button" data-close="waterEditDialog" aria-label="关闭">×</button></div><label>时间<input name="date" type="datetime-local" required></label><label>饮水量 ml<input name="milliliters" type="number" min="1" max="10000" required></label><label>备注<input name="note"></label><p class="form-error" id="waterEditError" role="status"></p><button class="primary-button submit-button">保存饮水记录</button></form></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="app.js?v=20260906-3"></script>
   <script src="admin.js?v=20260906-3"></script>

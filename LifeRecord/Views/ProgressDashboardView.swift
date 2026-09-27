@@ -6,7 +6,6 @@ struct ProgressDashboardView: View {
     @Environment(AppSettings.self) private var settings
     @Query(sort: \BodyMetric.date) private var bodyMetrics: [BodyMetric]
     @Query(sort: \MealEntry.date) private var meals: [MealEntry]
-    @Query(sort: \WaterEntry.date) private var waterEntries: [WaterEntry]
 
     @Query(sort: \WorkoutEntry.date) private var workouts: [WorkoutEntry]
 
@@ -38,11 +37,6 @@ struct ProgressDashboardView: View {
     private var filteredMeals: [MealEntry] {
         guard let cutoff else { return meals }
         return meals.filter { $0.date >= cutoff }
-    }
-
-    private var filteredWater: [WaterEntry] {
-        guard let cutoff else { return waterEntries }
-        return waterEntries.filter { $0.date >= cutoff }
     }
 
     private var weightSeries: [BodyTrend.Point] {
@@ -78,12 +72,6 @@ struct ProgressDashboardView: View {
         .sorted { $0.date < $1.date }
     }
 
-    private var dailyWater: [(date: Date, value: Double)] {
-        let grouped = Dictionary(grouping: filteredWater) { Calendar.current.startOfDay(for: $0.date) }
-        return grouped.map { ($0.key, $0.value.reduce(0) { $0 + $1.milliliters }) }
-            .sorted { $0.date < $1.date }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -94,7 +82,6 @@ struct ProgressDashboardView: View {
                         weightChart
                         bodyCompositionCard
                         calorieChart
-                        waterChart
                         workoutChart
                         aiReportCard
                     }
@@ -167,7 +154,6 @@ struct ProgressDashboardView: View {
                 SummaryMetric(title: "日均碳水", value: averageCarbs, detail: goalText(settings.carbsGoal), symbol: "leaf.fill", tint: AppTheme.carbs)
                 SummaryMetric(title: "日均脂肪", value: averageFat, detail: goalText(settings.fatGoal), symbol: "drop.triangle.fill", tint: AppTheme.fat)
                 SummaryMetric(title: "日均纤维", value: averageFiber, detail: "建议 30 g", symbol: "leaf.circle.fill", tint: AppTheme.accent)
-                SummaryMetric(title: "日均饮水", value: averageWater, detail: goalText(settings.waterGoal / 1000, unit: "L"), symbol: "drop.fill", tint: AppTheme.water)
                 SummaryMetric(title: "有记录天数", value: consistencyText, detail: "最近 7 天", symbol: "calendar.badge.checkmark", tint: AppTheme.carbs)
                 SummaryMetric(title: "距目标", value: distanceToGoal, detail: "目标 \(settings.targetWeight.formatted(.number.precision(.fractionLength(1)))) kg", symbol: "flag.checkered", tint: AppTheme.accent)
             }
@@ -242,11 +228,6 @@ struct ProgressDashboardView: View {
         }
     }
 
-    private var waterChart: some View {
-        InspectableTrendCard(title: "每日饮水", unit: "ml", tint: AppTheme.water,
-            points: dailyWater.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当天所有饮水记录合计") }, goal: settings.waterGoal, bars: true)
-    }
-
     private var workoutChart: some View {
         WorkoutTrendCard(workouts: workouts.filter { cutoff == nil || $0.date >= cutoff! }, cutoff: cutoff)
     }
@@ -261,11 +242,10 @@ struct ProgressDashboardView: View {
         return (0..<((count + 6) / 7 * 7)).map { calendar.date(byAdding: .day, value: $0, to: start)! }
     }
 
-    private func dayCounts(_ day: Date) -> (meal: Int, body: Int, water: Int) {
+    private func dayCounts(_ day: Date) -> (meal: Int, body: Int) {
         let c = Calendar.current
         return (meals.filter { c.isDate($0.date, inSameDayAs: day) }.count,
-                bodyMetrics.filter { c.isDate($0.date, inSameDayAs: day) }.count,
-                waterEntries.filter { c.isDate($0.date, inSameDayAs: day) }.count)
+                bodyMetrics.filter { c.isDate($0.date, inSameDayAs: day) }.count)
     }
 
     private var recordHeatmap: some View {
@@ -280,31 +260,31 @@ struct ProgressDashboardView: View {
                     ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { Text("周" + $0).font(.caption).foregroundStyle(.secondary) }
                     ForEach(calendarDays, id: \.self) { day in
                         let counts = dayCounts(day)
-                        let count = (counts.meal > 0 ? 1 : 0) + (counts.body > 0 ? 1 : 0) + (counts.water > 0 ? 1 : 0)
+                        let count = (counts.meal > 0 ? 1 : 0) + (counts.body > 0 ? 1 : 0)
                         Button { selectedRecordDay = day } label: {
                             Text(day.formatted(.dateTime.day()))
                                 .font(.subheadline.monospacedDigit())
                                 .foregroundStyle(count >= 2 ? Color.white : Color.primary)
                                 .frame(maxWidth: .infinity, minHeight: 44)
-                                .background(recordColor(Double(count) / 3), in: RoundedRectangle(cornerRadius: 9))
+                                .background(recordColor(Double(count) / 2), in: RoundedRectangle(cornerRadius: 9))
                                 .overlay { RoundedRectangle(cornerRadius: 9).stroke(Calendar.current.isDate(day, inSameDayAs: selectedRecordDay) ? AppTheme.accent : .clear, lineWidth: 2) }
                         }
                         .buttonStyle(.plain)
                         .disabled(day > Date.now || day < Calendar.current.date(byAdding: .day, value: -29, to: Calendar.current.startOfDay(for: .now))!)
                         .opacity(day > Date.now || day < Calendar.current.date(byAdding: .day, value: -29, to: Calendar.current.startOfDay(for: .now))! ? 0.25 : 1)
-                        .accessibilityLabel("\(day.formatted(date: .abbreviated, time: .omitted))，饮食 \(counts.meal) 条，身体 \(counts.body) 条，饮水 \(counts.water) 条")
+                        .accessibilityLabel("\(day.formatted(date: .abbreviated, time: .omitted))，饮食 \(counts.meal) 条，身体 \(counts.body) 条")
                     }
                 }
                 HStack {
                     ForEach(0..<4) { count in
-                        RoundedRectangle(cornerRadius: 3).fill(recordColor(Double(count) / 3)).frame(width: 12, height: 12)
+                        RoundedRectangle(cornerRadius: 3).fill(recordColor(Double(count) / 2)).frame(width: 12, height: 12)
                         Text("\(count) 类").font(.caption2)
                     }
                 }
                 let counts = dayCounts(selectedRecordDay)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(selectedRecordDay.formatted(.dateTime.year().month().day().weekday())).font(.subheadline.weight(.semibold))
-                    Text("饮食 \(counts.meal) 条 · 身体 \(counts.body) 条 · 饮水 \(counts.water) 条").font(.subheadline).foregroundStyle(.secondary)
+                    Text("饮食 \(counts.meal) 条 · 身体 \(counts.body) 条").font(.subheadline).foregroundStyle(.secondary)
                 }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(AppTheme.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
             }
         }
@@ -345,7 +325,7 @@ struct ProgressDashboardView: View {
                     }.padding(.vertical, 6)
                 }
                 .buttonStyle(AppButtonStyle())
-                .disabled(isGenerating || (bodyMetrics.isEmpty && meals.isEmpty && waterEntries.isEmpty && workouts.isEmpty))
+                .disabled(isGenerating || (bodyMetrics.isEmpty && meals.isEmpty && workouts.isEmpty))
             }
         }
     }
@@ -395,12 +375,6 @@ struct ProgressDashboardView: View {
         dailyNutrition.isEmpty ? "—" : "\(Int(averageFiberValue)) g"
     }
 
-    private var averageWater: String {
-        guard !dailyWater.isEmpty else { return "—" }
-        let value = dailyWater.reduce(0) { $0 + $1.value } / Double(dailyWater.count) / 1000
-        return value.formatted(.number.precision(.fractionLength(1))) + " L"
-    }
-
     private var averageProteinValue: Double {
         dailyNutrition.isEmpty ? 0 : dailyNutrition.reduce(0) { $0 + $1.protein } / Double(dailyNutrition.count)
     }
@@ -444,7 +418,7 @@ struct ProgressDashboardView: View {
 
     private var consistencyText: String {
         let cutoff = Calendar.current.date(byAdding: .day, value: -6, to: Calendar.current.startOfDay(for: .now)) ?? .now
-        let days = Set((meals.map(\.date) + bodyMetrics.map(\.date) + waterEntries.map(\.date)).filter { $0 >= cutoff && $0 <= .now }.map { Calendar.current.startOfDay(for: $0) })
+        let days = Set((meals.map(\.date) + bodyMetrics.map(\.date)).filter { $0 >= cutoff && $0 <= .now }.map { Calendar.current.startOfDay(for: $0) })
         return "\(days.count) / 7 天"
     }
 
@@ -455,8 +429,7 @@ struct ProgressDashboardView: View {
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
             let hasMeal = meals.contains { calendar.isDate($0.date, inSameDayAs: day) }
             let hasMetric = bodyMetrics.contains { calendar.isDate($0.date, inSameDayAs: day) }
-            let hasWater = waterEntries.contains { calendar.isDate($0.date, inSameDayAs: day) }
-            let score = (hasMeal ? 0.5 : 0) + (hasMetric ? 0.3 : 0) + (hasWater ? 0.2 : 0)
+            let score = (hasMeal ? 0.6 : 0) + (hasMetric ? 0.4 : 0)
             return (day, score)
         }
     }
@@ -491,15 +464,10 @@ struct ProgressDashboardView: View {
             let entries = nutrition[day]!
             return "\(day.formatted(date: .numeric, time: .omitted)): \(Int(entries.reduce(0) { $0 + $1.calories }))kcal / P\(Int(entries.reduce(0) { $0 + $1.protein }))g"
         }.joined(separator: ", ")
-        let weekWater = waterEntries.filter { $0.date >= weekStart && $0.date <= .now }
-        let waterGroups = Dictionary(grouping: weekWater) { Calendar.current.startOfDay(for: $0.date) }
-        let water = waterGroups.keys.sorted().map { day in
-            "\(day.formatted(date: .numeric, time: .omitted)): \(Int(waterGroups[day]!.reduce(0) { $0 + $1.milliliters }))ml"
-        }.joined(separator: ", ")
         let workoutContext = WorkoutSummary.context(workouts.filter { $0.date >= weekStart }.map {
             .init(date: $0.date, endDate: $0.endDate, note: $0.contentSummary)
         })
-        let context = "健身记录：\(workoutContext)。最近7天（含今天）。目标体重 \(settings.targetWeight)kg，热量目标 \(settings.calorieGoal)kcal，饮水目标 \(settings.waterGoal)ml。体重：\(recentWeights)。体脂：\(fat)。每日营养：\(calories)。每日饮水：\(water)。身体数据每日中位数后指数平滑；无记录不代表零，不要把日内波动解释为脂肪变化。"
+        let context = "健身记录：\(workoutContext)。最近7天（含今天）。目标体重 \(settings.targetWeight)kg，热量目标 \(settings.calorieGoal)kcal。体重：\(recentWeights)。体脂：\(fat)。每日营养：\(calories)。身体数据每日中位数后指数平滑；无记录不代表零，不要把日内波动解释为脂肪变化。"
         do {
             report = try await AIClient(settings: settings).coachText(
                 system: "你是克制、循证的健身记录教练。根据有限数据指出趋势和不确定性，用中文给出 3 条可执行建议，不做医疗诊断，不鼓励极端热量缺口。",

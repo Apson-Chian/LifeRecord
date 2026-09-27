@@ -21,7 +21,6 @@ with tempfile.TemporaryDirectory() as folder:
     server.merge_snapshot({'meals': [original]})  # A stale device must not undo the edit.
     result = server.current_snapshot()
     assert result['meals'] == [edited]
-    assert result['waterEntries'] == []
     server.merge_snapshot({'deletions': [dict(id='meal-test', recordType='meal', deletedAt=3000)]})
     server.merge_snapshot({'meals': [edited]})
     assert server.current_snapshot()['meals'] == []

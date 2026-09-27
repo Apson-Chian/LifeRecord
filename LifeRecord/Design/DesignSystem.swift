@@ -11,7 +11,6 @@ enum AppTheme {
     static let protein = Color(red: 0.20, green: 0.55, blue: 0.98)
     static let carbs = Color(red: 0.95, green: 0.64, blue: 0.22)
     static let fat = Color(red: 0.88, green: 0.35, blue: 0.67)
-    static let water = Color.cyan
     static let meals = Color(red: 0.94, green: 0.25, blue: 0.35)
     static let recorded = Color(red: 0.16, green: 0.68, blue: 0.37)
     static let success = Color(red: 0.20, green: 0.52, blue: 0.88)
@@ -188,15 +187,7 @@ struct PressScaleButtonStyle: ButtonStyle {
 
 extension View {
     func keyboardDoneButton() -> some View {
-        keyboardDismissControl().toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Button("收起") { dismissKeyboard() }
-                    .fontWeight(.semibold)
-                Spacer()
-                Image(systemName: "keyboard.chevron.compact.down")
-                    .foregroundStyle(.secondary)
-            }
-        }
+        keyboardDismissControl()
     }
 
     func dismissKeyboardOnTap() -> some View {
@@ -209,31 +200,14 @@ extension View {
 }
 
 
-/// A visible fallback above the keyboard, independent of SwiftUI keyboard-toolbar delivery.
-private struct KeyboardDismissControl: ViewModifier {
-    @State private var keyboardVisible = false
-    func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if keyboardVisible {
-                    HStack {
-                        Spacer()
-                        Button {
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        } label: {
-                            Label("收起键盘", systemImage: "keyboard.chevron.compact.down")
-                                .font(.subheadline.weight(.semibold)).frame(minHeight: 44)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .background(.bar)
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in keyboardVisible = true }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
-    }
-}
-
 extension View {
-    func keyboardDismissControl() -> some View { modifier(KeyboardDismissControl()) }
+    func keyboardDismissControl() -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("收起键盘") { dismissKeyboard() }
+                    .fontWeight(.semibold)
+            }
+        }
+    }
 }

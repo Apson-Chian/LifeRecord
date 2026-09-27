@@ -20,7 +20,6 @@ struct OnboardingView: View {
 
     @Query(sort: \BodyMetric.date) private var bodyMetrics: [BodyMetric]
     @Query(sort: \MealEntry.date) private var meals: [MealEntry]
-    @Query(sort: \WaterEntry.date) private var waterEntries: [WaterEntry]
     @Query(sort: \CoachConversation.updatedAt, order: .reverse) private var conversations: [CoachConversation]
 
     @State private var page = OnboardingTopic.home
@@ -35,7 +34,6 @@ struct OnboardingView: View {
                         topic: topic,
                         bodyMetrics: bodyMetrics,
                         meals: meals,
-                        waterEntries: waterEntries,
                         conversations: conversations,
                         onReinstallDemoData: {
                             DemoDataService.reinstall(context: modelContext)
@@ -102,9 +100,9 @@ private enum OnboardingTopic: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .home:
-            "首页会汇总体重、热量、蛋白质、饮水和 LifeTrack 今日运动。示例数据已经写入，你可以直接在对应栏目查看效果。"
+            "首页会汇总体重、热量、蛋白质和 LifeTrack 今日运动。示例数据已经写入，你可以直接在对应栏目查看效果。"
         case .trends:
-            "趋势页顶部横向展示体重、体脂、营养和饮水摘要，下方展示对应图表与记录连续性。示例数据覆盖最近 30 天。"
+            "趋势页顶部横向展示体重、体脂与营养摘要，下方展示对应图表与记录连续性。示例数据覆盖最近 30 天。"
         case .coach:
             "教练页支持多个独立对话，可围绕增肌、饮食、训练或配料表连续追问。示例对话已经写入，用于展示上下文和 Markdown 排版。"
         case .privacy:
@@ -117,7 +115,6 @@ private struct OnboardingPageView: View {
     let topic: OnboardingTopic
     let bodyMetrics: [BodyMetric]
     let meals: [MealEntry]
-    let waterEntries: [WaterEntry]
     let conversations: [CoachConversation]
     let onReinstallDemoData: () -> Void
 
@@ -152,11 +149,10 @@ private struct OnboardingPageView: View {
     @ViewBuilder
     private var preview: some View {
         switch topic {
-        case .home: TodayPreview(bodyMetrics: bodyMetrics, meals: meals, waterEntries: waterEntries)
+        case .home: TodayPreview(bodyMetrics: bodyMetrics, meals: meals)
         case .trends: TrendsPreview(
             bodyMetrics: bodyMetrics,
             meals: meals,
-            waterEntries: waterEntries,
             onReinstall: onReinstallDemoData
         )
         case .coach: CoachPreview(conversations: conversations)
@@ -168,7 +164,6 @@ private struct OnboardingPageView: View {
 private struct TodayPreview: View {
     let bodyMetrics: [BodyMetric]
     let meals: [MealEntry]
-    let waterEntries: [WaterEntry]
 
     private var latestWeight: Double { bodyMetrics.last?.weight ?? 0 }
     private var todayCalories: Double {
@@ -182,12 +177,6 @@ private struct TodayPreview: View {
         return meals
             .filter { Calendar.current.isDate($0.date, inSameDayAs: today) }
             .reduce(0) { $0 + $1.protein }
-    }
-    private var todayWater: Double {
-        let today = Calendar.current.startOfDay(for: .now)
-        return waterEntries
-            .filter { Calendar.current.isDate($0.date, inSameDayAs: today) }
-            .reduce(0) { $0 + $1.milliliters }
     }
 
     var body: some View {
@@ -213,7 +202,6 @@ private struct TodayPreview: View {
                     VStack(alignment: .leading, spacing: 7) {
                         Label("热量 \(Int(todayCalories)) kcal", systemImage: "flame.fill")
                         Label("蛋白质 \(Int(todayProtein)) g", systemImage: "bolt.fill")
-                        Label("饮水 \(Int(todayWater)) ml", systemImage: "drop.fill")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -223,7 +211,6 @@ private struct TodayPreview: View {
             HStack(spacing: 8) {
                 demoMetric("体重", latestWeight.formatted(.number.precision(.fractionLength(1))), "scalemass")
                 demoMetric("热量", "\(Int(todayCalories))", "flame")
-                demoMetric("饮水", "\(Int(todayWater))", "drop")
             }
 
             if let latest = bodyMetrics.last {
@@ -270,7 +257,6 @@ private struct TodayPreview: View {
 private struct TrendsPreview: View {
     let bodyMetrics: [BodyMetric]
     let meals: [MealEntry]
-    let waterEntries: [WaterEntry]
     let onReinstall: () -> Void
 
     private var weightData: [(date: Date, value: Double)] {
@@ -285,15 +271,8 @@ private struct TrendsPreview: View {
         groupedDaily(meals) { $0.protein }
     }
 
-    private var waterData: [(date: Date, value: Double)] {
-        let grouped = Dictionary(grouping: waterEntries) { Calendar.current.startOfDay(for: $0.date) }
-        return grouped
-            .map { ($0.key, $0.value.reduce(0) { $0 + $1.milliliters }) }
-            .sorted { $0.date < $1.date }
-    }
-
     private var hasData: Bool {
-        !weightData.isEmpty && !calorieData.isEmpty && !waterData.isEmpty
+        !weightData.isEmpty && !calorieData.isEmpty
     }
 
     var body: some View {
@@ -321,13 +300,11 @@ private struct TrendsPreview: View {
                 HStack(spacing: 7) {
                     metric("日均热量", String(format: "%.0f kcal", averageText(calorieData)), "flame")
                     metric("日均蛋白", String(format: "%.0f g", averageText(proteinData)), "bolt.fill")
-                    metric("日均饮水", String(format: "%.1f L", averageText(waterData) / 1000), "drop.fill")
                 }
 
                 GlassCard {
                     HStack(spacing: 10) {
                         miniChart("热量", calorieData, AppTheme.accent, goal: 2600)
-                        miniChart("饮水", waterData, AppTheme.water, goal: 2800)
                     }
                 }
 
@@ -339,7 +316,7 @@ private struct TrendsPreview: View {
                             Text("记录连续性 7 / 7 天")
                                 .font(.caption.weight(.semibold))
                         }
-                        Text("30 天身体测量 · 30 天饮食 · 29 天完整晚餐 · 每日 4 次饮水")
+                        Text("30 天身体测量 · 30 天饮食 · 29 天完整晚餐")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -350,7 +327,7 @@ private struct TrendsPreview: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("正在准备示例数据", systemImage: "chart.line.uptrend.xyaxis")
                         .font(.headline)
-                    Text("如果这里仍为空，说明示例数据没有成功写入。点击下方按钮会重新生成 30 天体重、体脂、饮食、饮水和教练对话数据。")
+                    Text("如果这里仍为空，说明示例数据没有成功写入。点击下方按钮会重新生成 30 天体重、体脂、饮食和教练对话数据。")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

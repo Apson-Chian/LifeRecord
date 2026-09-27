@@ -11,7 +11,6 @@
   --carbs: #f3a537;
   --protein: #378bea;
   --fat: #df5dac;
-  --water: #20b9db;
   --recorded: #28ad5e;
   --shadow: 0 22px 70px rgba(37, 36, 77, .10);
   font-family: Inter, ui-rounded, "SF Pro Rounded", "PingFang SC", system-ui, sans-serif;
@@ -65,7 +64,7 @@ kbd { margin-left: 2px; border: 1px solid rgba(55,55,80,.12); border-radius: 5px
 .mini-carbs { inset: 5px; --color: var(--carbs); }
 .mini-meals { inset: 10px; --color: var(--meals); }
 .mini-day-number { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 8px; font-weight: 850; font-variant-numeric: tabular-nums; }
-.overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
 .overview-item { position: relative; overflow: hidden; min-height: 112px; padding: 17px 18px 15px; border: 1px solid rgba(255,255,255,.88); border-radius: 22px; background: rgba(255,255,255,.68); box-shadow: 0 14px 40px rgba(37,36,77,.065); backdrop-filter: blur(20px); }
 .overview-item { color: var(--text); text-align: left; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
 .overview-item:hover { transform: translateY(-2px); border-color: rgba(92,82,240,.18); box-shadow: 0 18px 46px rgba(37,36,77,.10); }
@@ -79,7 +78,6 @@ kbd { margin-left: 2px; border: 1px solid rgba(55,55,80,.12); border-radius: 5px
 .overview-item > em { position: absolute; right: 14px; bottom: 10px; color: var(--accent); font-size: 9px; font-style: normal; font-weight: 750; opacity: 0; transform: translateX(-3px); transition: .18s ease; }
 .overview-item:hover > em, .overview-item:focus-visible > em { opacity: 1; transform: translateX(0); }
 .overview-item:nth-child(2) > i b { background: var(--protein); }
-.overview-item:nth-child(3) > i b { background: var(--water); }
 .calories-overview::after { background: rgba(251,113,79,.10); }
 .weight-overview::after { background: rgba(40,173,94,.10); }
 .hero-grid, .content-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(300px, .75fr); gap: 18px; }
@@ -107,21 +105,8 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .ring-legend span { font-size: 13px; font-weight: 700; }
 .ring-legend small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 9px currentColor; }
-.dot.meals { color: var(--meals); } .dot.carbs { color: var(--carbs); } .dot.protein { color: var(--protein); } .dot.fat { color: var(--fat); } .dot.calories { color: var(--accent); } .dot.water { color: var(--water); }
 .calorie-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
 .flame { color: #fb714f; }
-.water-card { color: #f7fdff; background: linear-gradient(150deg, #25b8d5, #247fd3); border: 0; }
-.water-card .eyebrow { color: rgba(255,255,255,.72); }
-.water-heading { display: flex; gap: 15px; align-items: center; }
-.water-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; color: #fff; background: rgba(255,255,255,.17); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
-.water-heading h2 { font-size: 19px; font-weight: 500; }
-.water-heading h2 strong { font-size: 31px; font-variant-numeric: tabular-nums; }
-.water-track { height: 9px; margin: 25px 0 9px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.18); }
-.water-track span { display: block; height: 100%; width: 0; border-radius: inherit; background: #fff; transition: width .4s ease; }
-.water-card > p { display: flex; justify-content: space-between; color: rgba(255,255,255,.75); font-size: 11px; }
-.water-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 23px; }
-.water-options button { border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 10px 4px; color: #fff; background: rgba(255,255,255,.12); font-size: 12px; font-weight: 700; transition: .15s ease; }
-.water-options button:hover { transform: translateY(-2px); background: rgba(255,255,255,.22); }
 .primary-button { border: 0; border-radius: 14px; padding: 11px 15px; color: white; background: var(--accent); font-size: 13px; font-weight: 750; box-shadow: 0 10px 22px rgba(92,82,240,.2); }
 .secondary-button { border: 0; border-radius: 14px; padding: 11px 15px; color: var(--accent); background: var(--accent-soft); font-size: 13px; font-weight: 750; }
 .text-button { border: 0; color: var(--accent); background: transparent; font-size: 13px; font-weight: 750; }
@@ -158,9 +143,6 @@ h2 { margin-top: 4px; font-size: 21px; letter-spacing: -.025em; }
 .quick-detail strong { margin-top: 2px; font-size: 17px; }
 .quick-detail strong b { font-size: 24px; }
 .quick-chevron { color: rgba(255,255,255,.76); font-size: 27px; font-weight: 300; }
-.compact-water-options { grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 10px; }
-.compact-water-options button { border-color: rgba(32,185,219,.16); padding: 8px 2px; color: #1689a4; background: rgba(32,185,219,.09); font-size: 10px; }
-.compact-water-options button:hover { background: rgba(32,185,219,.16); }
 .quick-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
 .page-footer { display: flex; justify-content: center; align-items: center; gap: 3px; margin-top: 26px; color: var(--muted); }
 .delete-meal { border: 0; padding: 4px; color: #a4a5ae; background: transparent; font-size: 16px; }
@@ -282,7 +264,6 @@ button.source-row:hover { border-color: rgba(92,82,240,.2); background: #f4f3ff;
   .ring-legend { gap: 12px; }
   .section-heading.compact { align-items: start; }
   .heading-actions { align-items: flex-end; flex-direction: column; }
-  .compact-water-options { grid-template-columns: repeat(3, 1fr); }
   .source-row { grid-template-columns: 1fr; }
   .source-row > b { text-align: left; }
   .form-grid { grid-template-columns: 1fr; }
@@ -294,7 +275,6 @@ button.source-row:hover { border-color: rgba(92,82,240,.2); background: #f4f3ff;
 @media (prefers-contrast: more) { .topbar, .desktop-toolbar, .week-rings, .overview-item, .card { border-color: rgba(23,24,33,.35); background: #fff; } }
 
 /* Calm surfaces and a single, readable nutrition focal point. */
-:root { --bg: #f6f7f9; --card: #fff; --text: #242a35; --muted: #737b88; --line: #e9ecf1; --accent: #5367bd; --accent-soft: #eef1fa; --protein: #6685d5; --carbs: #e6b260; --meals: #da858b; --water: #589eb8; --shadow: 0 4px 20px rgba(33,43,65,.025); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
 .ambient { display: none; }
 .app-shell { width: min(1200px, calc(100% - 64px)); padding: 28px 0 36px; }
 .topbar { position: static; margin: 0 0 38px; padding: 0 0 22px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
@@ -374,8 +354,6 @@ h2 { font-size: 18px; font-weight: 600; }
 .quick-detail { background: #edf5f8; color: #346e86; border-radius: 13px; box-shadow: none; padding: 17px; }
 .quick-detail small, .quick-chevron { color: #60899a; }
 .quick-icon { background: #dcecf2; }
-.compact-water-options { gap: 5px; }
-.compact-water-options button { background: #f6fafb; color: #507d8e; border-color: #e7eff2; border-radius: 8px; font-size: 10px; padding: 10px 0; }
 .privacy-note { background: none; padding: 0; font-size: 11px; color: #868e9b; }
 .empty { min-height: 158px; display: grid; place-content: center; border: 1px dashed #e1e5ed; background: #fcfcfd; border-radius: 12px; font-size: 12px; line-height: 1.8; }
 .page-footer { margin-top: 28px; gap: 8px; }
@@ -406,7 +384,6 @@ h2 { font-size: 18px; font-weight: 600; }
   .overview-item > strong { font-size: 24px; }
   .home-grid { grid-template-columns: 1fr; }
   .card { padding: 22px; }
-  .compact-water-options { grid-template-columns: repeat(5, 1fr); }
   .heading-actions { flex-direction: row; align-items: center; }
   .section-heading.compact { align-items: center; }
 }
@@ -499,8 +476,6 @@ h2 { font-size: 16px; }
 .table-summary { margin: 16px 0 0; font-size: 12px; color: var(--muted); }
 .quick-detail { border-radius: 6px; padding: 14px; }
 .quick-actions-grid { grid-template-columns: 1fr; }
-.compact-water-options { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.compact-water-options button { font-size: 12px; padding: 9px 4px; border-radius: 5px; }
 .privacy-note { font-size: 12px; line-height: 1.7; }
 .page-footer { order: 6; justify-content: flex-end; margin-top: 22px; }
 .page-footer .text-button { font-size: 12px; }
@@ -512,7 +487,6 @@ h2 { font-size: 16px; }
 .detail-actions { display: flex; align-items: center; gap: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 @media (min-width: 1600px) { .app-shell { padding-inline: 48px; } .topbar { margin-inline: -48px; padding-inline: 48px; } .home-grid { grid-template-columns: minmax(0, 1fr) 320px; } }
-@media (max-width: 1200px) { .sidebar { width: 190px; padding-inline: 12px; } .app-shell { margin-left: 190px; width: calc(100% - 190px); padding-inline: 24px; } .topbar { margin-inline: -24px; padding-inline: 24px; } .balance-card { grid-template-columns: 1fr; } .week-panel { border-left: 0; border-top: 1px solid var(--line); } .balance-visual { max-width: 440px; } .home-grid { grid-template-columns: 1fr; } .quick-actions-grid { grid-template-columns: 1fr 1fr; } .compact-water-options { grid-template-columns: repeat(5, 1fr); } }
 @media (max-width: 780px) { .sidebar { display: none; } .app-shell { width: 100%; margin: 0; padding: 0 16px 24px; } .topbar { margin: 0 -16px 20px; padding: 16px; } .page-intro h1 { font-size: 23px; } .desktop-toolbar { display: flex; } .toolbar-actions { flex-wrap: wrap; } .toolbar-actions kbd { display: none; } .overview-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } .balance-card { grid-template-columns: minmax(0, 1fr); } .balance-main { padding: 20px; } .balance-visual { gap: 20px; } .week-panel { padding: 18px 10px; } .week-heading { padding-inline: 6px; } .card { padding: 16px; } .heading-actions { flex-direction: row; } .heading-actions .text-button { display: none; } .record-filters { flex-wrap: wrap; } .record-filters label { flex-basis: 100%; } .record-filters select { flex: 1; } .mini-rings { width: 34px; height: 34px; } .nutrition-legend em { display: block; } .date-button { font-size: 12px; } .modal-sheet input, .modal-sheet select { font-size: 16px; } }
 .home-grid > *, .balance-card > * { min-width: 0; }
 

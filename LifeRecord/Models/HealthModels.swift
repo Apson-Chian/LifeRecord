@@ -123,24 +123,19 @@ final class BodyMetric {
     }
 }
 
+// Keep the old entity in the SwiftData schema so installed stores can open after
+// the drinking feature is removed. It is no longer queried or synchronized.
 @Model
 final class WaterEntry {
     static let commonAmounts: [Double] = [200, 250, 330, 500, 750]
-
     @Attribute(.unique) var id: UUID
     var date: Date
     var milliliters: Double
     var isDemo: Bool = false
     var note: String = ""
     var updatedAt: Date = Date.now
-
     init(id: UUID = UUID(), date: Date = .now, milliliters: Double, isDemo: Bool = false, note: String = "") {
-        self.id = id
-        self.date = date
-        self.milliliters = milliliters
-        self.isDemo = isDemo
-        self.note = note
-        self.updatedAt = .now
+        self.id = id; self.date = date; self.milliliters = milliliters; self.isDemo = isDemo; self.note = note; self.updatedAt = .now
     }
 }
 
@@ -209,7 +204,6 @@ struct MealDraft: Codable {
     var carbs = 0.0
     var fat = 0.0
     var fiber = 0.0
-    var waterML = 0.0
     var note = ""
 }
 

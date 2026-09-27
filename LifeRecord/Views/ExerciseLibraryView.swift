@@ -50,6 +50,12 @@ struct WorkoutExerciseFields: View {
     var body: some View {
         DisclosureGroup {
             TextField("动作名称", text: $exercise.name)
+            Picker("训练部位", selection: Binding(
+                get: { exercise.bodyPart ?? "未分类" },
+                set: { exercise.bodyPart = $0 }
+            )) {
+                ForEach(WorkoutExercise.bodyParts, id: \.self) { Text($0).tag($0) }
+            }
             ForEach(Array(exercise.sets.indices), id: \.self) { index in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {

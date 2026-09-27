@@ -9,17 +9,15 @@ struct TodayView: View {
     @EnvironmentObject private var router: AppRouter
     @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
     @Query(sort: \BodyMetric.date, order: .reverse) private var bodyMetrics: [BodyMetric]
-    @Query(sort: \WaterEntry.date, order: .reverse) private var waterEntries: [WaterEntry]
 
     @Query(sort: \WorkoutEntry.date, order: .reverse) private var workouts: [WorkoutEntry]
 
     @State private var selectedDate = Date.now
     @State private var activeSheet: SheetDestination?
     @State private var lifeTrackActivity = SharedProfileStore.lifeTrackActivity()
-    @State private var errorMessage: String?
 
     private enum SheetDestination: String, Identifiable {
-        case meal, weight, water
+        case meal, weight
         var id: String { rawValue }
     }
 
@@ -31,16 +29,10 @@ struct TodayView: View {
         selectedMeals.reduce(into: DailyNutrition()) { $0.add($1) }
     }
 
-    private var water: Double {
-        waterEntries
-            .filter { Calendar.current.isSameDay($0.date, selectedDate) }
-            .reduce(0) { $0 + $1.milliliters }
-    }
-
     private var recordedDates: Set<Date> {
         let calendar = Calendar.current
         return Set(
-            (meals.map(\.date) + bodyMetrics.map(\.date) + waterEntries.map(\.date) + workouts.map(\.date))
+            (meals.map(\.date) + bodyMetrics.map(\.date) + workouts.map(\.date))
                 .map(calendar.startOfDay(for:))
         )
     }
@@ -86,13 +78,6 @@ struct TodayView: View {
                         Button { activeSheet = .weight } label: {
                             Label("记体重", systemImage: "scalemass")
                         }
-                        Menu {
-                            ForEach(WaterEntry.commonAmounts, id: \.self) { amount in
-                                Button("\(Int(amount)) ml") { addQuickWater(amount) }
-                            }
-                        } label: {
-                            Label("记录饮水", systemImage: "drop")
-                        }
                     } label: {
                         Image(systemName: "plus")
                             .font(.body.weight(.semibold))
@@ -113,7 +98,6 @@ struct TodayView: View {
                 lifeTrackActivity = SharedProfileStore.lifeTrackActivity()
             }
             .onChange(of: selectedMeals.count) { _, _ in publishSharedDailySummary() }
-            .onChange(of: waterEntries.count) { _, _ in publishSharedDailySummary() }
             .onChange(of: selectedDate) { _, _ in publishSharedDailySummary() }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
@@ -124,13 +108,7 @@ struct TodayView: View {
                 switch destination {
                 case .meal: AddMealView(defaultDate: selectedDate)
                 case .weight: AddWeightView(defaultDate: selectedDate, lastWeight: bodyMetrics.first?.weight ?? settings.baselineWeight)
-                case .water: AddWaterView(defaultDate: selectedDate)
                 }
-            }
-            .alert("无法保存记录", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("好") { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "未知错误")
             }
         }
     }
@@ -143,7 +121,7 @@ struct TodayView: View {
 
     @ViewBuilder
     private var demoDataBanner: some View {
-        if selectedMeals.contains(where: \.isDemo) || bodyMetrics.contains(where: \.isDemo) || waterEntries.contains(where: \.isDemo) {
+        if selectedMeals.contains(where: \.isDemo) || bodyMetrics.contains(where: \.isDemo) {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles.rectangle.stack")
                     .font(.subheadline.weight(.semibold))
@@ -240,22 +218,6 @@ struct TodayView: View {
             ActionTile(title: "记体重", subtitle: "追踪趋势", symbol: "scalemass.fill", tint: AppTheme.protein) {
                 activeSheet = .weight
             }
-            ActionTile(title: "喝水", subtitle: "选择常用容量", symbol: "drop.fill", tint: AppTheme.water) {
-                activeSheet = .water
-            }
-        }
-    }
-
-    private func addQuickWater(_ amount: Double) {
-        let entry = WaterEntry(date: selectedDate, milliliters: amount)
-        modelContext.insert(entry)
-        do {
-            try modelContext.save()
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-        } catch {
-            modelContext.delete(entry)
-            errorMessage = error.localizedDescription
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
 
@@ -293,11 +255,7 @@ struct TodayView: View {
     }
 
     private func publishSharedDailySummary() {
-        SharedProfileStore.publishDailySummary(
-            date: selectedDate,
-            nutrition: nutrition,
-            water: water
-        )
+        SharedProfileStore.publishDailySummary(date: selectedDate, nutrition: nutrition)
     }
 
     private var macroCard: some View {
@@ -307,7 +265,6 @@ struct TodayView: View {
                 MacroProgressView(title: "蛋白质", value: nutrition.protein, goal: settings.proteinGoal, color: AppTheme.protein)
                 MacroProgressView(title: "碳水", value: nutrition.carbs, goal: settings.carbsGoal, color: AppTheme.carbs)
                 MacroProgressView(title: "脂肪", value: nutrition.fat, goal: settings.fatGoal, color: AppTheme.fat)
-                MacroProgressView(title: "饮水", value: water / 1000, goal: settings.waterGoal / 1000, color: AppTheme.water, unit: "L")
             }
         }
     }

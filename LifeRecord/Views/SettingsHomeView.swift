@@ -166,13 +166,6 @@ private struct DailyGoalSettingsView: View {
                 SettingsNumberRow(title: "碳水", value: $settings.carbsGoal, unit: "g", focused: $focused)
                 SettingsNumberRow(title: "脂肪", value: $settings.fatGoal, unit: "g", focused: $focused)
             }
-            Section {
-                SettingsNumberRow(title: "每日饮水", value: $settings.waterGoal, unit: "ml", focused: $focused)
-            } header: {
-                Text("饮水")
-            } footer: {
-                Text("首页饮水量是当天每条饮水记录的毫升数之和；明确记录的饮料也可由 AI 添加。")
-            }
         }
         .navigationTitle("每日目标")
         .navigationBarTitleDisplayMode(.inline)
@@ -358,7 +351,7 @@ private struct SyncAndIntegrationSettingsView: View {
             } header: {
                 Text("App 与浏览器")
             } footer: {
-                Text("餐食、身体数据、饮水记录和每日目标通过私有服务器双向同步。")
+                Text("餐食、身体数据和每日营养目标通过私有服务器双向同步。")
             }
 
             Section {

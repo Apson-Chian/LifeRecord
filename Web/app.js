@@ -1,12 +1,11 @@
 const API_BASE = "/liferecord-api";
 const LEGACY_STORAGE_KEY = "liferecord.web.v1";
 const UI_DATE_KEY = "liferecord.selected-date";
-const commonWater = [200, 250, 330, 500, 750];
 const symbols = { 早餐: "☀", 午餐: "◐", 晚餐: "☾", 加餐: "◇" };
 const defaultSettings = {
   id: "profile", displayName: "", fitnessGoal: "增肌", height: 181, baselineWeight: 64,
   targetWeight: 72, weeklyWeightTarget: .25, calorieGoal: 2600, proteinGoal: 130,
-  carbsGoal: 340, fatGoal: 70, waterGoal: 2800
+  carbsGoal: 340, fatGoal: 70
 };
 
 const $ = selector => document.querySelector(selector);
@@ -23,7 +22,7 @@ const fmtMealDate = seconds => new Intl.DateTimeFormat("zh-CN", { year: "numeric
 const fmtSyncTime = () => new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date());
 const progress = (value, goal) => Math.min(Math.max(value / Math.max(goal, 1), 0), 1);
 
-let state = { meals: [], bodyMetrics: [], waterEntries: [], settings: null, deletions: [], serverTime: null };
+let state = { meals: [], bodyMetrics: [], settings: null, deletions: [], serverTime: null };
 let selectedDate = localStorage.getItem(UI_DATE_KEY) || dateKey(new Date());
 let visibleMonth = parseDate(selectedDate);
 let connected = false;
@@ -33,10 +32,14 @@ let syncAgain = false;
 
 function touchLocalState() { localRevision += 1; }
 
+function cleanSnapshot(snapshot) {
+  delete snapshot.waterEntries;
+  if (snapshot.settings) delete snapshot.settings.waterGoal;
+  return snapshot;
+}
+
 function goals() { return state.settings || defaultSettings; }
 function selectedMeals() { return state.meals.filter(item => recordDateKey(item) === selectedDate); }
-function selectedWaterEntries() { return state.waterEntries.filter(item => recordDateKey(item) === selectedDate); }
-function selectedWater() { return selectedWaterEntries().reduce((sum, item) => sum + item.milliliters, 0); }
 function totals() {
   return selectedMeals().reduce((sum, item) => ({ calories: sum.calories + item.calories, protein: sum.protein + item.protein, carbs: sum.carbs + item.carbs, fat: sum.fat + item.fat }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
 }
@@ -70,7 +73,7 @@ async function api(path, options = {}) {
 async function boot() {
   setSyncStatus("正在连接");
   try {
-    state = await api("/snapshot");
+    state = cleanSnapshot(await api("/snapshot"));
     connected = true;
     await migrateLegacyIfNeeded();
     render();
@@ -92,7 +95,7 @@ async function syncNow(message = "已同步", silent = false) {
   const revisionAtStart = localRevision;
   setSyncStatus("正在同步");
   try {
-    const inbound = await api("/sync", { method: "POST", body: JSON.stringify(state) });
+    const inbound = cleanSnapshot(await api("/sync", { method: "POST", body: JSON.stringify(state) }));
     if (revisionAtStart === localRevision) {
       state = inbound;
       render();
@@ -116,7 +119,7 @@ async function syncNow(message = "已同步", silent = false) {
 
 async function migrateLegacyIfNeeded() {
   const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
-  if (!raw || state.meals.length || state.waterEntries.length || state.bodyMetrics.length) return;
+  if (!raw || state.meals.length || state.bodyMetrics.length) return;
   try {
     const legacy = JSON.parse(raw);
     const timestamp = nowSeconds();
@@ -126,10 +129,6 @@ async function migrateLegacyIfNeeded() {
       carbs: Number(item.carbs || 0), fat: Number(item.fat || 0), fiber: 0, note: "从旧版网页迁移",
       source: "手动", createdAt: timestamp - index, updatedAt: timestamp - index
     }));
-    state.waterEntries = (legacy.water || []).map((item, index) => ({
-      id: String(item.id || newID()).toLowerCase(), date: epochForDateKey(item.date), milliliters: Number(item.amount || 0),
-      note: "从旧版网页迁移", updatedAt: timestamp - index
-    })).filter(item => item.milliliters > 0);
     touchLocalState();
     if (await syncNow("旧版数据已迁移")) localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch (_) {}
@@ -139,14 +138,12 @@ function render() {
   const date = parseDate(selectedDate);
   const meals = selectedMeals();
   const nutrition = totals();
-  const water = selectedWater();
   const target = goals();
   $("#dateLabel").textContent = fmtDate(date);
   $("#toolbarDateLabel").textContent = relativeDateLabel(date);
   $("#mealTitle").textContent = selectedDate === dateKey(new Date()) ? "餐食记录" : `${date.getMonth() + 1} 月 ${date.getDate()} 日记录`;
   $("#mealSummary").textContent = `${meals.length} 餐 · ${Math.round(nutrition.calories)} kcal`;
-  $("#waterTotal").textContent = (water / 1000).toFixed(1);
-  renderOverview(nutrition, water, target);
+  renderOverview(nutrition, target);
   renderMealPreview(meals);
   renderWeekRings();
   renderDailyRings(nutrition, meals.length, target);
@@ -162,19 +159,15 @@ function relativeDateLabel(date) {
   return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
 }
 
-function renderOverview(nutrition, water, target) {
+function renderOverview(nutrition, target) {
   const calorieProgress = progress(nutrition.calories, target.calorieGoal);
   const proteinProgress = progress(nutrition.protein, target.proteinGoal);
-  const waterProgress = progress(water, target.waterGoal);
   $("#overviewCalories").textContent = `${Math.round(nutrition.calories)} kcal`;
   $("#overviewCaloriesDetail").textContent = `目标 ${Math.round(target.calorieGoal)} kcal`;
   $("#overviewProtein").textContent = `${Math.round(proteinProgress * 100)}%`;
   $("#overviewProteinDetail").textContent = `${Math.round(nutrition.protein)} / ${Math.round(target.proteinGoal)} g`;
-  $("#overviewWater").textContent = `${Math.round(waterProgress * 100)}%`;
-  $("#overviewWaterDetail").textContent = `${Math.round(water)} / ${Math.round(target.waterGoal)} ml`;
   $("#overviewCaloriesBar").style.width = `${calorieProgress * 100}%`;
   $("#overviewProteinBar").style.width = `${proteinProgress * 100}%`;
-  $("#overviewWaterBar").style.width = `${waterProgress * 100}%`;
 
   const endOfSelectedDay = epochForDateKey(selectedDate) + 86400;
   const metric = [...state.bodyMetrics].filter(item => item.date < endOfSelectedDay).sort((a, b) => b.date - a.date)[0];
@@ -245,7 +238,6 @@ function renderMealPreview() {
 
 function escapeHtml(value) { const node = document.createElement("span"); node.textContent = String(value); return node.innerHTML; }
 function showToast(message) { const toast = $("#toast"); toast.textContent = message; toast.classList.add("show"); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("show"), 1700); }
-function renderWaterOptions() { $("#waterOptions").innerHTML = commonWater.map(amount => `<button type="button" data-water="${amount}">+${amount} ml</button>`).join(""); }
 
 function blobBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -323,15 +315,6 @@ function showColumnDetail(type) {
     openDetail({ title: "热量来源", subtitle: `${date} · 共 ${Math.round(nutrition.calories)} / ${Math.round(target.calorieGoal)} kcal`, html: mealSourceRows(meals, "calories", "kcal") });
   } else if (type === "protein") {
     openDetail({ title: "蛋白质来源", subtitle: `${date} · 共 ${Math.round(nutrition.protein)} / ${Math.round(target.proteinGoal)} g`, html: mealSourceRows(meals, "protein", "g") });
-  } else if (type === "water") {
-    const entries = [...selectedWaterEntries()].sort((a, b) => b.date - a.date);
-    const total = entries.reduce((sum, item) => sum + Number(item.milliliters || 0), 0);
-    const html = entries.length ? `<div class="source-list">${entries.map(item => `
-      <div class="source-row">
-        <span><strong>${escapeHtml(item.note || "饮水记录")}</strong><small>${fmtShortDate(item.date)} · ${escapeHtml(recordSource(item, "water"))}</small></span>
-        <b>${Math.round(item.milliliters)} ml<button class="text-button" type="button" data-admin-edit="water" data-record-id="${item.id}">编辑</button><button class="delete-record" type="button" data-delete-water="${item.id}" aria-label="删除这条饮水记录">删除</button></b>
-      </div>`).join("")}</div>` : emptyDetail("所选日期还没有饮水记录。");
-    openDetail({ title: "饮水来源", subtitle: `${date} · ${Math.round(total)} / ${Math.round(target.waterGoal)} ml`, html: `<p class="calculation-note">计算方式：当天所有饮水记录的毫升数直接相加。AI 只会为明确饮用的饮料新增来源，不计算菜肴、米饭、蔬果本身的水分。</p>${html}` });
   } else if (type === "weight") {
     const end = epochForDateKey(selectedDate) + 86400;
     const entries = [...state.bodyMetrics].filter(item => item.date < end).sort((a, b) => b.date - a.date).slice(0, 20);
@@ -364,7 +347,7 @@ function addDeletion(id, recordType) {
 }
 
 function recordedDates() {
-  return new Set([...state.meals, ...state.waterEntries, ...state.bodyMetrics].map(recordDateKey));
+  return new Set([...state.meals, ...state.bodyMetrics].map(recordDateKey));
 }
 
 function renderCalendar() {
@@ -420,7 +403,6 @@ function openMealDialog(meal = null) {
 }
 function openWeightDialog() { editBodyRecord(); }
 
-renderWaterOptions();
 render();
 boot();
 
@@ -437,15 +419,6 @@ $("#authForm").addEventListener("submit", async event => {
   } catch (error) {
     $("#authError").textContent = error.message;
   }
-});
-
-$("#waterOptions").addEventListener("click", async event => {
-  const button = event.target.closest("[data-water]"); if (!button) return;
-  const amount = Number(button.dataset.water);
-  try {
-    await saveAdminActions([recordAction("water", null, {date: epochForDateKey(selectedDate), milliliters:amount, note:"网页版快速记录"})]);
-    showToast(`已记录 ${amount} ml 饮水`);
-  } catch(error) { showToast(error.message); }
 });
 
 $("#mealPreview").addEventListener("click", event => {
@@ -470,10 +443,8 @@ $("#detailContent").addEventListener("click", async event => {
   }
   const mealButton = event.target.closest("[data-delete-meal]");
   const bodyButton = event.target.closest("[data-delete-body]");
-  const waterButton = event.target.closest("[data-delete-water]");
   if (mealButton) await deleteAdminRecord("meal", mealButton.dataset.deleteMeal);
   else if (bodyButton) await deleteAdminRecord("body", bodyButton.dataset.deleteBody);
-  else if (waterButton) await deleteAdminRecord("water", waterButton.dataset.deleteWater);
 });
 
 $("#dateButton").addEventListener("click", () => { visibleMonth = parseDate(selectedDate); renderCalendar(); $("#calendarDialog").showModal(); });

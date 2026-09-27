@@ -11,7 +11,6 @@ struct RootView: View {
     @EnvironmentObject private var router: AppRouter
     @Query private var meals: [MealEntry]
     @Query private var bodyMetrics: [BodyMetric]
-    @Query private var waterEntries: [WaterEntry]
     @AppStorage(ReminderPreferences.key) private var reminderRaw = ""
     @Query private var workouts: [WorkoutEntry]
     @Query private var tombstones: [SyncTombstone]
@@ -20,10 +19,9 @@ struct RootView: View {
     private var syncFingerprint: String {
         let mealStamp = meals.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
         let bodyStamp = bodyMetrics.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
-        let waterStamp = waterEntries.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
         let workoutStamp = workouts.map(\.updatedAt.timeIntervalSince1970).max() ?? 0
         let deletionStamp = tombstones.map(\.deletedAt.timeIntervalSince1970).max() ?? 0
-        return "\(workouts.count):\(workoutStamp):\(meals.count):\(mealStamp):\(bodyMetrics.count):\(bodyStamp):\(waterEntries.count):\(waterStamp):\(tombstones.count):\(deletionStamp)"
+        return "\(workouts.count):\(workoutStamp):\(meals.count):\(mealStamp):\(bodyMetrics.count):\(bodyStamp):\(tombstones.count):\(deletionStamp)"
     }
 
     var body: some View {
@@ -85,7 +83,7 @@ struct RootView: View {
 
     private func refreshReminders() {
         RecordReminderCenter.shared.refresh(preferences: .decode(reminderRaw), records: .init(
-            meals: meals.filter { !$0.isDemo }.map(\.date), water: waterEntries.filter { !$0.isDemo }.map(\.date),
+            meals: meals.filter { !$0.isDemo }.map(\.date),
             body: bodyMetrics.filter { !$0.isDemo }.map(\.date), workouts: workouts.map(\.date)))
     }
 

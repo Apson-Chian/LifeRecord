@@ -14,7 +14,6 @@ struct CoachView: View {
     @Query(sort: \BodyMetric.date) private var bodyMetrics: [BodyMetric]
     @Query(sort: \MealEntry.date) private var meals: [MealEntry]
     @Query(sort: \WorkoutEntry.date) private var workouts: [WorkoutEntry]
-    @Query(sort: \WaterEntry.date) private var waterEntries: [WaterEntry]
 
     @State private var input = ""
     @State private var photoItems: [PhotosPickerItem] = []
@@ -135,6 +134,7 @@ struct CoachView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+            .keyboardDismissControl()
             .navigationTitle(activeConversation?.title ?? "AI 助手")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -199,7 +199,7 @@ struct CoachView: View {
                 }
                 Button("取消", role: .cancel) { }
             } message: {
-                Text("其他对话、体重、餐食和饮水记录不会受影响。")
+                Text("其他对话、体重和餐食记录不会受影响。")
             }
             .alert("暂时无法完成", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button("好") { errorMessage = nil }
@@ -345,21 +345,6 @@ struct CoachView: View {
                     .focused($composerFocused)
                     .submitLabel(.send)
                     .onSubmit { if canSend { send() } }
-
-                if composerFocused {
-                    Button {
-                        composerFocused = false
-                    } label: {
-                        Image(systemName: "keyboard.chevron.compact.down")
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
-                            .background(Color(.tertiarySystemFill), in: Circle())
-                    }
-                    .buttonStyle(PressScaleButtonStyle())
-                    .transition(.scale.combined(with: .opacity))
-                    .accessibilityLabel("收起键盘")
-                }
 
                 Button {
                     if isSending {
@@ -726,13 +711,6 @@ struct CoachView: View {
                     source: .ai,
                     photoIDs: photoIDs
                 ))
-                if let waterML = action.waterML,
-                   waterML > 0,
-                   waterML <= 10_000,
-                   let waterSource = action.waterSource?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !waterSource.isEmpty {
-                    modelContext.insert(WaterEntry(date: date, milliliters: waterML, note: "来自 AI 识别：\(waterSource)"))
-                }
                 receipts.append("新增\(kind.rawValue)：\(name)，\(Int(calories)) kcal · \(receiptDate(date))")
             case "add_weight", "record_weight", "log_weight":
                 guard let weight = action.weight, (20...400).contains(weight) else {
@@ -741,13 +719,6 @@ struct CoachView: View {
                 }
                 modelContext.insert(BodyMetric(date: date, weight: weight, bodyFat: action.bodyFat, note: action.note ?? "由 AI 助手按要求记录"))
                 receipts.append("记录体重 \(weight.formatted(.number.precision(.fractionLength(1)))) kg · \(receiptDate(date))")
-            case "add_water", "record_water", "log_water":
-                guard let amount = action.waterML, amount > 0, amount <= 10_000 else {
-                    rejectedCount += 1
-                    continue
-                }
-                modelContext.insert(WaterEntry(date: date, milliliters: amount, note: action.note ?? "由 AI 助手按要求记录"))
-                receipts.append("记录饮水 \(Int(amount)) ml · \(receiptDate(date))")
             case "delete_meal", "remove_meal":
                 guard let id = actionRecordID(action), let meal = meals.first(where: { $0.id == id }) else {
                     rejectedCount += 1
@@ -763,14 +734,6 @@ struct CoachView: View {
                 }
                 let description = "体重 \(metric.weight.formatted(.number.precision(.fractionLength(1)))) kg · \(receiptDate(metric.date))"
                 SyncDeletion.delete(metric, context: modelContext)
-                receipts.append("删除\(description)")
-            case "delete_water", "remove_water":
-                guard let id = actionRecordID(action), let water = waterEntries.first(where: { $0.id == id }) else {
-                    rejectedCount += 1
-                    continue
-                }
-                let description = "饮水 \(Int(water.milliliters)) ml · \(receiptDate(water.date))"
-                SyncDeletion.delete(water, context: modelContext)
                 receipts.append("删除\(description)")
             case "update_goals", "update_goal", "set_goals", "set_goal":
                 var updates: [String] = []
@@ -924,21 +887,18 @@ struct CoachView: View {
         let workoutContext = WorkoutSummary.context(workouts.map {
             .init(date: $0.date, endDate: $0.endDate, note: $0.contentSummary)
         })
-        let recentWater = waterEntries.filter { $0.date >= cutoff }.reduce(0) { $0 + $1.milliliters }
         let deletableMeals = recentMeals.sorted { $0.date > $1.date }.prefix(30).map {
             "meal id=\($0.id.uuidString) | \(receiptDate($0.date)) | \($0.kind.rawValue) | \($0.name) | \(Int($0.calories))kcal | 蛋白质 \($0.protein)g | 碳水 \($0.carbs)g | 脂肪 \($0.fat)g | 纤维 \($0.fiber)g | \($0.note)"
         }.joined(separator: "\n")
         let deletableWeights = bodyMetrics.sorted { $0.date > $1.date }.prefix(20).map {
             "weight id=\($0.id.uuidString) | \(receiptDate($0.date)) | \($0.weight)kg"
         }.joined(separator: "\n")
-        let deletableWater = waterEntries.sorted { $0.date > $1.date }.prefix(30).map {
-            "water id=\($0.id.uuidString) | \(receiptDate($0.date)) | \(Int($0.milliliters))ml | \($0.note.isEmpty ? "无备注" : $0.note)"
-        }.joined(separator: "\n")
+
 
         return """
         你是这个私人健身记录 App 内的通用 AI 助手。可以回答用户提出的任何正常问题，也应结合记录给出简洁、可执行、明确区分事实与估算的建议。
-        用户身高 \(settings.height)cm，起始体重 \(settings.baselineWeight)kg，当前约 \(latestWeight)kg；目标为\(settings.fitnessGoal.rawValue)，目标体重 \(settings.targetWeight)kg，每周期望变化 \(settings.weeklyWeightTarget)kg。每日目标：\(Int(settings.calorieGoal))kcal、蛋白质 \(Int(settings.proteinGoal))g、碳水 \(Int(settings.carbsGoal))g、脂肪 \(Int(settings.fatGoal))g、饮水 \(Int(settings.waterGoal))ml。
-        最近体重：\(weightSummary.isEmpty ? "暂无" : weightSummary)。最近饮食：\(foodSummary.isEmpty ? "暂无" : foodSummary)。近 30 天已记录饮水总量 \(Int(recentWater))ml。
+        用户身高 \(settings.height)cm，起始体重 \(settings.baselineWeight)kg，当前约 \(latestWeight)kg；目标为\(settings.fitnessGoal.rawValue)，目标体重 \(settings.targetWeight)kg，每周期望变化 \(settings.weeklyWeightTarget)kg。每日目标：\(Int(settings.calorieGoal))kcal、蛋白质 \(Int(settings.proteinGoal))g、碳水 \(Int(settings.carbsGoal))g、脂肪 \(Int(settings.fatGoal))g。
+        最近体重：\(weightSummary.isEmpty ? "暂无" : weightSummary)。最近饮食：\(foodSummary.isEmpty ? "暂无" : foodSummary)。
         当前本地时间：\(Date.now.formatted(date: .complete, time: .shortened))。
         以下是本机全部健身记录（可读取动作与每组次数、重量、时长；修改必须匹配清单 id）：
         \(workoutContext)
@@ -947,8 +907,7 @@ struct CoachView: View {
         当前可操作记录清单（修改和删除只能使用这里的准确 id；找不到或有歧义就先询问）：
         \(deletableMeals.isEmpty ? "暂无餐食" : deletableMeals)
         \(deletableWeights.isEmpty ? "暂无体重" : deletableWeights)
-        \(deletableWater.isEmpty ? "暂无饮水" : deletableWater)
-        当用户明确要求记录餐食、体重、饮水、修改已保存餐食、调整目标或删除记录时，按约定返回 action；用户发送明显属于实际摄入的餐食或饮料照片且没有要求“只分析/不要记录”时，也必须识别营养并返回 add_meal action。不要把单独的配料表、商品包装或菜单误判为已经摄入。不要臆造用户没说的数据。删除动作必须与用户明确指定的类型、时间和内容一致。涉及伤病、进食障碍或异常体重变化时提示咨询专业人士，不做医疗诊断。
+        当用户明确要求记录餐食、体重、修改已保存餐食、调整目标或删除记录时，按约定返回 action；用户发送明显属于实际摄入的餐食或饮料照片且没有要求“只分析/不要记录”时，也必须识别营养并返回 add_meal action。不要把单独的配料表、商品包装或菜单误判为已经摄入。不要臆造用户没说的数据。删除动作必须与用户明确指定的类型、时间和内容一致。涉及伤病、进食障碍或异常体重变化时提示咨询专业人士，不做医疗诊断。
         """
     }
 }
@@ -1024,7 +983,7 @@ private struct ConversationListSheet: View {
                         } header: {
                             Text("全部对话")
                         } footer: {
-                            Text("每个对话拥有独立上下文；删除对话不会影响饮食、体重和饮水记录。")
+                            Text("每个对话拥有独立上下文；删除对话不会影响饮食和体重记录。")
                         }
                     }
                 }

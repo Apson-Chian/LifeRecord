@@ -9,7 +9,7 @@ const assert = require('assert/strict');
  const page = await browser.newPage({viewport:{width:1440,height:1100}});
  const errors=[]; page.on('pageerror', e => errors.push(e.message));
  const timestamp = Date.now()/1000;
- let snapshot={meals:[{id:'d0a4f4ee-2222-4444-8888-555555555555',date:timestamp,kind:'午餐',name:'鸡胸肉拌饭',calories:650,protein:42,carbs:78,fat:18,fiber:5,note:'米饭 200g',source:'AI 估算',createdAt:timestamp-3600,updatedAt:timestamp,photoIDs:[]}],bodyMetrics:Array.from({length:12},(_,i)=>({id:`body-${i}`,date:timestamp-(11-i)*86400,weight:70-i*.1,bodyFat:i===11?null:19-i*.08,waist:80,note:'晨起空腹',updatedAt:timestamp})),waterEntries:[],deletions:[],settings:null};
+ let snapshot={meals:[{id:'d0a4f4ee-2222-4444-8888-555555555555',date:timestamp,kind:'午餐',name:'鸡胸肉拌饭',calories:650,protein:42,carbs:78,fat:18,fiber:5,note:'米饭 200g',source:'AI 估算',createdAt:timestamp-3600,updatedAt:timestamp,photoIDs:[]}],bodyMetrics:Array.from({length:12},(_,i)=>({id:`body-${i}`,date:timestamp-(11-i)*86400,weight:70-i*.1,bodyFat:i===11?null:19-i*.08,waist:80,note:'晨起空腹',updatedAt:timestamp})),deletions:[],settings:null};
  await page.route('http://liferecord.test/**', async route => {
   const url=new URL(route.request().url());
   if(url.pathname.startsWith('/liferecord-api')) {
@@ -17,7 +17,7 @@ const assert = require('assert/strict');
    if(url.pathname.endsWith('/admin')) {
     const {actions}=JSON.parse(route.request().postData());
     for(const a of actions) {
-     const key={meal:'meals',body:'bodyMetrics',water:'waterEntries'}[a.recordType];
+     const key={meal:'meals',body:'bodyMetrics'}[a.recordType];
      if(a.recordType==='settings') {snapshot.settings={...(snapshot.settings||{}),...a.fields,id:'profile',updatedAt:Date.now()/1000};continue;}
      const index=snapshot[key].findIndex(x=>x.id===a.recordID);
      if(a.operation==='delete') snapshot[key].splice(index,1);
@@ -53,17 +53,6 @@ const assert = require('assert/strict');
  await page.waitForFunction(()=>!document.querySelector('#weightDialog').open);
  assert.equal(snapshot.bodyMetrics[0].bodyFat,17.5);
  assert.equal(snapshot.bodyMetrics.length,12);
- await page.locator('#newWaterRecord').click();
- await page.locator('#waterEditForm [name=milliliters]').fill('330');
- await page.getByRole('button',{name:'保存饮水记录',exact:true}).click();
- await page.waitForFunction(()=>!document.querySelector('#waterEditDialog').open);
- assert.equal(snapshot.waterEntries[0].milliliters,330);
- await page.locator('#adminRecordType').selectOption('water');
- await page.locator('#adminRows [data-admin-edit]').click();
- await page.locator('#waterEditForm [name=milliliters]').fill('500');
- await page.getByRole('button',{name:'保存饮水记录',exact:true}).click();
- await page.waitForFunction(()=>!document.querySelector('#waterEditDialog').open);
- assert.equal(snapshot.waterEntries.length,1); assert.equal(snapshot.waterEntries[0].milliliters,500);
  await page.locator('#aiInstruction').fill('把第一条身体测量的体脂率改为 18.5%');
  await page.locator('#aiGenerate').click();
  await page.locator('#aiApply').waitFor({state:'visible'});
@@ -77,7 +66,7 @@ const assert = require('assert/strict');
  assert.equal(await page.locator('#webWeightChart [data-trend-id]').count(),7);
  await page.locator('#trendRange').selectOption('30');
  await page.locator('#recordCalendar [data-record-day]:not([disabled])').first().click();
- assert.match(await page.locator('#recordDayDetail').innerText(),/餐食.*身体.*饮水/);
+ assert.match(await page.locator('#recordDayDetail').innerText(),/餐食.*身体/);
  await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:'/tmp/liferecord-desktop.png',fullPage:true});
  for(const width of [390,768,1024,1440]) {
@@ -87,6 +76,6 @@ const assert = require('assert/strict');
  await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:'/tmp/liferecord-mobile.png',fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS: meal/body/water editing, AI preview+apply, nullable body fat, chart selection+range, calendar, search, 4 responsive widths');
+ console.log('PASS: meal/body editing, AI preview+apply, nullable body fat, chart selection+range, calendar, search, 4 responsive widths');
  } finally {await browser.close();}
 })();

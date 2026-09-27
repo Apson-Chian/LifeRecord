@@ -52,7 +52,6 @@ private struct LegacySettingsView: View {
                     settingNumber("蛋白质", value: $settings.proteinGoal, unit: "g", field: .nutrition)
                     settingNumber("碳水", value: $settings.carbsGoal, unit: "g", field: .nutrition)
                     settingNumber("脂肪", value: $settings.fatGoal, unit: "g", field: .nutrition)
-                    settingNumber("饮水", value: $settings.waterGoal, unit: "ml", field: .nutrition)
                 } header: {
                     Text("每日目标")
                 }
@@ -145,7 +144,7 @@ private struct LegacySettingsView: View {
                     Text("AI 能力与权限")
                 } footer: {
                     Text(settings.aiCanWrite
-                         ? "AI 可按你的明确要求新增或删除餐食、体重与饮水记录，并调整目标。"
+                         ? "AI 可按你的明确要求新增或删除餐食与体重记录，并调整目标。"
                          : "AI 目前只能读取摘要并回答，不会修改任何记录。")
                 }
 
@@ -213,7 +212,7 @@ private struct LegacySettingsView: View {
                 } header: {
                     Text("App 与浏览器同步")
                 } footer: {
-                    Text("餐食、身体数据、饮水记录和每日目标通过你的私有服务器双向同步。同步密钥只保存在 iOS 钥匙串中。")
+                    Text("餐食、身体数据和每日营养目标通过你的私有服务器双向同步。同步密钥只保存在 iOS 钥匙串中。")
                 }
 
                 Section("隐私") {
@@ -248,13 +247,6 @@ private struct LegacySettingsView: View {
             .scrollDismissesKeyboard(.interactively)
             .keyboardDismissControl()
             .navigationTitle("设置")
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("收起键盘") { focusedField = nil }
-                        .fontWeight(.semibold)
-                }
-            }
             .sheet(isPresented: $showsAPIKeyEditor, onDismiss: {
                 hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider)
             }) {
@@ -398,10 +390,6 @@ struct SyncKeyEditorView: View {
                     .fontWeight(.semibold)
                     .disabled(isSaving || trimmedKey.isEmpty)
                 }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("收起键盘") { isFocused = false }.fontWeight(.semibold)
-                }
             }
             .confirmationDialog("移除同步密钥？", isPresented: $showsDeleteConfirmation, titleVisibility: .visible) {
                 Button("移除", role: .destructive) { removeKey() }
@@ -533,11 +521,6 @@ struct APIKeyEditorView: View {
                     }
                     .fontWeight(.semibold)
                     .disabled(isSaving || trimmedKey.isEmpty)
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("收起键盘") { isFocused = false }
-                        .fontWeight(.semibold)
                 }
             }
             .confirmationDialog("删除 API Key？", isPresented: $showsDeleteConfirmation, titleVisibility: .visible) {

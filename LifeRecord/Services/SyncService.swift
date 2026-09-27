@@ -15,7 +15,6 @@ struct SyncedProfile: Codable {
     var proteinGoal: Double
     var carbsGoal: Double
     var fatGoal: Double
-    var waterGoal: Double
 }
 
 private struct SyncedMeal: Codable {
@@ -45,14 +44,6 @@ private struct SyncedBodyMetric: Codable {
     var updatedAt: Double
 }
 
-private struct SyncedWater: Codable {
-    var id: String
-    var date: Double
-    var milliliters: Double
-    var note: String
-    var updatedAt: Double
-}
-
 private struct SyncedWorkout: Codable {
     var exercises: [WorkoutExercise]? = nil
     var id: String
@@ -72,7 +63,6 @@ private struct SyncSnapshot: Codable {
     var meals: [SyncedMeal]
     var bodyMetrics: [SyncedBodyMetric]
     var workoutEntries: [SyncedWorkout]? = nil
-    var waterEntries: [SyncedWater]
     var settings: SyncedProfile?
     var deletions: [SyncedDeletion]
     var serverTime: Double?
@@ -236,23 +226,14 @@ final class SyncCoordinator {
                     updatedAt: $0.updatedAt.timeIntervalSince1970
                 )
             }
-        let waterEntries = try context.fetch(FetchDescriptor<WaterEntry>())
-            .filter { !$0.isDemo }
-            .map {
-                SyncedWater(
-                    id: $0.id.uuidString.lowercased(),
-                    date: $0.date.timeIntervalSince1970,
-                    milliliters: $0.milliliters,
-                    note: $0.note,
-                    updatedAt: $0.updatedAt.timeIntervalSince1970
-                )
-            }
         let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>()).map {
             SyncedWorkout(exercises: $0.exercises, id: $0.id.uuidString.lowercased(), date: $0.date.timeIntervalSince1970,
                           endDate: $0.endDate?.timeIntervalSince1970, note: $0.note,
                           updatedAt: $0.updatedAt.timeIntervalSince1970)
         }
-        let deletions = try context.fetch(FetchDescriptor<SyncTombstone>()).map {
+        let deletions = try context.fetch(FetchDescriptor<SyncTombstone>())
+            .filter { $0.recordType != "water" }
+            .map {
             SyncedDeletion(
                 id: $0.recordID.uuidString.lowercased(),
                 recordType: $0.recordType,
@@ -271,13 +252,11 @@ final class SyncCoordinator {
             proteinGoal: settings.proteinGoal,
             carbsGoal: settings.carbsGoal,
             fatGoal: settings.fatGoal,
-            waterGoal: settings.waterGoal
         )
         return SyncSnapshot(
             meals: meals,
             bodyMetrics: bodyMetrics,
             workoutEntries: workouts,
-            waterEntries: waterEntries,
             settings: profile,
             deletions: deletions,
             serverTime: nil
@@ -306,11 +285,9 @@ final class SyncCoordinator {
         let localBody = try context.fetch(FetchDescriptor<BodyMetric>())
         let localWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
         var workoutsByID = Dictionary(uniqueKeysWithValues: localWorkouts.map { ($0.id, $0) })
-        let localWater = try context.fetch(FetchDescriptor<WaterEntry>())
         let localTombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
         var mealsByID = Dictionary(uniqueKeysWithValues: localMeals.map { ($0.id, $0) })
         var bodyByID = Dictionary(uniqueKeysWithValues: localBody.map { ($0.id, $0) })
-        var waterByID = Dictionary(uniqueKeysWithValues: localWater.map { ($0.id, $0) })
         var tombstonesByKey = Dictionary(uniqueKeysWithValues: localTombstones.map { ($0.key, $0) })
 
         for deletion in snapshot.deletions {
@@ -323,8 +300,6 @@ final class SyncCoordinator {
                 if let entry = bodyByID.removeValue(forKey: id), entry.updatedAt <= deletionDate { context.delete(entry) }
             case "workout":
                 if let entry = workoutsByID.removeValue(forKey: id), entry.updatedAt <= deletionDate { context.delete(entry) }
-            case "water":
-                if let entry = waterByID.removeValue(forKey: id), entry.updatedAt <= deletionDate { context.delete(entry) }
             default:
                 continue
             }
@@ -396,22 +371,6 @@ final class SyncCoordinator {
             }
         }
 
-        for remote in snapshot.waterEntries {
-            guard let id = UUID(uuidString: remote.id), !deletedKeys.contains("water:\(remote.id.lowercased())") else { continue }
-            let updatedAt = Date(timeIntervalSince1970: remote.updatedAt)
-            if let local = waterByID[id] {
-                guard updatedAt > local.updatedAt else { continue }
-                local.date = Date(timeIntervalSince1970: remote.date)
-                local.milliliters = remote.milliliters
-                local.note = remote.note
-                local.updatedAt = updatedAt
-            } else {
-                let entry = WaterEntry(id: id, date: Date(timeIntervalSince1970: remote.date), milliliters: remote.milliliters, note: remote.note)
-                entry.updatedAt = updatedAt
-                context.insert(entry)
-            }
-        }
-
         for remote in snapshot.workoutEntries ?? [] {
             guard let id = UUID(uuidString: remote.id), !deletedKeys.contains("workout:\(remote.id.lowercased())") else { continue }
             let updated = Date(timeIntervalSince1970: remote.updatedAt)
@@ -446,10 +405,5 @@ enum SyncDeletion {
     static func delete(_ bodyMetric: BodyMetric, context: ModelContext) {
         context.insert(SyncTombstone(recordID: bodyMetric.id, recordType: "body"))
         context.delete(bodyMetric)
-    }
-
-    static func delete(_ water: WaterEntry, context: ModelContext) {
-        context.insert(SyncTombstone(recordID: water.id, recordType: "water"))
-        context.delete(water)
     }
 }

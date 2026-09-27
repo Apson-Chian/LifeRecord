@@ -1,13 +1,12 @@
 /* Authenticated administration and inspection. All writes are committed on the server. */
 let adminBusy = false;
 let bodyEdit = null;
-let waterEdit = null;
 let profileVersion = null;
 let pendingAIPlan = [];
 let selectedTrend = { weight: null, bodyFat: null };
 let calendarSelection = dateKey(new Date());
-const recordKeys = { meal: 'meals', body: 'bodyMetrics', water: 'waterEntries' };
-const fieldLabels = { name:'餐食名称',kind:'餐次',date:'时间',weight:'体重 kg',bodyFat:'体脂率 %',waist:'腰围 cm',calories:'热量 kcal',protein:'蛋白质 g',carbs:'碳水 g',fat:'脂肪 g',fiber:'膳食纤维 g',milliliters:'饮水 ml',note:'备注',source:'来源',photoIDs:'照片',displayName:'称呼',fitnessGoal:'健身目标',height:'身高 cm',baselineWeight:'起始体重 kg',targetWeight:'目标体重 kg',weeklyWeightTarget:'每周变化 kg',calorieGoal:'热量目标',proteinGoal:'蛋白质目标',carbsGoal:'碳水目标',fatGoal:'脂肪目标',waterGoal:'饮水目标' };
+const recordKeys = { meal: 'meals', body: 'bodyMetrics' };
+const fieldLabels = { name:'餐食名称',kind:'餐次',date:'时间',weight:'体重 kg',bodyFat:'体脂率 %',waist:'腰围 cm',calories:'热量 kcal',protein:'蛋白质 g',carbs:'碳水 g',fat:'脂肪 g',fiber:'膳食纤维 g',note:'备注',source:'来源',photoIDs:'照片',displayName:'称呼',fitnessGoal:'健身目标',height:'身高 cm',baselineWeight:'起始体重 kg',targetWeight:'目标体重 kg',weeklyWeightTarget:'每周变化 kg',calorieGoal:'热量目标',proteinGoal:'蛋白质目标',carbsGoal:'碳水目标',fatGoal:'脂肪目标' };
 const profileFields = Object.keys(defaultSettings).filter(key => key !== 'id');
 const localDateTime = timestamp => {
   const d = new Date(timestamp * 1000);
@@ -82,9 +81,9 @@ function renderBodyTrends() {
 function renderAdminRows() {
   const kind = $('#adminRecordType').value;
   const search = $('#adminSearch').value.trim().toLowerCase();
-  const records = [...state[recordKeys[kind]]].sort((a,b)=>b.date-a.date).filter(item=>`${fmtShortDate(item.date)} ${new Date(item.date*1000).toLocaleDateString('sv')} ${item.weight??''} ${item.bodyFat??''} ${item.milliliters??''} ${item.note}`.toLowerCase().includes(search));
-  $('#adminHead').innerHTML = `<tr><th>测量 / 记录时间</th>${kind==='body'?'<th>体重 kg</th><th>体脂率 %</th><th>腰围 cm</th>':'<th>饮水 ml</th>'}<th>备注</th><th>操作</th></tr>`;
-  $('#adminRows').innerHTML = records.map(item=>`<tr><td>${fmtShortDate(item.date)}</td>${kind==='body'?`<td>${Number(item.weight).toFixed(1)}</td><td>${item.bodyFat==null?'未测量':Number(item.bodyFat).toFixed(1)}</td><td>${item.waist==null?'—':Number(item.waist).toFixed(1)}</td>`:`<td>${Math.round(item.milliliters)}</td>`}<td class="record-note">${escapeHtml(item.note||'—')}</td><td><button class="text-button" data-admin-edit="${kind}" data-record-id="${item.id}">编辑</button><button class="delete-record" data-admin-delete="${kind}" data-record-id="${item.id}">删除</button></td></tr>`).join('') || `<tr><td colspan="6"><div class="empty">暂无匹配记录</div></td></tr>`;
+  const records = [...state[recordKeys[kind]]].sort((a,b)=>b.date-a.date).filter(item=>`${fmtShortDate(item.date)} ${new Date(item.date*1000).toLocaleDateString('sv')} ${item.weight??''} ${item.bodyFat??''} ${item.note}`.toLowerCase().includes(search));
+  $('#adminHead').innerHTML = '<tr><th>测量 / 记录时间</th><th>体重 kg</th><th>体脂率 %</th><th>腰围 cm</th><th>备注</th><th>操作</th></tr>';
+  $('#adminRows').innerHTML = records.map(item=>`<tr><td>${fmtShortDate(item.date)}</td><td>${Number(item.weight).toFixed(1)}</td><td>${item.bodyFat==null?'未测量':Number(item.bodyFat).toFixed(1)}</td><td>${item.waist==null?'—':Number(item.waist).toFixed(1)}</td><td class="record-note">${escapeHtml(item.note||'—')}</td><td><button class="text-button" data-admin-edit="body" data-record-id="${item.id}">编辑</button><button class="delete-record" data-admin-delete="body" data-record-id="${item.id}">删除</button></td></tr>`).join('') || `<tr><td colspan="6"><div class="empty">暂无匹配记录</div></td></tr>`;
   $('#adminCount').textContent = `共 ${records.length} 条 · 时间从新到旧`;
 }
 
@@ -94,10 +93,10 @@ function renderRecordCalendar() {
   const start = new Date(first); start.setDate(start.getDate()-(start.getDay()+6)%7);
   const days=[]; const cursor = new Date(start);
   while(cursor <= today || days.length%7) { days.push(new Date(cursor)); cursor.setDate(cursor.getDate()+1); }
-  const counts = d => [state.meals,state.bodyMetrics,state.waterEntries].map(items=>items.filter(x=>recordDateKey(x)===dateKey(d)).length);
-  $('#recordCalendar').innerHTML = `<div class="record-calendar"><div class="calendar-range">${first.getMonth()+1}/${first.getDate()} — ${today.getMonth()+1}/${today.getDate()}</div>${['一','二','三','四','五','六','日'].map(x=>`<span class="weekday-label">周${x}</span>`).join('')}${days.map(d=>{const c=counts(d),total=c.filter(Boolean).length;return `<button class="record-day level-${total} ${dateKey(d)===calendarSelection?'selected':''}" data-record-day="${dateKey(d)}" ${d>today||d<first?'disabled':''} aria-label="${dateKey(d)}，餐食${c[0]}条，身体${c[1]}条，饮水${c[2]}条">${d.getDate()}</button>`;}).join('')}</div><div class="calendar-legend">${[0,1,2,3].map(i=>`<span><i class="level-${i}"></i>${i} 类</span>`).join('')}</div><p class="chart-note">颜色表示餐食、身体、饮水中有记录的类型数，非达标评分。</p>`;
+  const counts = d => [state.meals,state.bodyMetrics].map(items=>items.filter(x=>recordDateKey(x)===dateKey(d)).length);
+  $('#recordCalendar').innerHTML = `<div class="record-calendar"><div class="calendar-range">${first.getMonth()+1}/${first.getDate()} — ${today.getMonth()+1}/${today.getDate()}</div>${['一','二','三','四','五','六','日'].map(x=>`<span class="weekday-label">周${x}</span>`).join('')}${days.map(d=>{const c=counts(d),total=c.filter(Boolean).length;return `<button class="record-day level-${total} ${dateKey(d)===calendarSelection?'selected':''}" data-record-day="${dateKey(d)}" ${d>today||d<first?'disabled':''} aria-label="${dateKey(d)}，餐食${c[0]}条，身体${c[1]}条">${d.getDate()}</button>`;}).join('')}</div><div class="calendar-legend">${[0,1,2].map(i=>`<span><i class="level-${i}"></i>${i} 类</span>`).join('')}</div><p class="chart-note">颜色表示餐食、身体中有记录的类型数，非达标评分。</p>`;
   const c=counts(parseDate(calendarSelection));
-  $('#recordDayDetail').textContent = `${calendarSelection} · 餐食 ${c[0]} 条 · 身体 ${c[1]} 条 · 饮水 ${c[2]} 条`;
+  $('#recordDayDetail').textContent = `${calendarSelection} · 餐食 ${c[0]} 条 · 身体 ${c[1]} 条`;
 }
 
 function editBodyRecord(original = null) {
@@ -107,14 +106,6 @@ function editBodyRecord(original = null) {
   form.elements.date.value=localDateTime(original?.date ?? epochForDateKey(selectedDate));
   for (const key of ['weight','bodyFat','waist','note']) form.elements[key].value=original?.[key]??'';
   $('#weightDialog').showModal();
-}
-function editWaterRecord(original = null) {
-  waterEdit = original ? structuredClone(original) : null;
-  const form=$('#waterEditForm'); form.reset();
-  form.elements.date.value=localDateTime(original?.date??epochForDateKey(selectedDate));
-  form.elements.milliliters.value=original?.milliliters??250;
-  form.elements.note.value=original?.note??'';
-  $('#waterEditError').textContent=''; $('#waterEditDialog').showModal();
 }
 
 async function deleteAdminRecord(kind, id) {
@@ -126,7 +117,7 @@ async function deleteAdminRecord(kind, id) {
 
 document.addEventListener('click', event => {
   const edit=event.target.closest('[data-admin-edit]');
-  if(edit) { const kind=edit.dataset.adminEdit, item=state[recordKeys[kind]].find(x=>x.id===edit.dataset.recordId); if(item) (kind==='body'?editBodyRecord:editWaterRecord)(item); }
+  if(edit) { const kind=edit.dataset.adminEdit, item=state[recordKeys[kind]].find(x=>x.id===edit.dataset.recordId); if(item && kind==='body') editBodyRecord(item); }
   const del=event.target.closest('[data-admin-delete]'); if(del) deleteAdminRecord(del.dataset.adminDelete,del.dataset.recordId);
   const point=event.target.closest('[data-trend-id]'); if(point) { selectedTrend[point.dataset.trendKey]=point.dataset.trendId; renderBodyTrends(); }
   const day=event.target.closest('[data-record-day]'); if(day) { calendarSelection=day.dataset.recordDay; renderRecordCalendar(); }
@@ -137,13 +128,6 @@ $('#trendRange').addEventListener('change',renderBodyTrends);
 $('#adminSearch').addEventListener('input',renderAdminRows);
 $('#adminRecordType').addEventListener('change',renderAdminRows);
 $('#newBodyRecord').addEventListener('click',()=>editBodyRecord());
-$('#newWaterRecord').addEventListener('click',()=>editWaterRecord());
-$('#waterEditForm').addEventListener('submit',async event=>{
-  event.preventDefault(); const form=event.currentTarget, button=form.querySelector('[type=submit]')||form.querySelector('.submit-button'); button.disabled=true;
-  try {const data=new FormData(form); await saveAdminActions([recordAction('water',waterEdit,{date:timestampFromForm(data.get('date'),waterEdit),milliliters:Number(data.get('milliliters')),note:data.get('note').trim()})]); $('#waterEditDialog').close(); showToast('饮水记录已保存');}
-  catch(error) {$('#waterEditError').textContent=error.message;} finally {button.disabled=false;}
-});
-
 function displayField(key,value) {
   if(value==null) return '未填写';
   if(key==='date') return fmtShortDate(value);
@@ -156,7 +140,7 @@ $('#aiForm').addEventListener('submit',async event=>{
   try {
     const result=await api('/ai/plan',{method:'POST',body:JSON.stringify({instruction:$('#aiInstruction').value,provider:$('#aiProvider').value,model:$('#aiModel').value,apiKey:$('#aiKey').value,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone})});
     pendingAIPlan=result.actions||[]; $('#aiStatus').textContent='';
-    $('#aiPlan').innerHTML=`<p class="ai-answer">${escapeHtml(result.answer)}</p>${pendingAIPlan.map(action=>`<article class="change-preview"><h4>${{add:'新增',update:'修改',delete:'删除'}[action.operation]} · ${{meal:'餐食',body:'身体测量',water:'饮水',settings:'个人档案与目标'}[action.recordType]}</h4><p>${escapeHtml(action.before?.name|| (action.before?.date?fmtShortDate(action.before.date):''))}</p>${action.operation==='delete'?'<p class="form-error">这条记录将被删除。</p>':`<dl>${Object.entries(action.fields).map(([key,value])=>`<div><dt>${escapeHtml(fieldLabels[key]||key)}</dt><dd><span>${escapeHtml(displayField(key,action.before?.[key]))}</span> → <strong>${escapeHtml(displayField(key,value))}</strong></dd></div>`).join('')}</dl>`}</article>`).join('')}`;
+    $('#aiPlan').innerHTML=`<p class="ai-answer">${escapeHtml(result.answer)}</p>${pendingAIPlan.map(action=>`<article class="change-preview"><h4>${{add:'新增',update:'修改',delete:'删除'}[action.operation]} · ${{meal:'餐食',body:'身体测量',settings:'个人档案与目标'}[action.recordType]}</h4><p>${escapeHtml(action.before?.name|| (action.before?.date?fmtShortDate(action.before.date):''))}</p>${action.operation==='delete'?'<p class="form-error">这条记录将被删除。</p>':`<dl>${Object.entries(action.fields).map(([key,value])=>`<div><dt>${escapeHtml(fieldLabels[key]||key)}</dt><dd><span>${escapeHtml(displayField(key,action.before?.[key]))}</span> → <strong>${escapeHtml(displayField(key,value))}</strong></dd></div>`).join('')}</dl>`}</article>`).join('')}`;
     $('#aiApply').hidden=!pendingAIPlan.length;
   } catch(error) {$('#aiStatus').textContent=error.message;} finally {button.disabled=false; button.textContent='生成修改预览';}
 });

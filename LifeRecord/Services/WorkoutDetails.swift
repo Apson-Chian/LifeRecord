@@ -12,7 +12,10 @@ struct WorkoutExercise: Codable, Identifiable, Equatable {
     var id = UUID()
     var name: String
     var sets: [WorkoutSet]
-    enum CodingKeys: String, CodingKey { case name, sets }
+    var bodyPart: String? = nil
+    enum CodingKeys: String, CodingKey { case name, sets, bodyPart }
+
+    static let bodyParts = ["胸部", "背部", "肩部", "手臂", "核心", "臀腿", "全身", "有氧", "其他", "未分类"]
 
     var summary: String {
         guard !sets.isEmpty else { return name }

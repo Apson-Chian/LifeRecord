@@ -16,6 +16,7 @@ struct LifeRecordApp: App {
                 .environmentObject(router)
                 .tint(AppTheme.accent)
         }
+        // WaterEntry remains only as a legacy schema entity for store migration.
         .modelContainer(for: [MealEntry.self, BodyMetric.self, WaterEntry.self, WorkoutEntry.self, SyncTombstone.self, CoachConversation.self, CoachMessage.self])
     }
 }

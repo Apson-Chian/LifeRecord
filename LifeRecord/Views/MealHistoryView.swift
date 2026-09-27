@@ -330,7 +330,7 @@ struct MealEditView: View {
                     TextField("例如：米饭只吃了一半，重新计算营养", text: $instruction, axis: .vertical)
                     Button(busy ? "正在修改…" : "生成修改结果") { Task { await revise() } }
                         .disabled(busy || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Text("AI 结果会填入下方表单，复核并保存后生效。原照片保留，饮水记录不变。")
+                    Text("AI 结果会填入下方表单，复核并保存后生效。原照片保留。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("餐食数据") {
@@ -378,7 +378,7 @@ struct MealEditView: View {
         do {
             let current = String(data: try JSONEncoder().encode(draft), encoding: .utf8) ?? ""
             draft = try await AIClient(settings: settings).analyzeMeal(
-                description: "修改已有餐食，原数据：\(current)。用户要求：\(instruction)。保留未涉及的内容，返回修改后的完整营养数据，waterML 为 0。", images: [], mode: .meal)
+                description: "修改已有餐食，原数据：\(current)。用户要求：\(instruction)。保留未涉及的内容，返回修改后的完整营养数据。", images: [], mode: .meal)
         } catch { errorMessage = error.localizedDescription }
     }
 

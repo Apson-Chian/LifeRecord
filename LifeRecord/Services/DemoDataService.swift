@@ -24,12 +24,10 @@ enum DemoDataService {
     static func clear(context: ModelContext) {
         let meals = (try? context.fetch(FetchDescriptor<MealEntry>())) ?? []
         let metrics = (try? context.fetch(FetchDescriptor<BodyMetric>())) ?? []
-        let water = (try? context.fetch(FetchDescriptor<WaterEntry>())) ?? []
         let conversations = (try? context.fetch(FetchDescriptor<CoachConversation>())) ?? []
 
         meals.filter(\.isDemo).forEach(context.delete)
         metrics.filter(\.isDemo).forEach(context.delete)
-        water.filter(\.isDemo).forEach(context.delete)
         conversations.filter(\.isDemo).forEach(context.delete)
         try? context.save()
     }
@@ -54,7 +52,7 @@ enum DemoDataService {
             ))
         }
 
-        // 30 天完整饮食与饮水，偶尔留一个缺口用于展示记录连续性。
+        // 30 天完整饮食，偶尔留一个缺口用于展示记录连续性。
         for offset in (0..<30).reversed() {
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
             let progress = Double(29 - offset)
@@ -122,12 +120,6 @@ enum DemoDataService {
                 )
                 context.insert(snack)
             }
-
-            for (hour, amount) in [(9, 400), (13, 500), (17, 450), (20, 550)] {
-                let date = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
-                let adjusted = Double(amount) + sin(progress / 5.0) * 70
-                context.insert(WaterEntry(date: date, milliliters: max(300, adjusted), isDemo: true))
-            }
         }
 
         insertConversation(
@@ -160,22 +152,6 @@ enum DemoDataService {
             - **热量调整**：训练日可比休息日多 300kcal 左右。
 
             如果当天已经达到热量目标，不必强行加餐。
-            """
-        )
-
-        insertConversation(
-            context: context,
-            title: "[示例] 饮水与恢复",
-            updatedAt: .now.addingTimeInterval(-60 * 60 * 48),
-            user: "最近饮水和恢复怎么样？",
-            assistant: """
-            ## 饮水与恢复
-            - 最近 30 天日均饮水约 **1,900ml**，接近 2,000ml。
-            - 训练日饮水略高，休息日略低。
-            - 若训练时间超过 75 分钟，可考虑补充电解质。
-
-            ### 执行
-            把最大的一杯水固定在训练前后，比分散到处补更有效。
             """
         )
 

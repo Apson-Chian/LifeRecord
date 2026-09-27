@@ -26,7 +26,6 @@ struct ReminderSettingsView: View {
             } footer: { Text("按本机记录判断，每天最多一条汇总提醒。当日已有该类记录就不提醒，不要求达到营养目标。") }
             Section("提醒哪些记录") {
                 Toggle("餐食", isOn: $preferences.meals)
-                Toggle("饮水", isOn: $preferences.water)
                 Toggle("身体数据", isOn: $preferences.body)
                 Toggle("训练", isOn: $preferences.workout)
             }

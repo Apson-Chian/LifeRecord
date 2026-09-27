@@ -6,6 +6,7 @@ struct WorkoutTrendCard: View {
     let cutoff: Date?
     @State private var selectedDate: Date?
     @State private var editing: WorkoutEntry?
+    @State private var detailCategory = "训练记录"
     private let tint = Color.teal
     private var completed: [WorkoutEntry] { workouts.filter { $0.endDate != nil && $0.date <= .now } }
     private var days: [Day] {
@@ -98,33 +99,96 @@ struct WorkoutTrendCard: View {
         .onChange(of: cutoff) { _, _ in selectedDate = nil }
     }
     private var detail: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                if workouts.isEmpty {
-                    ContentUnavailableView("暂无训练记录", systemImage: "figure.strengthtraining.traditional", description: Text("在今日页开始训练或补记。"))
-                }
-                ForEach(workouts.sorted { $0.date > $1.date }) { entry in
-                    Button { editing = entry } label: {
-                        GlassCard(tint: tint) {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Text(entry.date.formatted(.dateTime.month().day().weekday())).font(.headline)
-                                    Spacer()
-                                    Text(entry.endDate == nil ? "进行中" : "\(entry.minutes.formatted(.number.precision(.fractionLength(1)))) 分钟").font(.subheadline.monospacedDigit()).foregroundStyle(tint)
+        VStack(spacing: 12) {
+            Picker("分类", selection: $detailCategory) {
+                Text("训练记录").tag("训练记录")
+                Text("按部位").tag("按部位")
+            }.pickerStyle(.segmented).padding(.horizontal, 16).padding(.top, 8)
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    if detailCategory == "按部位" {
+                        bodyPartSummaries
+                    } else if workouts.isEmpty {
+                        ContentUnavailableView("暂无训练记录", systemImage: "figure.strengthtraining.traditional", description: Text("在今日页开始训练或补记。"))
+                    } else {
+                        ForEach(workouts.sorted { $0.date > $1.date }) { entry in
+                            Button { editing = entry } label: {
+                                GlassCard(tint: tint) {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        HStack {
+                                            Text(entry.date.formatted(.dateTime.month().day().weekday())).font(.headline)
+                                            Spacer()
+                                            Text(entry.endDate == nil ? "进行中" : "\(entry.minutes.formatted(.number.precision(.fractionLength(1)))) 分钟").font(.subheadline.monospacedDigit()).foregroundStyle(tint)
+                                        }
+                                        Text(entry.contentSummary.isEmpty ? "未填写训练内容" : entry.contentSummary).font(.subheadline).foregroundStyle(.secondary)
+                                        HStack {
+                                            Text("\(entry.date.formatted(date: .abbreviated, time: .shortened)) → \(entry.endDate?.formatted(date: .abbreviated, time: .shortened) ?? "尚未结束")").font(.caption).foregroundStyle(.secondary)
+                                            Spacer()
+                                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(tint)
+                                        }
+                                    }
                                 }
-                                Text(entry.contentSummary.isEmpty ? "未填写训练内容" : entry.contentSummary).font(.subheadline).foregroundStyle(.secondary)
-                                HStack {
-                                    Text("\(entry.date.formatted(date: .abbreviated, time: .shortened)) → \(entry.endDate?.formatted(date: .abbreviated, time: .shortened) ?? "尚未结束")").font(.caption).foregroundStyle(.secondary)
-                                    Spacer()
-                                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(tint)
-                                }
-                            }
+                            }.buttonStyle(.plain)
                         }
-                    }.buttonStyle(.plain)
-                }
-            }.padding(16)
+                    }
+                }.padding(16)
+            }
         }.background(AppBackground()).navigationTitle("训练明细")
             .sheet(item: $editing) { WorkoutEditor(entry: $0, date: $0.date) }
+    }
+
+    private var bodyPartSummaries: some View {
+        let finished = workouts.filter { $0.endDate != nil && $0.date <= .now }
+        let parts = WorkoutExercise.bodyParts.filter { part in
+            finished.contains { entry in entry.exercises.contains { ($0.bodyPart ?? "未分类") == part } }
+        }
+        return Group {
+            if parts.isEmpty {
+                ContentUnavailableView("暂无部位训练数据", systemImage: "figure.strengthtraining.traditional", description: Text("编辑训练动作并选择训练部位，即可查看各部位的训练量与周节奏。"))
+            } else {
+                ForEach(parts, id: \.self) { part in
+                    let entries = finished.filter { entry in entry.exercises.contains { ($0.bodyPart ?? "未分类") == part } }
+                    let setCount = entries.flatMap(\.exercises).filter { ($0.bodyPart ?? "未分类") == part }.reduce(0) { $0 + $1.sets.count }
+                    let weekly = weeklyPartSessions(entries: entries)
+                    GlassCard(tint: tint) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text(part).font(.headline)
+                                Spacer()
+                                Text("\(entries.count) 次 · \(setCount) 组").font(.subheadline.weight(.semibold)).foregroundStyle(tint)
+                            }
+                            Chart(weekly) { week in
+                                BarMark(x: .value("周", week.date, unit: .weekOfYear), y: .value("训练次数", week.count))
+                                    .foregroundStyle(tint.gradient).cornerRadius(4)
+                            }
+                            .chartYScale(domain: 0...max(2, (weekly.map(\.count).max() ?? 0) + 1))
+                            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisValueLabel(format: .dateTime.month().day()) } }
+                            .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { AxisValueLabel() } }
+                            .frame(height: 90)
+                            Text("近 6 周每周训练次数 · 最近一次：\(entries.map(\.date).max()?.formatted(.dateTime.month().day()) ?? "—")")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func weeklyPartSessions(entries: [WorkoutEntry]) -> [Week] {
+        let calendar = Calendar.current
+        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: .now)?.start ?? calendar.startOfDay(for: .now)
+        let starts = (0..<6).compactMap { offset in calendar.date(byAdding: .weekOfYear, value: offset - 5, to: thisWeek) }
+        return starts.map { start in
+            let end = calendar.date(byAdding: .weekOfYear, value: 1, to: start) ?? start
+            let count = entries.filter { $0.date >= start && $0.date < end }.count
+            return Week(date: start, count: count)
+        }
+    }
+
+    private struct Week: Identifiable {
+        let date: Date
+        let count: Int
+        var id: Date { date }
     }
     private struct Day: Identifiable {
         let date: Date

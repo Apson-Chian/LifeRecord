@@ -77,7 +77,6 @@ final class AppSettings {
         static let proteinGoal = "proteinGoal"
         static let carbsGoal = "carbsGoal"
         static let fatGoal = "fatGoal"
-        static let waterGoal = "waterGoal"
         static let targetWeight = "targetWeight"
         static let height = "height"
         static let baselineWeight = "baselineWeight"
@@ -102,7 +101,6 @@ final class AppSettings {
     var proteinGoal: Double { didSet { save(proteinGoal, Key.proteinGoal); publishSharedProfile(); markProfileChanged() } }
     var carbsGoal: Double { didSet { save(carbsGoal, Key.carbsGoal); publishSharedProfile(); markProfileChanged() } }
     var fatGoal: Double { didSet { save(fatGoal, Key.fatGoal); publishSharedProfile(); markProfileChanged() } }
-    var waterGoal: Double { didSet { save(waterGoal, Key.waterGoal); publishSharedProfile(); markProfileChanged() } }
     var targetWeight: Double { didSet { save(targetWeight, Key.targetWeight); publishSharedProfile(); markProfileChanged() } }
     var height: Double { didSet { save(height, Key.height); publishSharedProfile(); markProfileChanged() } }
     var baselineWeight: Double { didSet { save(baselineWeight, Key.baselineWeight); publishSharedProfile(); markProfileChanged() } }
@@ -138,7 +136,6 @@ final class AppSettings {
         proteinGoal = defaults.object(forKey: Key.proteinGoal) as? Double ?? 130
         carbsGoal = defaults.object(forKey: Key.carbsGoal) as? Double ?? 340
         fatGoal = defaults.object(forKey: Key.fatGoal) as? Double ?? 70
-        waterGoal = defaults.object(forKey: Key.waterGoal) as? Double ?? 2800
         targetWeight = defaults.object(forKey: Key.targetWeight) as? Double ?? 72
         height = defaults.object(forKey: Key.height) as? Double ?? 181
         baselineWeight = defaults.object(forKey: Key.baselineWeight) as? Double ?? 64
@@ -202,7 +199,6 @@ final class AppSettings {
         proteinGoal = profile.proteinGoal
         carbsGoal = profile.carbsGoal
         fatGoal = profile.fatGoal
-        waterGoal = profile.waterGoal
         isApplyingSyncedProfile = false
         profileUpdatedAt = updatedAt
         save(updatedAt.timeIntervalSince1970, Key.profileUpdatedAt)
