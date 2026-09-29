@@ -238,28 +238,21 @@ struct WorkoutTrendCard: View {
                                 Spacer()
                                 Text("\(entries.count) 次").font(.subheadline.weight(.semibold)).foregroundStyle(tint)
                             }
-                            ForEach(entries) { entry in
-                                Button { editing = entry } label: {
-                                    HStack {
-                                        Image(systemName: "calendar")
-                                        Text(entry.date.formatted(date: .abbreviated, time: .shortened))
-                                        Spacer()
-                                        Image(systemName: "chevron.right").font(.caption)
+                            WorkoutPartTimeline(entries: entries) { editing = $0 }
+                            HStack {
+                                Menu {
+                                    ForEach(entries) { entry in
+                                        Button(entry.date.formatted(date: .abbreviated, time: .shortened)) { editing = entry }
                                     }
-                                    .font(.subheadline)
-                                    .padding(.vertical, 8)
-                                    .contentShape(Rectangle())
+                                } label: {
+                                    Label("选择训练记录", systemImage: "calendar")
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("编辑\(part)，\(entry.date.formatted(date: .complete, time: .shortened))")
+                                Spacer()
+                                Button("部位改名", systemImage: "pencil") {
+                                    renamedPart = part; renameError = nil; renamingPart = PartToRename(name: part)
+                                }
                             }
-                            Button("编辑部位名称", systemImage: "pencil") {
-                                renamedPart = part; renameError = nil; renamingPart = PartToRename(name: part)
-                            }.font(.subheadline)
-                            NavigationLink { ExerciseLibraryView(initialBodyPart: part) } label: {
-                                Label("给\(part)添加动作", systemImage: "plus.circle")
-                                    .font(.subheadline.weight(.medium))
-                            }
+                            .font(.caption)
                         }
                     }
                 }
@@ -339,5 +332,60 @@ struct WorkoutTrendCard: View {
     private struct PartToRename: Identifiable {
         let name: String
         var id: String { name }
+    }
+}
+
+private struct WorkoutPartTimeline: View {
+    let entries: [WorkoutEntry]
+    let onEdit: (WorkoutEntry) -> Void
+    @State private var selectedDate: Date?
+    private let tint = Color.teal
+
+    private var domain: ClosedRange<Date> {
+        let dates = entries.map(\.date)
+        let first = dates.min() ?? .now
+        let last = dates.max() ?? first
+        let padding = max(86_400, last.timeIntervalSince(first) * 0.05)
+        return first.addingTimeInterval(-padding)...last.addingTimeInterval(padding)
+    }
+
+    private var selectedEntry: WorkoutEntry? {
+        guard let selectedDate else { return nil }
+        return entries.min {
+            abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate))
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Chart {
+                RuleMark(y: .value("训练时间轴", 0))
+                    .foregroundStyle(.secondary.opacity(0.35))
+                ForEach(entries) { entry in
+                    PointMark(x: .value("训练日期", entry.date), y: .value("训练", 0))
+                        .symbolSize(selectedEntry?.id == entry.id ? 110 : 65)
+                        .foregroundStyle(tint)
+                }
+            }
+            .chartXScale(domain: domain)
+            .chartYScale(domain: -1...1)
+            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 3)) { _ in AxisValueLabel(format: .dateTime.month().day()) } }
+            .chartYAxis(.hidden)
+            .chartXSelection(value: $selectedDate)
+            .frame(height: 82)
+            .accessibilityLabel("训练时间轴，共 \(entries.count) 次；下方可选择训练记录编辑")
+            if let selectedEntry {
+                Button {
+                    onEdit(selectedEntry)
+                } label: {
+                    Label("\(selectedEntry.date.formatted(date: .abbreviated, time: .shortened)) · 编辑此次训练", systemImage: "pencil")
+                        .font(.caption)
+                }
+            } else {
+                Text("点时间点查看并编辑训练")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
