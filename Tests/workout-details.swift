@@ -22,6 +22,8 @@ struct WorkoutDetailTests {
         assert(selectedRoundtrip.name == "深蹲" && selectedRoundtrip.sets.isEmpty)
         let library = [ExerciseTemplate(name: "我的动作", sets: 4)]
         assert(ExerciseLibrary.decode(ExerciseLibrary.encode(library))[0].sets == 4)
+        assert(WorkoutBodyParts.normalized(["背部", "胸部", "背部", "未分类", "未知"]) == ["胸部", "背部"])
+        assert(WorkoutBodyParts.fromExercises([.init(name: "卧推", sets: [], bodyPart: "胸部")]) == ["胸部"])
         print("PASS: per-set values, AI JSON decoding, round-trip, optional fields, validation and custom library")
     }
 }

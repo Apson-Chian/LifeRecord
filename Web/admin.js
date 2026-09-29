@@ -6,7 +6,7 @@ let pendingAIPlan = [];
 let selectedTrend = { weight: null, bodyFat: null };
 let calendarSelection = dateKey(new Date());
 const recordKeys = { meal: 'meals', body: 'bodyMetrics' };
-const fieldLabels = { name:'餐食名称',kind:'餐次',date:'时间',weight:'体重 kg',bodyFat:'体脂率 %',waist:'腰围 cm',calories:'热量 kcal',protein:'蛋白质 g',carbs:'碳水 g',fat:'脂肪 g',fiber:'膳食纤维 g',note:'备注',source:'来源',photoIDs:'照片',displayName:'称呼',fitnessGoal:'健身目标',height:'身高 cm',baselineWeight:'起始体重 kg',targetWeight:'目标体重 kg',weeklyWeightTarget:'每周变化 kg',calorieGoal:'热量目标',proteinGoal:'蛋白质目标',carbsGoal:'碳水目标',fatGoal:'脂肪目标' };
+const fieldLabels = { name:'餐食名称',kind:'餐次',date:'时间',endDate:'结束时间',bodyParts:'训练部位',exercises:'训练动作与部位',weight:'体重 kg',bodyFat:'体脂率 %',waist:'腰围 cm',calories:'热量 kcal',protein:'蛋白质 g',carbs:'碳水 g',fat:'脂肪 g',fiber:'膳食纤维 g',note:'备注',source:'来源',photoIDs:'照片',displayName:'称呼',fitnessGoal:'健身目标',height:'身高 cm',baselineWeight:'起始体重 kg',targetWeight:'目标体重 kg',weeklyWeightTarget:'每周变化 kg',calorieGoal:'热量目标',proteinGoal:'蛋白质目标',carbsGoal:'碳水目标',fatGoal:'脂肪目标' };
 const profileFields = Object.keys(defaultSettings).filter(key => key !== 'id');
 const localDateTime = timestamp => {
   const d = new Date(timestamp * 1000);
@@ -130,8 +130,10 @@ $('#adminRecordType').addEventListener('change',renderAdminRows);
 $('#newBodyRecord').addEventListener('click',()=>editBodyRecord());
 function displayField(key,value) {
   if(value==null) return '未填写';
-  if(key==='date') return fmtShortDate(value);
+  if(key==='date'||key==='endDate') return fmtShortDate(value);
   if(key==='photoIDs') return `${value.length} 张`;
+  if(key==='bodyParts') return value.join('、')||'未分类';
+  if(key==='exercises') return value.map(exercise=>`${exercise.name} · ${exercise.bodyPart||'未分类'} · ${(exercise.sets||[]).map((set,index)=>`第${index+1}组 ${[set.reps==null?'':`${set.reps}次`,set.weight==null?'':`${set.weight}kg`,set.durationSeconds==null?'':`${set.durationSeconds}秒`].filter(Boolean).join(' / ')||'未填写'}`).join('，')||'无组数'}`).join('；')||'无动作';
   return String(value);
 }
 $('#aiForm').addEventListener('submit',async event=>{
@@ -140,7 +142,7 @@ $('#aiForm').addEventListener('submit',async event=>{
   try {
     const result=await api('/ai/plan',{method:'POST',body:JSON.stringify({instruction:$('#aiInstruction').value,provider:$('#aiProvider').value,model:$('#aiModel').value,apiKey:$('#aiKey').value,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone})});
     pendingAIPlan=result.actions||[]; $('#aiStatus').textContent='';
-    $('#aiPlan').innerHTML=`<p class="ai-answer">${escapeHtml(result.answer)}</p>${pendingAIPlan.map(action=>`<article class="change-preview"><h4>${{add:'新增',update:'修改',delete:'删除'}[action.operation]} · ${{meal:'餐食',body:'身体测量',settings:'个人档案与目标'}[action.recordType]}</h4><p>${escapeHtml(action.before?.name|| (action.before?.date?fmtShortDate(action.before.date):''))}</p>${action.operation==='delete'?'<p class="form-error">这条记录将被删除。</p>':`<dl>${Object.entries(action.fields).map(([key,value])=>`<div><dt>${escapeHtml(fieldLabels[key]||key)}</dt><dd><span>${escapeHtml(displayField(key,action.before?.[key]))}</span> → <strong>${escapeHtml(displayField(key,value))}</strong></dd></div>`).join('')}</dl>`}</article>`).join('')}`;
+    $('#aiPlan').innerHTML=`<p class="ai-answer">${escapeHtml(result.answer)}</p>${pendingAIPlan.map(action=>`<article class="change-preview"><h4>${{add:'新增',update:'修改',delete:'删除'}[action.operation]} · ${{meal:'餐食',body:'身体测量',workout:'训练',settings:'个人档案与目标'}[action.recordType]}</h4><p>${escapeHtml(action.before?.name|| (action.before?.date?fmtShortDate(action.before.date):''))}</p>${action.operation==='delete'?'<p class="form-error">这条记录将被删除。</p>':`<dl>${Object.entries(action.fields).map(([key,value])=>`<div><dt>${escapeHtml(fieldLabels[key]||key)}</dt><dd><span>${escapeHtml(displayField(key,action.before?.[key]))}</span> → <strong>${escapeHtml(displayField(key,value))}</strong></dd></div>`).join('')}</dl>`}</article>`).join('')}`;
     $('#aiApply').hidden=!pendingAIPlan.length;
   } catch(error) {$('#aiStatus').textContent=error.message;} finally {button.disabled=false; button.textContent='生成修改预览';}
 });

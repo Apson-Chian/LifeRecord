@@ -4,31 +4,37 @@ struct ExerciseLibraryView: View {
     @AppStorage(ExerciseLibrary.key) private var raw = "[]"
     @State private var templates: [ExerciseTemplate] = []
     @State private var newName = ""
+    @State private var newPart: String?
     @State private var message: String?
+
+    init(initialBodyPart: String? = nil) {
+        _newPart = State(initialValue: initialBodyPart)
+    }
 
     var body: some View {
         Form {
             Section {
                 TextField("新动作名称，例如杠铃划船", text: $newName)
+                TrainingBodyPartPicker(title: "归属部位", selection: $newPart)
                 Button("添加动作", systemImage: "plus") {
                     let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !templates.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
                         message = "动作库已有这个名称。"; return
                     }
-                    templates.append(.init(name: name)); newName = ""; save()
+                    templates.append(.init(name: name, bodyPart: newPart)); newName = ""; save()
                 }.disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newName.count > 100 || templates.count >= 100)
             } header: { Text("添加自定义动作") } footer: { Text("动作库保存在这台设备。修改或删除模板不会改变已保存的训练。") }
             Section("我的动作（\(templates.count)）") {
                 ForEach($templates) { $template in
-                    VStack(alignment: .leading, spacing: 8) {
+                    DisclosureGroup {
                         TextField("动作名称", text: $template.name).onSubmit { save() }
-                        Picker("默认训练部位", selection: Binding(
-                            get: { template.bodyPart ?? "未分类" },
-                            set: { template.bodyPart = $0 == "未分类" ? nil : $0 }
-                        )) {
-                            ForEach(WorkoutExercise.bodyParts, id: \.self) { Text($0).tag($0) }
+                        TrainingBodyPartPicker(title: "默认训练部位", selection: $template.bodyPart)
+                    } label: {
+                        HStack {
+                            Text(template.name)
+                            Spacer()
+                            Text(template.bodyPart ?? "未分类").font(.caption).foregroundStyle(.secondary)
                         }
-                        .font(.subheadline)
                     }
                     .padding(.vertical, 4)
                 }.onDelete { indices in templates.remove(atOffsets: indices); save() }
@@ -54,6 +60,32 @@ struct ExerciseLibraryView: View {
     }
 }
 
+struct WorkoutBodyPartsPicker: View {
+    @Binding var selection: [String]
+    private let columns = [GridItem(.adaptive(minimum: 64), spacing: 8)]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+            ForEach(WorkoutBodyParts.choices, id: \.self) { part in
+                let selected = selection.contains(part)
+                Button {
+                    if selected { selection.removeAll { $0 == part } }
+                    else { selection = WorkoutBodyParts.normalized(selection + [part]) }
+                } label: {
+                    Text(part)
+                        .font(.subheadline.weight(selected ? .semibold : .regular))
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .background(selected ? Color.teal.opacity(0.16) : Color(.tertiarySystemGroupedBackground), in: Capsule())
+                        .overlay(Capsule().strokeBorder(selected ? Color.teal : Color.clear, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selected ? Color.teal : Color.primary)
+                .accessibilityValue(selected ? "已选择" : "未选择")
+            }
+        }
+    }
+}
+
 struct WorkoutExerciseFields: View {
     @Binding var exercise: WorkoutExercise
     let remove: () -> Void
@@ -73,14 +105,7 @@ struct WorkoutExerciseFields: View {
                 }
                 .accessibilityLabel("动作选项")
             }
-            Picker("训练部位", selection: Binding(
-                get: { exercise.bodyPart ?? "未分类" },
-                set: { exercise.bodyPart = $0 == "未分类" ? nil : $0 }
-            )) {
-                ForEach(WorkoutExercise.bodyParts, id: \.self) { Text($0).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .tint(exercise.bodyPart == nil ? Color.secondary : Color.teal)
+            TrainingBodyPartPicker(title: "训练部位", selection: $exercise.bodyPart)
             DisclosureGroup {
                 ForEach(Array(exercise.sets.indices), id: \.self) { index in
                     VStack(alignment: .leading, spacing: 8) {
@@ -114,5 +139,34 @@ struct WorkoutExerciseFields: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+private struct TrainingBodyPartPicker: View {
+    let title: String
+    @Binding var selection: String?
+    private let columns = [GridItem(.adaptive(minimum: 64), spacing: 8)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                ForEach(WorkoutExercise.bodyParts, id: \.self) { part in
+                    let selected = (selection ?? "未分类") == part
+                    Button {
+                        selection = part == "未分类" ? nil : part
+                    } label: {
+                        Text(part)
+                            .font(.subheadline.weight(selected ? .semibold : .regular))
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .background(selected ? Color.teal.opacity(0.16) : Color(.tertiarySystemGroupedBackground), in: Capsule())
+                            .overlay(Capsule().strokeBorder(selected ? Color.teal : Color.clear, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(selected ? Color.teal : Color.primary)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
     }
 }

@@ -46,6 +46,7 @@ private struct SyncedBodyMetric: Codable {
 
 private struct SyncedWorkout: Codable {
     var exercises: [WorkoutExercise]? = nil
+    var bodyParts: [String]? = nil
     var id: String
     var date: Double
     var endDate: Double?
@@ -227,7 +228,7 @@ final class SyncCoordinator {
                 )
             }
         let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>()).map {
-            SyncedWorkout(exercises: $0.exercises, id: $0.id.uuidString.lowercased(), date: $0.date.timeIntervalSince1970,
+            SyncedWorkout(exercises: $0.exercises, bodyParts: $0.bodyParts, id: $0.id.uuidString.lowercased(), date: $0.date.timeIntervalSince1970,
                           endDate: $0.endDate?.timeIntervalSince1970, note: $0.note,
                           updatedAt: $0.updatedAt.timeIntervalSince1970)
         }
@@ -384,6 +385,11 @@ final class SyncCoordinator {
             if let exercises = remote.exercises {
                 try WorkoutExercise.validate(exercises)
                 record.exercises = exercises
+            }
+            if let bodyParts = remote.bodyParts {
+                guard WorkoutBodyParts.normalized(bodyParts).count == bodyParts.count,
+                      Set(bodyParts).count == bodyParts.count else { throw SyncServiceError.invalidResponse }
+                record.bodyParts = bodyParts
             }
             record.updatedAt = updated
         }

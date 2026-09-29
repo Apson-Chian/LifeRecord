@@ -16,6 +16,11 @@ struct WorkoutStorageTests {
         let loaded = try reader.fetch(FetchDescriptor<WorkoutEntry>()).first!
         assert(loaded.exercises[0].sets[1].weight == 40)
         assert(loaded.contentSummary.contains("旧版训练") && loaded.contentSummary.contains("自定义划船"))
+        loaded.bodyParts = ["背部", "核心"]
+        try reader.save()
+        let reread = try ModelContext(container).fetch(FetchDescriptor<WorkoutEntry>()).first!
+        assert(reread.bodyParts == ["背部", "核心"])
+        assert(reread.overviewSummary.contains("背部 · 核心"))
         print("PASS: SwiftData default, save and independent-context structured workout read")
     }
 }

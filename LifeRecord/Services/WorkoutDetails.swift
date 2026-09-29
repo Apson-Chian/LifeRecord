@@ -66,3 +66,15 @@ enum ExerciseLibrary {
         (try? JSONEncoder().encode(values)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
     }
 }
+
+enum WorkoutBodyParts {
+    static let choices = WorkoutExercise.bodyParts.filter { $0 != "未分类" }
+
+    static func normalized(_ values: [String]) -> [String] {
+        choices.filter { values.contains($0) }
+    }
+
+    static func fromExercises(_ exercises: [WorkoutExercise]) -> [String] {
+        normalized(exercises.compactMap(\.bodyPart))
+    }
+}

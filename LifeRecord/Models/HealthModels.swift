@@ -236,6 +236,8 @@ final class WorkoutEntry {
     var endDate: Date?
     var note: String
     var exercisesRaw: String = "[]"
+    // Empty means a legacy record whose parts come from its exercises.
+    var bodyPartsRaw: String = ""
     var updatedAt: Date = Date.now
 
     init(id: UUID = UUID(), date: Date = .now, endDate: Date? = nil, note: String = "") {
@@ -250,11 +252,27 @@ final class WorkoutEntry {
 
 
 extension WorkoutEntry {
+    var bodyParts: [String] {
+        get {
+            guard !bodyPartsRaw.isEmpty else { return WorkoutBodyParts.fromExercises(exercises) }
+            let values = (try? JSONDecoder().decode([String].self, from: Data(bodyPartsRaw.utf8))) ?? []
+            return WorkoutBodyParts.normalized(values)
+        }
+        set {
+            let values = WorkoutBodyParts.normalized(newValue)
+            bodyPartsRaw = (try? JSONEncoder().encode(values)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        }
+    }
     var exercises: [WorkoutExercise] {
         get { (try? JSONDecoder().decode([WorkoutExercise].self, from: Data(exercisesRaw.utf8))) ?? [] }
         set { exercisesRaw = (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]" }
     }
     var contentSummary: String {
-        ([note] + exercises.map(\.summary)).filter { !$0.isEmpty }.joined(separator: "\n")
+        ([bodyParts.joined(separator: "、"), note] + exercises.map(\.summary)).filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+    var overviewSummary: String {
+        let parts = bodyParts.joined(separator: " · ")
+        let detail = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [parts, detail].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }

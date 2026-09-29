@@ -1,12 +1,19 @@
 import SwiftUI
 import Charts
+import SwiftData
 
 struct WorkoutTrendCard: View {
     let workouts: [WorkoutEntry]
     let cutoff: Date?
+    @Environment(\.modelContext) private var context
+    @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var sync
+    @AppStorage(ExerciseLibrary.key) private var libraryRaw = "[]"
     @State private var selectedDate: Date?
     @State private var editing: WorkoutEntry?
     @State private var detailCategory = "训练记录"
+    @State private var isClassifying = false
+    @State private var classificationMessage: String?
     private let tint = Color.teal
     private var completed: [WorkoutEntry] { workouts.filter { $0.endDate != nil && $0.date <= .now } }
     private var days: [Day] {
@@ -120,7 +127,7 @@ struct WorkoutTrendCard: View {
                                             Spacer()
                                             Text(entry.endDate == nil ? "进行中" : "\(entry.minutes.formatted(.number.precision(.fractionLength(1)))) 分钟").font(.subheadline.monospacedDigit()).foregroundStyle(tint)
                                         }
-                                        Text(entry.contentSummary.isEmpty ? "未填写训练内容" : entry.contentSummary).font(.subheadline).foregroundStyle(.secondary)
+                                        Text(entry.overviewSummary.isEmpty ? "未填写训练部位或内容" : entry.overviewSummary).font(.subheadline).foregroundStyle(.secondary)
                                         HStack {
                                             Text("\(entry.date.formatted(date: .abbreviated, time: .shortened)) → \(entry.endDate?.formatted(date: .abbreviated, time: .shortened) ?? "尚未结束")").font(.caption).foregroundStyle(.secondary)
                                             Spacer()
@@ -139,20 +146,38 @@ struct WorkoutTrendCard: View {
 
     private var bodyPartSummaries: some View {
         let finished = workouts.filter { $0.endDate != nil && $0.date <= .now }
-        let parts = WorkoutExercise.bodyParts.filter { part in
-            guard part != "未分类" else { return false }
-            return finished.contains { entry in entry.exercises.contains { ($0.bodyPart ?? "未分类") == part } }
+        let parts = WorkoutBodyParts.choices.filter { part in
+            finished.contains { $0.bodyParts.contains(part) }
         }
+        let unclassified = workouts.filter { $0.bodyParts.isEmpty && (!$0.note.isEmpty || !$0.exercises.isEmpty) }
         return Group {
+            NavigationLink { ExerciseLibraryView() } label: {
+                Label("管理和添加动作", systemImage: "plus.circle")
+                    .font(.subheadline.weight(.medium))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !unclassified.isEmpty {
+                Button(isClassifying ? "AI 正在归类…" : "AI 归类 \(unclassified.count) 条未分类训练", systemImage: "sparkles") {
+                    classifyUncategorized(unclassified)
+                }
+                .disabled(isClassifying)
+                .buttonStyle(.borderedProminent)
+                .tint(tint)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let classificationMessage {
+                Text(classificationMessage).font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if parts.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     ContentUnavailableView(
                         "还没有部位统计",
                         systemImage: "figure.strengthtraining.traditional",
-                        description: Text("部位统计来自每个训练动作的“训练部位”。选择下面一条训练，编辑动作并分类；以后也可以在动作库设置默认部位。")
+                        description: Text("在训练详情直接选择训练部位；也可以让 AI 根据已有记录归类。")
                     )
                     let editable = finished.filter {
-                        $0.exercises.contains { $0.bodyPart == nil || $0.bodyPart == "未分类" }
+                        $0.bodyParts.isEmpty
                     }.sorted { $0.date > $1.date }
                     if !editable.isEmpty {
                         Text("选择一条已有训练来分类")
@@ -166,7 +191,7 @@ struct WorkoutTrendCard: View {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(entry.date.formatted(.dateTime.month().day().weekday()))
                                             .font(.subheadline.weight(.medium))
-                                        Text(entry.exercises.map(\.name).joined(separator: "、"))
+                                        Text(entry.overviewSummary.isEmpty ? "尚未标记部位" : entry.overviewSummary)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(2)
@@ -187,9 +212,10 @@ struct WorkoutTrendCard: View {
                 }
             } else {
                 ForEach(parts, id: \.self) { part in
-                    let entries = finished.filter { entry in entry.exercises.contains { ($0.bodyPart ?? "未分类") == part } }
+                    let entries = finished.filter { $0.bodyParts.contains(part) }
                     let setCount = entries.flatMap(\.exercises).filter { ($0.bodyPart ?? "未分类") == part }.reduce(0) { $0 + $1.sets.count }
                     let weekly = weeklyPartSessions(entries: entries)
+                    let templates = ExerciseLibrary.decode(libraryRaw).filter { $0.bodyPart == part }
                     GlassCard(tint: tint) {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
@@ -207,10 +233,54 @@ struct WorkoutTrendCard: View {
                             .frame(height: 90)
                             Text("近 6 周每周训练次数 · 最近一次：\(entries.map(\.date).max()?.formatted(.dateTime.month().day()) ?? "—")")
                                 .font(.caption).foregroundStyle(.secondary)
+                            NavigationLink { ExerciseLibraryView(initialBodyPart: part) } label: {
+                                Label("给\(part)添加动作", systemImage: "plus.circle")
+                                    .font(.subheadline.weight(.medium))
+                            }
+                            if !templates.isEmpty {
+                                DisclosureGroup("已添加动作 · \(templates.count) 个") {
+                                    ForEach(templates) { template in
+                                        Text(template.name).font(.subheadline)
+                                    }
+                                }.font(.subheadline).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+
+    private func classifyUncategorized(_ records: [WorkoutEntry]) {
+        isClassifying = true
+        classificationMessage = nil
+        let examples = workouts.filter { !$0.bodyParts.isEmpty }.prefix(24).map {
+            WorkoutPartExample(note: $0.note, exerciseNames: $0.exercises.map(\.name), bodyParts: $0.bodyParts)
+        }
+        Task {
+            do {
+                var classified = 0
+                for start in stride(from: 0, to: records.count, by: 12) {
+                    let batch = Array(records[start..<min(start + 12, records.count)])
+                    let candidates = batch.map { WorkoutPartCandidate(id: $0.id.uuidString, note: $0.note, exerciseNames: $0.exercises.map(\.name)) }
+                    let suggestions = try await AIClient(settings: settings).classifyWorkoutParts(records: candidates, examples: examples)
+                    for suggestion in suggestions where !suggestion.bodyParts.isEmpty {
+                        guard let record = batch.first(where: { $0.id.uuidString == suggestion.id }), record.bodyParts.isEmpty else { continue }
+                        record.bodyParts = suggestion.bodyParts
+                        record.updatedAt = .now
+                        classified += 1
+                    }
+                }
+                if classified > 0 {
+                    try context.save()
+                    await sync.sync(context: context, settings: settings)
+                }
+                classificationMessage = "已归类 \(classified) 条；证据不足的记录仍可手动选择部位。"
+            } catch {
+                context.rollback()
+                classificationMessage = "AI 归类失败：\(error.localizedDescription)"
+            }
+            isClassifying = false
         }
     }
 

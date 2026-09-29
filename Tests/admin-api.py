@@ -35,6 +35,14 @@ with tempfile.TemporaryDirectory() as folder:
         pass
     profile=server.apply_admin_actions([action('settings','update',displayName='测试')])['settings']
     assert profile['height']==181
+    workout=server.apply_admin_actions([action('workout','add',date=1_780_000_000,endDate=1_780_003_600,note='训练',bodyParts=['胸部'],exercises=[dict(name='卧推',bodyPart='胸部',sets=[dict(reps=8,weight=40)])])])['workoutEntries'][0]
+    workout=server.apply_admin_actions([action('workout','update',workout,exercises=[dict(name='卧推',bodyPart='胸部',sets=[dict(reps=10,weight=40)])])])['workoutEntries'][0]
+    assert workout['bodyParts']==['胸部'] and workout['exercises'][0]['bodyPart']=='胸部' and workout['exercises'][0]['sets'][0]['reps']==10
+    try:
+        server.apply_admin_actions([action('workout','update',workout,exercises=[dict(name='卧推',bodyPart='错误部位',sets=[])])])
+        raise AssertionError('invalid body part accepted')
+    except ValueError:
+        pass
 
     class Response:
         def __enter__(self): return self
@@ -51,4 +59,4 @@ with tempfile.TemporaryDirectory() as folder:
     assert updated['weight']==68.5 and updated['bodyFat'] is None
     server.apply_admin_actions([action('body','delete',updated)])
     assert not server.current_snapshot()['bodyMetrics']
-    print('PASS: full CRUD, nullable fat, timestamps, version conflicts, atomic validation, profile defaults, AI preview/apply')
+    print('PASS: full CRUD, nullable fat, workout parts and sets, timestamps, version conflicts, atomic validation, profile defaults, AI preview/apply')

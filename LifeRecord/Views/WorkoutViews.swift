@@ -49,7 +49,7 @@ struct WorkoutDayCard: View {
                                 .frame(width: 40, height: 40)
                                 .background(.teal.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(entry.contentSummary.isEmpty ? "健身训练" : entry.contentSummary).font(.subheadline.weight(.medium)).lineLimit(2)
+                                Text(entry.overviewSummary.isEmpty ? "健身训练" : entry.overviewSummary).font(.subheadline.weight(.medium)).lineLimit(2)
                                 Text("\(entry.date.formatted(date: .omitted, time: .shortened)) → \(entry.endDate?.formatted(date: .abbreviated, time: .shortened) ?? "进行中")").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -87,6 +87,11 @@ struct WorkoutEditor: View {
     @State private var error: String?
     @State private var confirmDelete = false
     @State private var exercises: [WorkoutExercise]
+    @State private var bodyParts: [String]
+    @State private var showsExercises = false
+    @State private var isClassifying = false
+    @State private var classifyTask: Task<Void, Never>?
+    @Query(sort: \WorkoutEntry.date, order: .reverse) private var workouts: [WorkoutEntry]
     @AppStorage(ExerciseLibrary.key) private var libraryRaw = "[]"
     @State private var aiInput = ""
     @State private var aiDraft: WorkoutAIDraft?
@@ -102,6 +107,7 @@ struct WorkoutEditor: View {
         _finished = State(initialValue: entry == nil || entry?.endDate != nil)
         _note = State(initialValue: entry?.note ?? "")
         _exercises = State(initialValue: entry?.exercises ?? [])
+        _bodyParts = State(initialValue: entry?.bodyParts ?? [])
     }
     var body: some View {
         NavigationStack {
@@ -116,29 +122,30 @@ struct WorkoutEditor: View {
                     }
                 }
                 Section {
-                    Menu("从动作库添加", systemImage: "list.bullet") {
-                        ForEach(ExerciseLibrary.decode(libraryRaw)) { template in
-                            Button {
-                                exercises.append(.init(name: template.name, sets: [], bodyPart: template.bodyPart))
-                            } label: {
-                                if let bodyPart = template.bodyPart {
-                                    Text("\(template.name) · \(bodyPart)")
-                                } else {
-                                    Text(template.name)
+                    WorkoutBodyPartsPicker(selection: $bodyParts)
+                } header: { Text("训练部位") } footer: { Text("直接选择今天练过的部位即可，不必填写具体动作。未选部位时，保存会尝试让 AI 根据训练内容归类。") }
+                Section {
+                    DisclosureGroup(isExpanded: $showsExercises) {
+                        Menu("从动作库添加", systemImage: "list.bullet") {
+                            ForEach(ExerciseLibrary.decode(libraryRaw)) { template in
+                                Button {
+                                    exercises.append(.init(name: template.name, sets: [], bodyPart: template.bodyPart ?? (bodyParts.count == 1 ? bodyParts[0] : nil)))
+                                } label: {
+                                    Text(template.bodyPart.map { "\(template.name) · \($0)" } ?? template.name)
                                 }
                             }
-                        }
-                    }.disabled(ExerciseLibrary.decode(libraryRaw).isEmpty || exercises.count >= 50)
-                    Button("添加自定义动作", systemImage: "plus") { exercises.append(.init(name: "", sets: [])) }.disabled(exercises.count >= 50)
-                    NavigationLink("管理我的动作库") { ExerciseLibraryView() }
-                } header: { Text("训练动作") } footer: { Text("添加动作后可直接选择训练部位；动作库里的默认部位会自动带入。组数、次数、重量和时长按需填写。") }
-                if !exercises.isEmpty {
-                    Section("已选动作") {
+                        }.disabled(ExerciseLibrary.decode(libraryRaw).isEmpty || exercises.count >= 50)
+                        Button("添加自定义动作", systemImage: "plus") {
+                            exercises.append(.init(name: "", sets: [], bodyPart: bodyParts.count == 1 ? bodyParts[0] : nil))
+                        }.disabled(exercises.count >= 50)
+                        NavigationLink("管理我的动作库") { ExerciseLibraryView() }
                         ForEach($exercises) { $exercise in
                             WorkoutExerciseFields(exercise: $exercise) { exercises.removeAll { $0.id == exercise.id } }
                         }
+                    } label: {
+                        Label(exercises.isEmpty ? "具体动作（选填）" : "具体动作 · \(exercises.count) 个（选填）", systemImage: "list.bullet")
                     }
-                }
+                } footer: { Text("动作和逐组数据默认收起，需要时再展开填写。") }
                 Section {
                     TextField("例如：卧推 3 组，每组 8 次 40 kg；平板支撑 2 组各 60 秒", text: $aiInput, axis: .vertical).lineLimit(3...6)
                     Button(isGenerating ? "正在整理…" : "AI 整理动作", systemImage: "sparkles") { generateDraft() }
@@ -161,10 +168,10 @@ struct WorkoutEditor: View {
             .keyboardDismissControl()
             .navigationTitle(entry == nil ? "补记训练" : "训练详情")
             .onChange(of: aiInput) { _, _ in aiTask?.cancel(); isGenerating = false; aiDraft = nil }
-            .onDisappear { aiTask?.cancel(); isGenerating = false }
+            .onDisappear { aiTask?.cancel(); classifyTask?.cancel(); isGenerating = false }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("保存") { save() }.disabled(finished && end < start) }
+                ToolbarItem(placement: .confirmationAction) { Button(isClassifying ? "归类中…" : "保存") { save() }.disabled((finished && end < start) || isClassifying) }
             }
             .confirmationDialog("删除这次训练？", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("删除", role: .destructive) {
@@ -193,9 +200,41 @@ struct WorkoutEditor: View {
         do { try WorkoutExercise.validate(exercises) } catch { self.error = error.localizedDescription; return }
         guard note.count <= 10000 else { error = "训练备注最多 10000 字。"; return }
         guard start <= .now, !finished || (end >= start && end <= .now) else { error = "请检查训练起止时间。"; return }
+        if bodyParts.isEmpty {
+            guard !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !exercises.isEmpty else {
+                error = "请选择训练部位，或填写训练内容供 AI 归类。"; return
+            }
+            isClassifying = true
+            let candidate = WorkoutPartCandidate(id: entry?.id.uuidString ?? UUID().uuidString, note: note, exerciseNames: exercises.map(\.name))
+            let examples = workouts.filter { !$0.bodyParts.isEmpty }.prefix(24).map {
+                WorkoutPartExample(note: $0.note, exerciseNames: $0.exercises.map(\.name), bodyParts: $0.bodyParts)
+            }
+            classifyTask = Task {
+                do {
+                    let suggestions = try await AIClient(settings: settings).classifyWorkoutParts(records: [candidate], examples: examples)
+                    guard !Task.isCancelled else { return }
+                    guard let suggested = suggestions.first?.bodyParts, !suggested.isEmpty else {
+                        error = "AI 无法确定训练部位，请手动选择后保存。"
+                        isClassifying = false
+                        return
+                    }
+                    bodyParts = suggested
+                    isClassifying = false
+                    saveRecord()
+                } catch {
+                    if !Task.isCancelled { self.error = "AI 归类失败：\(error.localizedDescription)。请手动选择训练部位。"; isClassifying = false }
+                }
+            }
+            return
+        }
+        saveRecord()
+    }
+
+    private func saveRecord() {
         let record = entry ?? WorkoutEntry()
         if entry == nil { context.insert(record) }
         record.exercises = exercises
+        record.bodyParts = bodyParts
         record.date = start
         record.endDate = finished ? end : nil
         record.note = note.trimmingCharacters(in: .whitespacesAndNewlines)

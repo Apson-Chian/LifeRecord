@@ -54,6 +54,18 @@ with tempfile.TemporaryDirectory() as folder:
     old.update(note='older client edit', updatedAt=9001)
     server.merge_snapshot({'workoutEntries': [old]})
     assert server.current_snapshot()['workoutEntries'][0]['exercises'] == structured['exercises']
+    with_parts = {**structured, 'bodyParts': ['胸部', '核心'], 'updatedAt': 9002}
+    server.merge_snapshot({'workoutEntries': [with_parts]})
+    old_parts = {k:v for k,v in with_parts.items() if k != 'bodyParts'}
+    old_parts['updatedAt'] = 9002.1
+    server.merge_snapshot({'workoutEntries': [old_parts]})
+    assert server.current_snapshot()['workoutEntries'][0]['bodyParts'] == ['胸部', '核心']
+    for invalid_parts in [['胸部', '胸部'], ['未分类'], ['未知']]:
+        try:
+            server.merge_snapshot({'workoutEntries': [{**with_parts, 'bodyParts': invalid_parts, 'updatedAt': 9002.2}]})
+            raise AssertionError('invalid workout parts accepted')
+        except ValueError:
+            pass
     for exercises in [[dict(name='', sets=[{}])], [dict(name='蹲', sets=[{}] * 101)],
                       [dict(name='蹲', sets=[dict(reps=-1)])], [dict(name='蹲', sets=[dict(reps=1.5)])],
                       [dict(name='蹲', sets=[dict(weight=True)])], [dict(name='蹲', sets=[dict(durationSeconds=0)])]]:

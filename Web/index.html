@@ -99,7 +99,7 @@
     <section class="workspace-grid">
       <article class="card" id="recordCalendarPanel"><h2>记录日历</h2><p class="section-subtitle">最近 30 天 · 从左到右、从上到下按时间排列</p><div id="recordCalendar"></div><p id="recordDayDetail" class="selection-detail" aria-live="polite"></p></article>
       <article class="card ai-workspace" id="aiWorkspace">
-        <div class="section-heading"><div><h2>AI 管理助手</h2><p class="section-subtitle">可新增、修改和删除餐食、身体与目标</p></div><span class="kind-badge">管理员</span></div>
+        <div class="section-heading"><div><h2>AI 管理助手</h2><p class="section-subtitle">可新增、修改和删除餐食、身体、训练与目标</p></div><span class="kind-badge">管理员</span></div>
         <form id="aiForm">
           <details class="ai-config"><summary>AI 服务配置</summary><div class="form-grid"><label>服务商<select id="aiProvider"><option value="deepseek">DeepSeek</option><option value="glm">智谱 GLM</option><option value="dots">Dots</option></select></label><label>模型<input id="aiModel" placeholder="填写模型名称"></label></div><label>API Key<input id="aiKey" type="password" autocomplete="off" placeholder="仅本次页面使用；已配置服务器密钥可留空"></label><p class="upload-hint">将记录与要求发送给所选 AI 服务。密钥不写入浏览器存储。</p></details>
           <label>告诉 AI 你想改什么<textarea id="aiInstruction" required rows="3" maxlength="8000" placeholder="例如：把昨天午餐的热量改成 650 kcal；把 9 月 5 日的体脂率改为 18.5%"></textarea></label>
