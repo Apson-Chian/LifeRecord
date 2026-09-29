@@ -56,7 +56,10 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("训练与提醒") {
+                Section("常用记录与提醒") {
+                    NavigationLink { FavoriteFoodsView() } label: {
+                        SettingsDestinationLabel(title: "常用餐食", subtitle: "固定名称、照片与每份营养", symbol: "fork.knife.circle.fill", tint: .orange)
+                    }
                     NavigationLink { ExerciseLibraryView() } label: {
                         SettingsDestinationLabel(title: "我的动作库", subtitle: "自定义动作与默认组数", symbol: "dumbbell.fill", tint: .teal)
                     }

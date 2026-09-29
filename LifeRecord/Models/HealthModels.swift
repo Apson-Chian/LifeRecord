@@ -93,6 +93,41 @@ final class MealEntry {
 }
 
 @Model
+final class FavoriteFood {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var portion: String
+    var calories: Double
+    var protein: Double
+    var carbs: Double
+    var fat: Double
+    var fiber: Double
+    var note: String
+    @Attribute(.externalStorage) var photoData: Data?
+    var updatedAt: Date
+
+    init(id: UUID = UUID(), name: String, portion: String = "1份", calories: Double = 0, protein: Double = 0,
+         carbs: Double = 0, fat: Double = 0, fiber: Double = 0, note: String = "",
+         photoData: Data? = nil) {
+        self.id = id
+        self.name = name
+        self.portion = portion
+        self.calories = calories
+        self.protein = protein
+        self.carbs = carbs
+        self.fat = fat
+        self.fiber = fiber
+        self.note = note
+        self.photoData = photoData
+        self.updatedAt = .now
+    }
+
+    var nutritionSummary: String {
+        "\(name)（\(portion)）：\(calories.formatted()) kcal；蛋白质 \(protein.formatted()) g、碳水 \(carbs.formatted()) g、脂肪 \(fat.formatted()) g、膳食纤维 \(fiber.formatted()) g。"
+    }
+}
+
+@Model
 final class BodyMetric {
     @Attribute(.unique) var id: UUID
     var date: Date

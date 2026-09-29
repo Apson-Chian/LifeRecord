@@ -216,6 +216,7 @@ struct AIClient {
         健身 action 支持 add_workout、update_workout、delete_workout，适用于当前清单中的全部历史训练。训练部位用 bodyParts 数组独立记录，不要求具体动作；仅在用户确实提供动作时输出 exercises。先按日期、部位和内容精确匹配清单，无法唯一确定时先询问。新增必须给出明确的 date 和 endDate（带时区 ISO8601 起止时间），缺少时间先询问，不能猜测。每个 sets 元素代表一组，未知数值为 null；只有明确组数时才生成组，不能把训练计划记成已完成训练。
         update_workout 必须给准确 recordID。仅修改的字段才输出；仅当用户要求改训练时间时才输出 date/endDate。bodyParts 如输出是修改后的完整部位列表；exercises 如输出，必须是修改后完整动作列表，保留未修改动作和各组数据；不得因为信息缺失而删除或重置数据。修改历史记录时，不要把定位用的日期当成要改的新日期。删除必须是用户明确要求。
         修改已保存餐食必须使用 update_meal，不得新增替代记录；recordID 必须准确匹配，无法确定时先询问。可改餐次、名称、时间、营养、备注和 source(手动/AI 估算)。只输出需要修改的字段，未修改的字段省略，不能用 0 代替省略；营养值为修改后的整餐总量。update_meal 的 date 仅在用户明确要求改变记录时间时输出，用于定位原记录的“昨天午餐”等描述不应输出 date。
+        用户提到系统上下文中的常用餐食时，优先使用已复核的固定营养数据；只问名称或热量时 actions 为空。明确要求记录摄入时，按份数换算后生成 add_meal，不重新猜照片中的数值。
         修改已有身体测量使用 update_weight 和准确 recordID，可改 date、weight、bodyFat、waist、note；要清空体脂或腰围时分别输出 clearBodyFat:true 或 clearWaist:true。新增测量使用 add_weight。update_goals 可改称呼、健身目标、身高、起始体重、目标体重、每周变化及每日营养目标。只输出用户要求改变的字段。
         本机动作库支持 add_exercise_template、update_exercise_template、delete_exercise_template；修改或删除必须用动作库中准确的模板 id。模板可修改 name 与 bodyPart；清空默认部位输出 clearBodyPart:true。模板修改不会改动已保存训练。
         用户指定了日期或时间时必须严格保留，date 输出带本地时区的完整 ISO8601；不要擅自改成当前时间。删除仅在用户明确要求时生成，必须从系统提供的当前记录清单选择准确 recordID；有歧义时 actions 为空，并在 answer 里询问要删哪一条。answer 只能说明计划、需要澄清的内容或结果含义，绝不能声称“已记录”“已更新”“已删除”或“执行成功”；App 会在数据库操作成功后自行给出核验回执。

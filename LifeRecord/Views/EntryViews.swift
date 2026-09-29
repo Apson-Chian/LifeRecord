@@ -22,6 +22,7 @@ struct AddMealView: View {
     @State private var isAnalyzing = false
     @State private var isSaving = false
     @State private var showsCamera = false
+    @State private var showsFavorites = false
     @State private var isRequestingCamera = false
     @State private var errorMessage: String?
     @State private var wasAIAnalyzed = false
@@ -99,6 +100,7 @@ struct AddMealView: View {
                 }
 
                 Section("记录") {
+                    Button("从常用餐食填入", systemImage: "fork.knife.circle") { showsFavorites = true }
                     Picker("餐次", selection: $kind) {
                         ForEach(MealKind.allCases) { Text($0.rawValue).tag($0) }
                     }
@@ -143,6 +145,17 @@ struct AddMealView: View {
                     Task { await addCameraPhoto(image) }
                 }
                 .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showsFavorites) {
+                NavigationStack {
+                    FavoriteFoodsView(onSelect: { food in
+                        draft = MealDraft(name: food.name, calories: food.calories, protein: food.protein,
+                                          carbs: food.carbs, fat: food.fat, fiber: food.fiber,
+                                          note: [food.portion, food.note].filter { !$0.isEmpty }.joined(separator: " · "))
+                        imageData = food.photoData.map { [$0] } ?? []
+                        wasAIAnalyzed = false
+                    })
+                }
             }
         }
     }

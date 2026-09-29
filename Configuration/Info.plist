@@ -49,9 +49,11 @@
 		<string>lifetrack</string>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>选择食物照片用于 AI 营养估算。</string>
+	<string>选择餐食和常用食品照片用于记录与 AI 营养估算。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>将餐食照片保存到你的系统相册。</string>
 	<key>NSCameraUsageDescription</key>
-	<string>拍摄餐食照片用于 AI 营养估算和饮食记录。</string>
+	<string>拍摄餐食和常用食品照片用于 AI 营养估算与饮食记录。</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIApplicationSceneManifest</key>

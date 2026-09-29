@@ -9,6 +9,7 @@ struct MealPhotoView: View {
     @Environment(SyncCoordinator.self) private var syncCoordinator
     let imageID: String
     var preview = false
+    var onZoomChange: ((Bool) -> Void)? = nil
     @State private var image: UIImage?
     @State private var errorMessage: String?
     @State private var retry = 0
@@ -19,7 +20,7 @@ struct MealPhotoView: View {
                 preview ? Color.black : Color(.tertiarySystemFill)
                 if let image {
                     if preview {
-                        ZoomableMealPhoto(image: image)
+                        ZoomableMealPhoto(image: image, onZoomChange: onZoomChange)
                     } else {
                         Image(uiImage: image).resizable().scaledToFill()
                             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -86,8 +87,13 @@ struct MealPhotoView: View {
 
 struct MealPhotoViewer: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(SyncCoordinator.self) private var syncCoordinator
     let imageIDs: [String]
     @State private var selection: String
+    @State private var dragOffset: CGFloat = 0
+    @State private var isZoomed = false
+    @State private var isSavingPhoto = false
+    @State private var photoNotice: String?
 
     init(imageIDs: [String], initialID: String) {
         var seen = Set<String>()
@@ -101,7 +107,9 @@ struct MealPhotoViewer: View {
                 ForEach(imageIDs, id: \.self) { id in
                     // Keep full-size decoding bounded to the visible page and its neighbors.
                     if abs((imageIDs.firstIndex(of: id) ?? 0) - (imageIDs.firstIndex(of: selection) ?? 0)) <= 1 {
-                        MealPhotoView(imageID: id, preview: true).tag(id)
+                        MealPhotoView(imageID: id, preview: true, onZoomChange: { zoomed in
+                            if id == selection { isZoomed = zoomed }
+                        }).tag(id)
                     } else {
                         Color.black.tag(id)
                     }
@@ -109,9 +117,32 @@ struct MealPhotoViewer: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .background(.black)
+            .offset(y: dragOffset)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 18)
+                    .onChanged { value in
+                        guard !isZoomed, value.translation.height > 0,
+                              abs(value.translation.height) > abs(value.translation.width) * 1.2 else { return }
+                        dragOffset = value.translation.height
+                    }
+                    .onEnded { value in
+                        guard dragOffset > 0 else { return }
+                        if dragOffset > 110 || value.predictedEndTranslation.height > 180 {
+                            dismiss()
+                        } else {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) { dragOffset = 0 }
+                        }
+                    }
+            )
+            .onChange(of: selection) { _, _ in isZoomed = false; dragOffset = 0 }
             .navigationTitle("\((imageIDs.firstIndex(of: selection) ?? 0) + 1) / \(imageIDs.count)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(isSavingPhoto ? "保存中…" : "保存到相册", systemImage: "square.and.arrow.down") {
+                        Task { await saveCurrentPhoto() }
+                    }.disabled(isSavingPhoto)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("关闭", systemImage: "xmark") { dismiss() }
                 }
@@ -121,7 +152,7 @@ struct MealPhotoViewer: View {
                     Button { move(-1) } label: {
                         Image(systemName: "chevron.left").frame(width: 44, height: 44)
                     }.disabled(selection == imageIDs.first).accessibilityLabel("上一张照片")
-                    Text("左右滑动切换 · 双指或双击缩放")
+                    Text("左右切换 · 下滑关闭 · 双指缩放")
                         .font(.caption).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .multilineTextAlignment(.center)
@@ -134,6 +165,22 @@ struct MealPhotoViewer: View {
             }
         }
         .preferredColorScheme(.dark)
+        .alert("餐食照片", isPresented: Binding(get: { photoNotice != nil }, set: { if !$0 { photoNotice = nil } })) {
+            Button("好") { photoNotice = nil }
+        } message: { Text(photoNotice ?? "") }
+    }
+
+    @MainActor
+    private func saveCurrentPhoto() async {
+        isSavingPhoto = true
+        defer { isSavingPhoto = false }
+        do {
+            let data = try await syncCoordinator.mealPhotoData(imageID: selection)
+            try await PhotoLibrarySaver.save(data)
+            photoNotice = "已保存到系统相册。"
+        } catch {
+            photoNotice = "保存失败：\(error.localizedDescription)"
+        }
     }
 
     private func move(_ offset: Int) {
@@ -144,11 +191,16 @@ struct MealPhotoViewer: View {
 
 private struct ZoomableMealPhoto: UIViewRepresentable {
     let image: UIImage
+    var onZoomChange: ((Bool) -> Void)?
     func makeUIView(context: Context) -> PhotoZoomScrollView { PhotoZoomScrollView() }
-    func updateUIView(_ view: PhotoZoomScrollView, context: Context) { view.setImage(image) }
+    func updateUIView(_ view: PhotoZoomScrollView, context: Context) {
+        view.onZoomChange = onZoomChange
+        view.setImage(image)
+    }
 }
 
 private final class PhotoZoomScrollView: UIScrollView, UIScrollViewDelegate {
+    var onZoomChange: ((Bool) -> Void)?
     private let photo = UIImageView()
     private var previousSize = CGSize.zero
 
@@ -192,7 +244,10 @@ private final class PhotoZoomScrollView: UIScrollView, UIScrollViewDelegate {
         return super.gestureRecognizerShouldBegin(gestureRecognizer)
     }
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { photo }
-    func scrollViewDidZoom(_ scrollView: UIScrollView) { centerPhoto() }
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centerPhoto()
+        onZoomChange?(zoomScale > minimumZoomScale + 0.01)
+    }
     private func centerPhoto() {
         photo.center = CGPoint(x: max(contentSize.width, bounds.width) / 2,
                                y: max(contentSize.height, bounds.height) / 2)
