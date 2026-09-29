@@ -152,10 +152,10 @@ struct AIClient {
 
         当前本地时间：\(currentTime)
         只输出 JSON：
-        {"answer":"给用户的自然语言回答","actions":[{"type":"add_workout|update_workout|delete_workout|add_meal|update_meal|add_weight|update_goals|delete_meal|delete_weight","recordID":"修改或删除时必填，必须来自当前记录清单","date":"带时区的 ISO8601，可选","mealKind":"早餐|午餐|晚餐|加餐","name":"可选","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"weight":0,"bodyFat":0,"targetWeight":0,"calorieGoal":0,"proteinGoal":0,"carbsGoal":0,"fatGoal":0,"note":"可选"}]}
+        {"answer":"给用户的自然语言回答","actions":[{"type":"add_workout|update_workout|delete_workout|add_meal|update_meal|add_weight|update_goals|delete_meal|delete_weight","recordID":"修改或删除时必填，必须来自当前记录清单","date":"训练开始时间或餐食时间，带时区 ISO8601","endDate":"训练结束时间，带时区 ISO8601","exercises":[{"name":"动作","bodyPart":"胸部|背部|肩部|手臂|核心|臀腿|全身|有氧|其他|未分类","sets":[{"reps":8,"weight":40,"durationSeconds":null}]}],"mealKind":"早餐|午餐|晚餐|加餐","name":"可选","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"weight":0,"bodyFat":0,"targetWeight":0,"calorieGoal":0,"proteinGoal":0,"carbsGoal":0,"fatGoal":0,"note":"可选"}]}
         只有用户明确要求新增、修改或删除数据时才生成 actions。例外：只要用户发送的图片明显是其实际摄入的餐食或饮料，且没有明确说“只分析/不要记录”，就视为明确的记录请求；必须识别整份餐食、估算营养并返回 add_meal action。配料表、商品包装或菜单图片若无法确认已经摄入，则只分析、不记录。普通问答 actions 必须为空。
-        健身 action 支持 add_workout、update_workout、delete_workout。新增必须给出明确的 date 和 endDate（带时区 ISO8601 起止时间），缺少时间先询问，不能猜测。exercises 格式为 [{"name":"动作","sets":[{"reps":8,"weight":40,"durationSeconds":null}]}]，每个元素代表一组，未知数值为 null；只有明确组数时才生成组，不能把训练计划记成已完成训练。
-        update_workout 必须给准确 recordID。仅修改的字段才输出；exercises 如输出，必须是修改后完整动作列表，保留未修改动作和组。删除必须是用户明确要求。
+        健身 action 支持 add_workout、update_workout、delete_workout，适用于当前清单中的全部历史训练。用户可以用自然语言要求补全、纠正或删除以前的训练；先按日期、动作和内容精确匹配清单，无法唯一确定时先询问。新增必须给出明确的 date 和 endDate（带时区 ISO8601 起止时间），缺少时间先询问，不能猜测。exercises 格式为 [{"name":"动作","bodyPart":"胸部|背部|肩部|手臂|核心|臀腿|全身|有氧|其他|未分类","sets":[{"reps":8,"weight":40,"durationSeconds":null}]}]，每个 sets 元素代表一组，未知数值为 null；只有明确组数时才生成组，不能把训练计划记成已完成训练。
+        update_workout 必须给准确 recordID。仅修改的字段才输出；仅当用户要求改训练时间时才输出 date/endDate。exercises 如输出，必须是修改后完整动作列表，保留未修改动作、训练部位和各组数据；不得因为信息缺失而删除或重置数据。修改历史记录时，不要把定位用的日期当成要改的新日期。删除必须是用户明确要求。
         修改已保存餐食必须使用 update_meal，不得新增替代记录；recordID 必须准确匹配，无法确定时先询问。只输出需要修改的字段，未修改的字段省略，不能用 0 代替省略；营养值为修改后的整餐总量。update_meal 的 date 仅在用户明确要求改变记录时间时输出，用于定位原记录的“昨天午餐”等描述不应输出 date。
         用户指定了日期或时间时必须严格保留，date 输出带本地时区的完整 ISO8601；不要擅自改成当前时间。删除仅在用户明确要求时生成，必须从系统提供的当前记录清单选择准确 recordID；有歧义时 actions 为空，并在 answer 里询问要删哪一条。answer 只能说明计划、需要澄清的内容或结果含义，绝不能声称“已记录”“已更新”“已删除”或“执行成功”；App 会在数据库操作成功后自行给出核验回执。
         图片可能是食物、饮料、营养表、配料表、训练截图或用户希望你分析的任何内容。
@@ -189,7 +189,8 @@ struct AIClient {
             user: #"{"status":"连接成功"}"#,
             images: [],
             wantsJSON: true,
-            apiKeyOverride: apiKey
+            apiKeyOverride: apiKey,
+            compatibilityProbe: true
         )
         guard let data = cleanedJSON(response).data(using: .utf8),
               let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -207,7 +208,8 @@ struct AIClient {
         wantsJSON: Bool,
         apiKeyOverride: String? = nil,
         maxTokensOverride: Int? = nil,
-        temperatureOverride: Double? = nil
+        temperatureOverride: Double? = nil,
+        compatibilityProbe: Bool = false
     ) async throws -> String {
         let override = apiKeyOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let apiKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider) : override
@@ -259,16 +261,18 @@ struct AIClient {
                 ["role": "system", "content": system + (settings.customInstructions.isEmpty ? "" : "\n用户自定义指令：\(settings.customInstructions)")],
                 ["role": "user", "content": userContent]
             ],
-            "temperature": temperatureOverride ?? settings.temperature,
-            "max_tokens": min(max(maxTokensOverride ?? settings.maxTokens, 256), 4_096),
+            "max_tokens": min(max(compatibilityProbe ? 256 : (maxTokensOverride ?? settings.maxTokens), 256), 4_096),
         ]
+        if !compatibilityProbe {
+            body["temperature"] = temperatureOverride ?? settings.temperature
+        }
         // 客户端一次性解码完整回复，明确关闭流式，避免兼容接口修改默认值。
         body["stream"] = false
-        if settings.provider == .dots {
+        if !compatibilityProbe && settings.provider == .dots {
             // Dots 的 Chat Completions 接口使用专有参数控制深度思考，默认为开启。
             // 营养 JSON 和 App 操作需要稳定的最终 content，不能让 reasoning 耗尽输出上限。
             body["chat_template_kwargs"] = ["enable_thinking": false]
-        } else if settings.provider == .deepSeek || settings.provider == .glm {
+        } else if !compatibilityProbe && settings.provider == .deepSeek {
             // 结构化营养数据和 App 操作需要稳定的最终答案；深度思考会占用输出预算，
             // 在较短 max_tokens 下可能只返回 reasoning_content 而没有 content。
             body["thinking"] = ["type": "disabled"]
@@ -277,7 +281,7 @@ struct AIClient {
         // 依靠提示词返回 JSON，避免连接正常却因未知参数被 400 拒绝。
         // Some multimodal endpoints accept image content but reject JSON response_format.
         // For image requests, rely on the prompt's JSON schema instead.
-        if wantsJSON && images.isEmpty && settings.provider != .dots {
+        if !compatibilityProbe && wantsJSON && images.isEmpty && settings.provider != .dots {
             body["response_format"] = ["type": "json_object"]
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

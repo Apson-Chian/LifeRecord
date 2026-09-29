@@ -140,11 +140,51 @@ struct WorkoutTrendCard: View {
     private var bodyPartSummaries: some View {
         let finished = workouts.filter { $0.endDate != nil && $0.date <= .now }
         let parts = WorkoutExercise.bodyParts.filter { part in
-            finished.contains { entry in entry.exercises.contains { ($0.bodyPart ?? "未分类") == part } }
+            guard part != "未分类" else { return false }
+            return finished.contains { entry in entry.exercises.contains { ($0.bodyPart ?? "未分类") == part } }
         }
         return Group {
             if parts.isEmpty {
-                ContentUnavailableView("暂无部位训练数据", systemImage: "figure.strengthtraining.traditional", description: Text("编辑训练动作并选择训练部位，即可查看各部位的训练量与周节奏。"))
+                VStack(alignment: .leading, spacing: 12) {
+                    ContentUnavailableView(
+                        "还没有部位统计",
+                        systemImage: "figure.strengthtraining.traditional",
+                        description: Text("部位统计来自每个训练动作的“训练部位”。选择下面一条训练，编辑动作并分类；以后也可以在动作库设置默认部位。")
+                    )
+                    let editable = finished.filter {
+                        $0.exercises.contains { $0.bodyPart == nil || $0.bodyPart == "未分类" }
+                    }.sorted { $0.date > $1.date }
+                    if !editable.isEmpty {
+                        Text("选择一条已有训练来分类")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 16)
+                        ForEach(editable.prefix(8)) { entry in
+                            Button { editing = entry } label: {
+                                HStack(alignment: .top, spacing: 12) {
+                                    Image(systemName: "slider.horizontal.3")
+                                        .foregroundStyle(tint)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(entry.date.formatted(.dateTime.month().day().weekday()))
+                                            .font(.subheadline.weight(.medium))
+                                        Text(entry.exercises.map(\.name).joined(separator: "、"))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(14)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                }
             } else {
                 ForEach(parts, id: \.self) { part in
                     let entries = finished.filter { entry in entry.exercises.contains { ($0.bodyPart ?? "未分类") == part } }

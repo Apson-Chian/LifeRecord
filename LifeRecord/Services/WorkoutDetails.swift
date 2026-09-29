@@ -18,7 +18,8 @@ struct WorkoutExercise: Codable, Identifiable, Equatable {
     static let bodyParts = ["胸部", "背部", "肩部", "手臂", "核心", "臀腿", "全身", "有氧", "其他", "未分类"]
 
     var summary: String {
-        guard !sets.isEmpty else { return name }
+        let labeledName = bodyPart.map { "\(name) · \($0)" } ?? name
+        guard !sets.isEmpty else { return labeledName }
         let rows = sets.enumerated().map { index, set in
             var values: [String] = []
             if let reps = set.reps { values.append("\(reps) 次") }
@@ -26,14 +27,15 @@ struct WorkoutExercise: Codable, Identifiable, Equatable {
             if let seconds = set.durationSeconds { values.append("\(seconds) 秒") }
             return "第 \(index + 1) 组：" + (values.isEmpty ? "未填写数值" : values.joined(separator: " · "))
         }
-        return "\(name)（\(sets.count) 组）\n" + rows.joined(separator: "\n")
+        return "\(labeledName)（\(sets.count) 组）\n" + rows.joined(separator: "\n")
     }
 
     static func validate(_ exercises: [Self]) throws {
         guard exercises.count <= 50 else { throw WorkoutDetailError.invalid }
         for exercise in exercises {
             guard !exercise.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  exercise.name.count <= 100, (0...100).contains(exercise.sets.count) else { throw WorkoutDetailError.invalid }
+                  exercise.name.count <= 100, (0...100).contains(exercise.sets.count),
+                  exercise.bodyPart.map({ bodyParts.contains($0) }) ?? true else { throw WorkoutDetailError.invalid }
             for set in exercise.sets {
                 guard set.reps.map({ (1...10000).contains($0) }) ?? true,
                       set.weight.map({ $0.isFinite && (0...2000).contains($0) }) ?? true,
@@ -52,6 +54,7 @@ struct ExerciseTemplate: Codable, Identifiable {
     var id = UUID()
     var name: String
     var sets: Int = 3
+    var bodyPart: String? = nil
 }
 
 enum ExerciseLibrary {

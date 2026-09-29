@@ -465,7 +465,13 @@ private struct DateNavigator: View {
                 .stroke(.white.opacity(0.22), lineWidth: 0.5)
         }
         .sheet(isPresented: $isShowingCalendar) {
-            RecordCalendarView(selectedDate: $selectedDate, recordedDates: recordedDates)
+            RecordCalendarView(
+                selectedDate: $selectedDate,
+                recordedDates: recordedDates,
+                meals: meals,
+                proteinGoal: proteinGoal,
+                carbsGoal: carbsGoal
+            )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -499,7 +505,7 @@ private struct DateNavigator: View {
                     day: calendar.component(.day, from: date)
                 )
                 .frame(width: 42, height: 42)
-                .opacity(hasRecord || isSelected ? 1 : 0.34)
+                .opacity(hasRecord || isSelected ? 1 : 0.72)
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
@@ -573,6 +579,7 @@ private struct MiniNutritionRings: View {
     let proteinProgress: Double
     let carbsProgress: Double
     let day: Int
+    var dayColor: Color = .secondary
 
     var body: some View {
         ZStack {
@@ -581,7 +588,7 @@ private struct MiniNutritionRings: View {
             ActivityRing(progress: Double(mealCount) / 4, color: AppTheme.meals, lineWidth: 5).padding(12.5)
             Text("\(day)")
                 .font(.system(size: 8, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(dayColor)
         }
         .accessibilityHidden(true)
     }
@@ -614,13 +621,25 @@ private struct RecordCalendarView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var selectedDate: Date
     let recordedDates: Set<Date>
+    let meals: [MealEntry]
+    let proteinGoal: Double
+    let carbsGoal: Double
 
     private let calendar = Calendar.current
     @State private var visibleMonth: Date
 
-    init(selectedDate: Binding<Date>, recordedDates: Set<Date>) {
+    init(
+        selectedDate: Binding<Date>,
+        recordedDates: Set<Date>,
+        meals: [MealEntry],
+        proteinGoal: Double,
+        carbsGoal: Double
+    ) {
         _selectedDate = selectedDate
         self.recordedDates = recordedDates
+        self.meals = meals
+        self.proteinGoal = proteinGoal
+        self.carbsGoal = carbsGoal
         _visibleMonth = State(
             initialValue: Calendar.current.dateInterval(of: .month, for: selectedDate.wrappedValue)?.start
                 ?? selectedDate.wrappedValue
@@ -676,13 +695,22 @@ private struct RecordCalendarView: View {
                     }
                 }
 
-                HStack(spacing: 7) {
-                    Circle().fill(AppTheme.recorded).frame(width: 6, height: 6)
-                    Text("绿点表示当天已有记录")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+                HStack(spacing: 10) {
+                    HStack(spacing: 5) {
+                        Circle().fill(AppTheme.protein).frame(width: 6, height: 6)
+                        Circle().fill(AppTheme.carbs).frame(width: 6, height: 6)
+                        Circle().fill(AppTheme.meals).frame(width: 6, height: 6)
+                        Text("圆环：蛋白质、碳水、用餐次数")
+                    }
+                    HStack(spacing: 5) {
+                        Circle().fill(AppTheme.recorded).frame(width: 6, height: 6)
+                        Text("有记录")
+                    }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 16)
@@ -700,22 +728,34 @@ private struct RecordCalendarView: View {
         let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
         let isToday = calendar.isDateInToday(date)
         let hasRecord = recordedDates.contains(calendar.startOfDay(for: date))
+        let dayMeals = meals.filter { calendar.isDate($0.date, inSameDayAs: date) }
+        let protein = dayMeals.reduce(0) { $0 + $1.protein }
+        let carbs = dayMeals.reduce(0) { $0 + $1.carbs }
 
         return Button {
             selectedDate = date
             dismiss()
         } label: {
             VStack(spacing: 2) {
-                Text("\(calendar.component(.day, from: date))")
-                    .font(.subheadline.weight(isSelected ? .bold : .regular).monospacedDigit())
-                    .foregroundStyle(isSelected ? Color.white : Color.primary)
-                    .frame(width: 32, height: 30)
-                    .background(isSelected ? AppTheme.accent : Color.clear, in: Circle())
-                    .overlay {
-                        if isToday && !isSelected {
-                            Circle().stroke(AppTheme.accent.opacity(0.65), lineWidth: 1)
-                        }
+                ZStack {
+                    if isSelected {
+                        Circle().fill(AppTheme.accent).frame(width: 34, height: 34)
                     }
+                    MiniNutritionRings(
+                        mealCount: dayMeals.count,
+                        proteinProgress: protein / max(proteinGoal, 1),
+                        carbsProgress: carbs / max(carbsGoal, 1),
+                        day: calendar.component(.day, from: date),
+                        dayColor: isSelected ? .white : .primary
+                    )
+                    .frame(width: 34, height: 34)
+                }
+                .overlay {
+                    if isToday && !isSelected {
+                        Circle().stroke(AppTheme.accent.opacity(0.65), lineWidth: 1)
+                            .frame(width: 39, height: 39)
+                    }
+                }
                 Circle()
                     .fill(hasRecord ? AppTheme.recorded : Color.clear)
                     .frame(width: 5, height: 5)

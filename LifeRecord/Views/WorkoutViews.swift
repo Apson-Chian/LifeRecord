@@ -118,12 +118,20 @@ struct WorkoutEditor: View {
                 Section {
                     Menu("从动作库添加", systemImage: "list.bullet") {
                         ForEach(ExerciseLibrary.decode(libraryRaw)) { template in
-                            Button(template.name) { exercises.append(.init(name: template.name, sets: [])) }
+                            Button {
+                                exercises.append(.init(name: template.name, sets: [], bodyPart: template.bodyPart))
+                            } label: {
+                                if let bodyPart = template.bodyPart {
+                                    Text("\(template.name) · \(bodyPart)")
+                                } else {
+                                    Text(template.name)
+                                }
+                            }
                         }
                     }.disabled(ExerciseLibrary.decode(libraryRaw).isEmpty || exercises.count >= 50)
                     Button("添加自定义动作", systemImage: "plus") { exercises.append(.init(name: "", sets: [])) }.disabled(exercises.count >= 50)
                     NavigationLink("管理我的动作库") { ExerciseLibraryView() }
-                } header: { Text("训练动作") } footer: { Text("选中动作即可保存；需要记录组数、次数、重量或时长时，展开动作填写。") }
+                } header: { Text("训练动作") } footer: { Text("添加动作后可直接选择训练部位；动作库里的默认部位会自动带入。组数、次数、重量和时长按需填写。") }
                 if !exercises.isEmpty {
                     Section("已选动作") {
                         ForEach($exercises) { $exercise in
