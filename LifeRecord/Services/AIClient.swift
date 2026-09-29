@@ -261,18 +261,16 @@ struct AIClient {
                 ["role": "system", "content": system + (settings.customInstructions.isEmpty ? "" : "\n用户自定义指令：\(settings.customInstructions)")],
                 ["role": "user", "content": userContent]
             ],
-            "max_tokens": min(max(compatibilityProbe ? 256 : (maxTokensOverride ?? settings.maxTokens), 256), 4_096),
+            "max_tokens": min(max(compatibilityProbe ? 1_024 : (maxTokensOverride ?? settings.maxTokens), 256), 4_096),
         ]
-        if !compatibilityProbe {
-            body["temperature"] = temperatureOverride ?? settings.temperature
-        }
+        body["temperature"] = temperatureOverride ?? settings.temperature
         // 客户端一次性解码完整回复，明确关闭流式，避免兼容接口修改默认值。
         body["stream"] = false
-        if !compatibilityProbe && settings.provider == .dots {
+        if settings.provider == .dots {
             // Dots 的 Chat Completions 接口使用专有参数控制深度思考，默认为开启。
             // 营养 JSON 和 App 操作需要稳定的最终 content，不能让 reasoning 耗尽输出上限。
             body["chat_template_kwargs"] = ["enable_thinking": false]
-        } else if !compatibilityProbe && settings.provider == .deepSeek {
+        } else if settings.provider == .deepSeek || settings.provider == .glm {
             // 结构化营养数据和 App 操作需要稳定的最终答案；深度思考会占用输出预算，
             // 在较短 max_tokens 下可能只返回 reasoning_content 而没有 content。
             body["thinking"] = ["type": "disabled"]
