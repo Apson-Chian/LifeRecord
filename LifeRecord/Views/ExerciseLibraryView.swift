@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct ExerciseLibraryView: View {
     @AppStorage(ExerciseLibrary.key) private var raw = "[]"
@@ -62,27 +63,51 @@ struct ExerciseLibraryView: View {
 
 struct WorkoutBodyPartsPicker: View {
     @Binding var selection: [String]
+    @Query private var workouts: [WorkoutEntry]
+    @AppStorage(WorkoutBodyParts.key) private var catalogRaw = ""
+    @State private var newPart = ""
+    @State private var error: String?
     private let columns = [GridItem(.adaptive(minimum: 64), spacing: 8)]
 
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-            ForEach(WorkoutBodyParts.choices, id: \.self) { part in
-                let selected = selection.contains(part)
-                Button {
-                    if selected { selection.removeAll { $0 == part } }
-                    else { selection = WorkoutBodyParts.normalized(selection + [part]) }
-                } label: {
-                    Text(part)
-                        .font(.subheadline.weight(selected ? .semibold : .regular))
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                        .background(selected ? Color.teal.opacity(0.16) : Color(.tertiarySystemGroupedBackground), in: Capsule())
-                        .overlay(Capsule().strokeBorder(selected ? Color.teal : Color.clear, lineWidth: 1))
+        VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                ForEach(WorkoutBodyParts.normalized(WorkoutBodyParts.choices + workouts.flatMap(\.bodyParts) + selection), id: \.self) { part in
+                    let selected = selection.contains(part)
+                    Button {
+                        if selected { selection.removeAll { $0 == part } }
+                        else { selection = WorkoutBodyParts.normalized(selection + [part]) }
+                    } label: {
+                        Text(part)
+                            .font(.subheadline.weight(selected ? .semibold : .regular))
+                            .frame(maxWidth: .infinity, minHeight: 40)
+                            .background(selected ? Color.teal.opacity(0.16) : Color(.tertiarySystemGroupedBackground), in: Capsule())
+                            .overlay(Capsule().strokeBorder(selected ? Color.teal : Color.clear, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(selected ? Color.teal : Color.primary)
+                    .accessibilityValue(selected ? "已选择" : "未选择")
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(selected ? Color.teal : Color.primary)
-                .accessibilityValue(selected ? "已选择" : "未选择")
             }
+            HStack {
+                TextField("自定义部位名称", text: $newPart)
+                    .textInputAutocapitalization(.never)
+                Button("添加") { addPart() }
+                    .disabled(newPart.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            if let error { Text(error).font(.caption).foregroundStyle(.red) }
         }
+    }
+
+    private func addPart() {
+        let name = newPart.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard WorkoutBodyParts.isValid(name), !WorkoutBodyParts.choices.contains(name) else {
+            error = "部位名称需在 30 字以内，且不能重复。"; return
+        }
+        WorkoutBodyParts.saveChoices(WorkoutBodyParts.choices + [name])
+        catalogRaw = UserDefaults.standard.string(forKey: WorkoutBodyParts.key) ?? ""
+        selection = WorkoutBodyParts.normalized(selection + [name])
+        newPart = ""; error = nil
     }
 }
 
@@ -145,13 +170,15 @@ struct WorkoutExerciseFields: View {
 private struct TrainingBodyPartPicker: View {
     let title: String
     @Binding var selection: String?
+    @Query private var workouts: [WorkoutEntry]
+    @AppStorage(WorkoutBodyParts.key) private var catalogRaw = ""
     private let columns = [GridItem(.adaptive(minimum: 64), spacing: 8)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                ForEach(WorkoutExercise.bodyParts, id: \.self) { part in
+                ForEach(WorkoutBodyParts.normalized(WorkoutBodyParts.choices + workouts.flatMap(\.bodyParts) + [selection ?? ""]) + ["未分类"], id: \.self) { part in
                     let selected = (selection ?? "未分类") == part
                     Button {
                         selection = part == "未分类" ? nil : part

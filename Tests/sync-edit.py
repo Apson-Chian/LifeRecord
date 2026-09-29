@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory() as folder:
     old_parts['updatedAt'] = 9002.1
     server.merge_snapshot({'workoutEntries': [old_parts]})
     assert server.current_snapshot()['workoutEntries'][0]['bodyParts'] == ['胸部', '核心']
-    for invalid_parts in [['胸部', '胸部'], ['未分类'], ['未知']]:
+    for invalid_parts in [['胸部', '胸部'], ['未分类'], [' 带空格 ']]:
         try:
             server.merge_snapshot({'workoutEntries': [{**with_parts, 'bodyParts': invalid_parts, 'updatedAt': 9002.2}]})
             raise AssertionError('invalid workout parts accepted')

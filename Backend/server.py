@@ -112,6 +112,12 @@ def valid_number(value: object, minimum: float = 0, maximum: float = 1e9) -> boo
     return not isinstance(value, bool) and isinstance(value, (int, float)) and minimum <= float(value) <= maximum
 
 
+def valid_body_part(value: object) -> bool:
+    return (isinstance(value, str) and 1 <= len(value) <= 30
+            and value == value.strip() and value != "未分类"
+            and all(character.isprintable() for character in value))
+
+
 def validate_record(record_type: str, item: dict) -> None:
     if not isinstance(item, dict):
         raise ValueError("record must be an object")
@@ -144,8 +150,8 @@ def validate_record(record_type: str, item: dict) -> None:
         if not isinstance(item.get("note", ""), str) or len(item.get("note", "")) > 10000:
             raise ValueError("invalid workout note")
         body_parts = item.get("bodyParts")
-        if body_parts is not None and (not isinstance(body_parts, list) or len(body_parts) > 9
-                or any(not isinstance(part, str) or part not in ("胸部", "背部", "肩部", "手臂", "核心", "臀腿", "全身", "有氧", "其他") for part in body_parts)
+        if body_parts is not None and (not isinstance(body_parts, list) or len(body_parts) > 30
+                or any(not valid_body_part(part) for part in body_parts)
                 or len(set(body_parts)) != len(body_parts)):
             raise ValueError("invalid workout bodyParts")
         exercises = item.get("exercises", [])
@@ -154,7 +160,7 @@ def validate_record(record_type: str, item: dict) -> None:
         for exercise in exercises:
             if not isinstance(exercise, dict) or not isinstance(exercise.get("name"), str) or not exercise["name"].strip() or len(exercise["name"]) > 100:
                 raise ValueError("invalid exercise name")
-            if exercise.get("bodyPart") is not None and exercise["bodyPart"] not in ("胸部", "背部", "肩部", "手臂", "核心", "臀腿", "全身", "有氧", "其他", "未分类"):
+            if exercise.get("bodyPart") is not None and exercise["bodyPart"] != "未分类" and not valid_body_part(exercise["bodyPart"]):
                 raise ValueError("invalid exercise bodyPart")
             sets = exercise.get("sets")
             if not isinstance(sets, list) or not 0 <= len(sets) <= 100:
@@ -460,7 +466,7 @@ def ai_plan(payload: dict) -> dict:
 删除需要用户明确要求。不要将修改转换成新增，date 为 Unix 秒，保留原时区含义，仅明确修改时间时变更 date。
 body: date,weight(kg),bodyFat(%,null表示未测量),waist(cm或null),note。
 meal: date,kind(早餐/午餐/晚餐/加餐),name,calories(kcal),protein,carbs,fat,fiber(均g),note,source(手动/AI 估算)。
-workout: date 为开始时间，endDate 为结束时间或 null，note 为备注，bodyParts 为本次训练部位数组(胸部/背部/肩部/手臂/核心/臀腿/全身/有氧/其他)，无需填写具体动作；exercises 为可选的完整动作数组。每个动作包含 name、bodyPart(同上或未分类/null)、sets；每组可填 reps、weight、durationSeconds。修改 exercises 时必须保留未要求修改的动作、部位与组数据。
+workout: date 为开始时间，endDate 为结束时间或 null，note 为备注，bodyParts 为本次训练部位数组，可使用已有记录中的自定义部位名称；无需填写具体动作。exercises 为可选的完整动作数组。每个动作包含 name、bodyPart(训练部位名称或未分类/null)、sets；每组可填 reps、weight、durationSeconds。修改 exercises 时必须保留未要求修改的动作、部位与组数据。
 settings 只能 update，字段为 displayName,fitnessGoal(增肌/减脂/维持),height,baselineWeight,targetWeight,weeklyWeightTarget,calorieGoal,proteinGoal,carbsGoal,fatGoal。
 一次最多100项。合理估算必须说明依据。不要擅自改用户未要求的数据。"""
     request = urllib.request.Request(AI_PROVIDERS[provider], data=json.dumps({

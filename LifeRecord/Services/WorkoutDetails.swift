@@ -35,7 +35,7 @@ struct WorkoutExercise: Codable, Identifiable, Equatable {
         for exercise in exercises {
             guard !exercise.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   exercise.name.count <= 100, (0...100).contains(exercise.sets.count),
-                  exercise.bodyPart.map({ bodyParts.contains($0) }) ?? true else { throw WorkoutDetailError.invalid }
+                  exercise.bodyPart.map({ $0 == "未分类" || WorkoutBodyParts.isValid($0) }) ?? true else { throw WorkoutDetailError.invalid }
             for set in exercise.sets {
                 guard set.reps.map({ (1...10000).contains($0) }) ?? true,
                       set.weight.map({ $0.isFinite && (0...2000).contains($0) }) ?? true,
@@ -68,10 +68,32 @@ enum ExerciseLibrary {
 }
 
 enum WorkoutBodyParts {
-    static let choices = WorkoutExercise.bodyParts.filter { $0 != "未分类" }
+    static let key = "workout.bodyPartCatalog"
+    static let defaults = WorkoutExercise.bodyParts.filter { $0 != "未分类" }
+    static var choices: [String] {
+        guard let raw = UserDefaults.standard.string(forKey: key),
+              let data = raw.data(using: .utf8),
+              let saved = try? JSONDecoder().decode([String].self, from: data) else { return defaults }
+        return saved.filter { isValid($0) }
+    }
+
+    static func isValid(_ value: String) -> Bool {
+        value == value.trimmingCharacters(in: .whitespacesAndNewlines)
+            && !value.isEmpty && value != "未分类" && value.count <= 30
+            && value.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) }
+    }
+
+    static func saveChoices(_ values: [String]) {
+        guard values.allSatisfy({ isValid($0) }), Set(values).count == values.count,
+              let data = try? JSONEncoder().encode(values),
+              let raw = String(data: data, encoding: .utf8) else { return }
+        UserDefaults.standard.set(raw, forKey: key)
+    }
 
     static func normalized(_ values: [String]) -> [String] {
-        choices.filter { values.contains($0) }
+        var seen = Set<String>()
+        let valid = values.filter { isValid($0) && seen.insert($0).inserted }
+        return choices.filter { valid.contains($0) } + valid.filter { !choices.contains($0) }
     }
 
     static func fromExercises(_ exercises: [WorkoutExercise]) -> [String] {

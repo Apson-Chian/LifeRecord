@@ -14,6 +14,10 @@ struct WorkoutTrendCard: View {
     @State private var detailCategory = "训练记录"
     @State private var isClassifying = false
     @State private var classificationMessage: String?
+    @State private var renamingPart: PartToRename?
+    @State private var renamedPart = ""
+    @State private var renameError: String?
+    @AppStorage(WorkoutBodyParts.key) private var catalogRaw = ""
     private let tint = Color.teal
     private var completed: [WorkoutEntry] { workouts.filter { $0.endDate != nil && $0.date <= .now } }
     private var days: [Day] {
@@ -142,13 +146,27 @@ struct WorkoutTrendCard: View {
             }
         }.background(AppBackground()).navigationTitle("训练明细")
             .sheet(item: $editing) { WorkoutEditor(entry: $0, date: $0.date) }
+            .sheet(item: $renamingPart) { target in
+                NavigationStack {
+                    Form {
+                        TextField("训练部位名称", text: $renamedPart)
+                        if let renameError { Text(renameError).foregroundStyle(.red) }
+                        Text("保存后，所有使用这个部位的训练记录和动作库会一起更名。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    .navigationTitle("编辑训练部位")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("取消") { renamingPart = nil } }
+                        ToolbarItem(placement: .confirmationAction) { Button("保存") { renamePart(target.name) } }
+                    }
+                }
+                .presentationDetents([.medium])
+            }
     }
 
     private var bodyPartSummaries: some View {
         let finished = workouts.filter { $0.endDate != nil && $0.date <= .now }
-        let parts = WorkoutBodyParts.choices.filter { part in
-            finished.contains { $0.bodyParts.contains(part) }
-        }
+        let parts = Array(Set(finished.flatMap(\.bodyParts))).sorted()
         let unclassified = workouts.filter { $0.bodyParts.isEmpty && (!$0.note.isEmpty || !$0.exercises.isEmpty) }
         return Group {
             NavigationLink { ExerciseLibraryView() } label: {
@@ -172,7 +190,7 @@ struct WorkoutTrendCard: View {
             if parts.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     ContentUnavailableView(
-                        "还没有部位统计",
+                        "还没有训练部位记录",
                         systemImage: "figure.strengthtraining.traditional",
                         description: Text("在训练详情直接选择训练部位；也可以让 AI 根据已有记录归类。")
                     )
@@ -212,37 +230,35 @@ struct WorkoutTrendCard: View {
                 }
             } else {
                 ForEach(parts, id: \.self) { part in
-                    let entries = finished.filter { $0.bodyParts.contains(part) }
-                    let setCount = entries.flatMap(\.exercises).filter { ($0.bodyPart ?? "未分类") == part }.reduce(0) { $0 + $1.sets.count }
-                    let weekly = weeklyPartSessions(entries: entries)
-                    let templates = ExerciseLibrary.decode(libraryRaw).filter { $0.bodyPart == part }
+                    let entries = finished.filter { $0.bodyParts.contains(part) }.sorted { $0.date > $1.date }
                     GlassCard(tint: tint) {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 Text(part).font(.headline)
                                 Spacer()
-                                Text("\(entries.count) 次 · \(setCount) 组").font(.subheadline.weight(.semibold)).foregroundStyle(tint)
+                                Text("\(entries.count) 次").font(.subheadline.weight(.semibold)).foregroundStyle(tint)
                             }
-                            Chart(weekly) { week in
-                                BarMark(x: .value("周", week.date, unit: .weekOfYear), y: .value("训练次数", week.count))
-                                    .foregroundStyle(tint.gradient).cornerRadius(4)
+                            ForEach(entries) { entry in
+                                Button { editing = entry } label: {
+                                    HStack {
+                                        Image(systemName: "calendar")
+                                        Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                        Spacer()
+                                        Image(systemName: "chevron.right").font(.caption)
+                                    }
+                                    .font(.subheadline)
+                                    .padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("编辑\(part)，\(entry.date.formatted(date: .complete, time: .shortened))")
                             }
-                            .chartYScale(domain: 0...max(2, (weekly.map(\.count).max() ?? 0) + 1))
-                            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisValueLabel(format: .dateTime.month().day()) } }
-                            .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { AxisValueLabel() } }
-                            .frame(height: 90)
-                            Text("近 6 周每周训练次数 · 最近一次：\(entries.map(\.date).max()?.formatted(.dateTime.month().day()) ?? "—")")
-                                .font(.caption).foregroundStyle(.secondary)
+                            Button("编辑部位名称", systemImage: "pencil") {
+                                renamedPart = part; renameError = nil; renamingPart = PartToRename(name: part)
+                            }.font(.subheadline)
                             NavigationLink { ExerciseLibraryView(initialBodyPart: part) } label: {
                                 Label("给\(part)添加动作", systemImage: "plus.circle")
                                     .font(.subheadline.weight(.medium))
-                            }
-                            if !templates.isEmpty {
-                                DisclosureGroup("已添加动作 · \(templates.count) 个") {
-                                    ForEach(templates) { template in
-                                        Text(template.name).font(.subheadline)
-                                    }
-                                }.font(.subheadline).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -284,26 +300,44 @@ struct WorkoutTrendCard: View {
         }
     }
 
-    private func weeklyPartSessions(entries: [WorkoutEntry]) -> [Week] {
-        let calendar = Calendar.current
-        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: .now)?.start ?? calendar.startOfDay(for: .now)
-        let starts = (0..<6).compactMap { offset in calendar.date(byAdding: .weekOfYear, value: offset - 5, to: thisWeek) }
-        return starts.map { start in
-            let end = calendar.date(byAdding: .weekOfYear, value: 1, to: start) ?? start
-            let count = entries.filter { $0.date >= start && $0.date < end }.count
-            return Week(date: start, count: count)
+    private func renamePart(_ oldName: String) {
+        let name = renamedPart.trimmingCharacters(in: .whitespacesAndNewlines)
+        let allEntries: [WorkoutEntry]
+        do { allEntries = try context.fetch(FetchDescriptor<WorkoutEntry>()) }
+        catch { renameError = error.localizedDescription; return }
+        guard WorkoutBodyParts.isValid(name),
+              name == oldName || !WorkoutBodyParts.choices.contains(name) && !allEntries.contains(where: { $0.bodyParts.contains(name) }) else {
+            renameError = "请输入不重复且不超过 30 字的名称。"; return
         }
-    }
-
-    private struct Week: Identifiable {
-        let date: Date
-        let count: Int
-        var id: Date { date }
+        if name != oldName {
+            for entry in allEntries where entry.bodyParts.contains(oldName) {
+                entry.bodyParts = entry.bodyParts.map { $0 == oldName ? name : $0 }
+                var exercises = entry.exercises
+                for index in exercises.indices where exercises[index].bodyPart == oldName { exercises[index].bodyPart = name }
+                entry.exercises = exercises
+                entry.updatedAt = .now
+            }
+            var catalog = WorkoutBodyParts.choices
+            if let index = catalog.firstIndex(of: oldName) { catalog[index] = name }
+            else { catalog.append(name) }
+            var templates = ExerciseLibrary.decode(libraryRaw)
+            for index in templates.indices where templates[index].bodyPart == oldName { templates[index].bodyPart = name }
+            do { try context.save() } catch { context.rollback(); renameError = error.localizedDescription; return }
+            WorkoutBodyParts.saveChoices(catalog)
+            catalogRaw = UserDefaults.standard.string(forKey: WorkoutBodyParts.key) ?? ""
+            libraryRaw = ExerciseLibrary.encode(templates)
+            Task { await sync.sync(context: context, settings: settings) }
+        }
+        renamingPart = nil
     }
     private struct Day: Identifiable {
         let date: Date
         let minutes: Double
         let count: Int
         var id: Date { date }
+    }
+    private struct PartToRename: Identifiable {
+        let name: String
+        var id: String { name }
     }
 }

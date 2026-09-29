@@ -660,7 +660,7 @@ struct CoachView: View {
                 } ?? false
                 guard (type == "add_exercise_template" && library.count < 100) || (type == "update_exercise_template" && templateIndex != nil),
                       name.map({ !$0.isEmpty && $0.count <= 100 }) ?? (type == "update_exercise_template"),
-                      action.bodyPart.map({ WorkoutExercise.bodyParts.contains($0) }) ?? true,
+                      action.bodyPart.map({ $0 == "未分类" || WorkoutBodyParts.isValid($0) }) ?? true,
                       !duplicateName,
                       type == "add_exercise_template" || name != nil || action.bodyPart != nil || action.clearBodyPart == true else {
                     rejectedCount += 1
