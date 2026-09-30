@@ -15,7 +15,7 @@ struct WorkoutExercise: Codable, Identifiable, Equatable {
     var bodyPart: String? = nil
     enum CodingKeys: String, CodingKey { case name, sets, bodyPart }
 
-    static let bodyParts = ["胸部", "背部", "肩部", "手臂", "核心", "臀腿", "全身", "有氧", "其他", "未分类"]
+    static let bodyParts = ["胸部", "背部", "肩部", "二头", "三头", "小臂", "核心", "臀腿", "全身", "有氧", "其他", "未分类"]
 
     var summary: String {
         let labeledName = bodyPart.map { "\(name) · \($0)" } ?? name
@@ -70,9 +70,13 @@ enum ExerciseLibrary {
 enum WorkoutBodyParts {
     static let key = "workout.bodyPartCatalog"
     static let defaults = WorkoutExercise.bodyParts.filter { $0 != "未分类" }
+    static let armParts = ["二头", "三头", "小臂"]
     static var choices: [String] {
-        guard let raw = UserDefaults.standard.string(forKey: key),
-              let data = raw.data(using: .utf8),
+        decodedChoices(UserDefaults.standard.string(forKey: key) ?? "")
+    }
+
+    static func decodedChoices(_ raw: String) -> [String] {
+        guard let data = raw.data(using: .utf8),
               let saved = try? JSONDecoder().decode([String].self, from: data) else { return defaults }
         return saved.filter { isValid($0) }
     }
@@ -88,6 +92,13 @@ enum WorkoutBodyParts {
               let data = try? JSONEncoder().encode(values),
               let raw = String(data: data, encoding: .utf8) else { return }
         UserDefaults.standard.set(raw, forKey: key)
+    }
+
+    static func splittingArms(in values: [String]) -> [String] {
+        guard values.contains("手臂") else { return values + armParts.filter { !values.contains($0) } }
+        let preceding = values.prefix { $0 != "手臂" }.filter { !armParts.contains($0) }
+        let remaining = values.drop { $0 != "手臂" }.filter { $0 != "手臂" && !armParts.contains($0) }
+        return Array(preceding) + armParts + Array(remaining)
     }
 
     static func normalized(_ values: [String]) -> [String] {

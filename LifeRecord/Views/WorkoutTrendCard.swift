@@ -8,16 +8,11 @@ struct WorkoutTrendCard: View {
     @Environment(\.modelContext) private var context
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var sync
-    @AppStorage(ExerciseLibrary.key) private var libraryRaw = "[]"
     @State private var selectedDate: Date?
     @State private var editing: WorkoutEntry?
     @State private var detailCategory = "训练记录"
     @State private var isClassifying = false
     @State private var classificationMessage: String?
-    @State private var renamingPart: PartToRename?
-    @State private var renamedPart = ""
-    @State private var renameError: String?
-    @AppStorage(WorkoutBodyParts.key) private var catalogRaw = ""
     private let tint = Color.teal
     private var completed: [WorkoutEntry] { workouts.filter { $0.endDate != nil && $0.date <= .now } }
     private var days: [Day] {
@@ -146,22 +141,6 @@ struct WorkoutTrendCard: View {
             }
         }.background(AppBackground()).navigationTitle("训练明细")
             .sheet(item: $editing) { WorkoutEditor(entry: $0, date: $0.date) }
-            .sheet(item: $renamingPart) { target in
-                NavigationStack {
-                    Form {
-                        TextField("训练部位名称", text: $renamedPart)
-                        if let renameError { Text(renameError).foregroundStyle(.red) }
-                        Text("保存后，所有使用这个部位的训练记录和动作库会一起更名。")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                    .navigationTitle("编辑训练部位")
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) { Button("取消") { renamingPart = nil } }
-                        ToolbarItem(placement: .confirmationAction) { Button("保存") { renamePart(target.name) } }
-                    }
-                }
-                .presentationDetents([.medium])
-            }
     }
 
     private var bodyPartSummaries: some View {
@@ -169,6 +148,11 @@ struct WorkoutTrendCard: View {
         let parts = Array(Set(finished.flatMap(\.bodyParts))).sorted()
         let unclassified = workouts.filter { $0.bodyParts.isEmpty && (!$0.note.isEmpty || !$0.exercises.isEmpty) }
         return Group {
+            NavigationLink { WorkoutBodyPartManagerView() } label: {
+                Label("管理训练部位", systemImage: "slider.horizontal.3")
+                    .font(.subheadline.weight(.medium))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             NavigationLink { ExerciseLibraryView() } label: {
                 Label("管理和添加动作", systemImage: "plus.circle")
                     .font(.subheadline.weight(.medium))
@@ -248,8 +232,10 @@ struct WorkoutTrendCard: View {
                                     Label("选择训练记录", systemImage: "calendar")
                                 }
                                 Spacer()
-                                Button("部位改名", systemImage: "pencil") {
-                                    renamedPart = part; renameError = nil; renamingPart = PartToRename(name: part)
+                                NavigationLink {
+                                    WorkoutBodyPartManagerView(initialRename: part)
+                                } label: {
+                                    Label("部位改名", systemImage: "pencil")
                                 }
                             }
                             .font(.caption)
@@ -293,45 +279,11 @@ struct WorkoutTrendCard: View {
         }
     }
 
-    private func renamePart(_ oldName: String) {
-        let name = renamedPart.trimmingCharacters(in: .whitespacesAndNewlines)
-        let allEntries: [WorkoutEntry]
-        do { allEntries = try context.fetch(FetchDescriptor<WorkoutEntry>()) }
-        catch { renameError = error.localizedDescription; return }
-        guard WorkoutBodyParts.isValid(name),
-              name == oldName || !WorkoutBodyParts.choices.contains(name) && !allEntries.contains(where: { $0.bodyParts.contains(name) }) else {
-            renameError = "请输入不重复且不超过 30 字的名称。"; return
-        }
-        if name != oldName {
-            for entry in allEntries where entry.bodyParts.contains(oldName) {
-                entry.bodyParts = entry.bodyParts.map { $0 == oldName ? name : $0 }
-                var exercises = entry.exercises
-                for index in exercises.indices where exercises[index].bodyPart == oldName { exercises[index].bodyPart = name }
-                entry.exercises = exercises
-                entry.updatedAt = .now
-            }
-            var catalog = WorkoutBodyParts.choices
-            if let index = catalog.firstIndex(of: oldName) { catalog[index] = name }
-            else { catalog.append(name) }
-            var templates = ExerciseLibrary.decode(libraryRaw)
-            for index in templates.indices where templates[index].bodyPart == oldName { templates[index].bodyPart = name }
-            do { try context.save() } catch { context.rollback(); renameError = error.localizedDescription; return }
-            WorkoutBodyParts.saveChoices(catalog)
-            catalogRaw = UserDefaults.standard.string(forKey: WorkoutBodyParts.key) ?? ""
-            libraryRaw = ExerciseLibrary.encode(templates)
-            Task { await sync.sync(context: context, settings: settings) }
-        }
-        renamingPart = nil
-    }
     private struct Day: Identifiable {
         let date: Date
         let minutes: Double
         let count: Int
         var id: Date { date }
-    }
-    private struct PartToRename: Identifiable {
-        let name: String
-        var id: String { name }
     }
 }
 

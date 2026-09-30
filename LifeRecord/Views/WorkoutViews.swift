@@ -121,9 +121,7 @@ struct WorkoutEditor: View {
                         else { LabeledContent("时长", value: "\(Int(end.timeIntervalSince(start) / 60)) 分钟") }
                     }
                 }
-                Section {
-                    WorkoutBodyPartsPicker(selection: $bodyParts)
-                } header: { Text("训练部位") } footer: { Text("直接选择今天练过的部位即可，不必填写具体动作。未选部位时，保存会尝试让 AI 根据训练内容归类。") }
+                bodyPartSection
                 Section {
                     DisclosureGroup(isExpanded: $showsExercises) {
                         Menu("从动作库添加", systemImage: "list.bullet") {
@@ -183,6 +181,24 @@ struct WorkoutEditor: View {
                 }
             }
             .alert("保存失败", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("好") {} } message: { Text(error ?? "") }
+        }
+    }
+    private var bodyPartSection: some View {
+        Section {
+            WorkoutBodyPartsPicker(selection: $bodyParts)
+            NavigationLink {
+                WorkoutBodyPartManagerView(onRename: applyBodyPartRename)
+            } label: {
+                Label("管理训练部位", systemImage: "slider.horizontal.3")
+            }
+        } header: { Text("训练部位") }
+        footer: { Text("直接选择今天练过的部位即可，不必填写具体动作。未选部位时，保存会尝试让 AI 根据训练内容归类。") }
+    }
+
+    private func applyBodyPartRename(_ oldName: String, _ newName: String) {
+        bodyParts = bodyParts.map { $0 == oldName ? newName : $0 }
+        for index in exercises.indices where exercises[index].bodyPart == oldName {
+            exercises[index].bodyPart = newName
         }
     }
     private func generateDraft() {

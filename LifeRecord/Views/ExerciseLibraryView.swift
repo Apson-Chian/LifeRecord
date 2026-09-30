@@ -61,9 +61,156 @@ struct ExerciseLibraryView: View {
     }
 }
 
+struct WorkoutBodyPartManagerView: View {
+    var onRename: ((String, String) -> Void)?
+    @Environment(\.modelContext) private var context
+    @Environment(AppSettings.self) private var settings
+    @Environment(SyncCoordinator.self) private var sync
+    @Query private var workouts: [WorkoutEntry]
+    @AppStorage(WorkoutBodyParts.key) private var catalogRaw = ""
+    @AppStorage(ExerciseLibrary.key) private var libraryRaw = "[]"
+    @State private var newName = ""
+    @State private var editedName = ""
+    @State private var renameTarget: PartName?
+    @State private var message: String?
+
+    init(initialRename: String? = nil, onRename: ((String, String) -> Void)? = nil) {
+        self.onRename = onRename
+        _renameTarget = State(initialValue: initialRename.map(PartName.init))
+        _editedName = State(initialValue: initialRename ?? "")
+    }
+
+    private var historicalParts: [String] {
+        Array(Set(workouts.flatMap(\.bodyParts)).subtracting(choices)).sorted()
+    }
+    private var choices: [String] { WorkoutBodyParts.decodedChoices(catalogRaw) }
+
+    var body: some View {
+        Form {
+            Section {
+                HStack {
+                    TextField("例如：二头、三头、小臂", text: $newName)
+                        .submitLabel(.done)
+                        .onSubmit(addPart)
+                    Button("添加", action: addPart)
+                        .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            } header: { Text("新增训练部位") }
+            if choices.contains("手臂") {
+                Section {
+                    Button("将手臂细分为二头、三头、小臂", systemImage: "square.split.3x1") {
+                        store(WorkoutBodyParts.splittingArms(in: choices))
+                        message = "已加入三个细分部位。旧的手臂训练仍保留，可逐条改成对应部位。"
+                    }
+                }
+            }
+            Section {
+                ForEach(choices, id: \.self) { part in
+                    HStack {
+                        Text(part)
+                        Spacer()
+                        Menu {
+                            Button("改名", systemImage: "pencil") { editedName = part; message = nil; renameTarget = PartName(part) }
+                            Button("从可选部位移除", systemImage: "minus.circle", role: .destructive) {
+                                store(choices.filter { $0 != part })
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .frame(width: 44, height: 36)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("管理\(part)")
+                    }
+                }
+            } header: { Text("以后训练可选的部位") }
+            footer: { Text("可自由添加、改名或移除。移除只影响以后选择，已有训练记录不会丢失。") }
+            if !historicalParts.isEmpty {
+                Section("历史记录中的其他部位") {
+                    ForEach(historicalParts, id: \.self) { part in
+                        HStack {
+                            Text(part)
+                            Spacer()
+                            Button("加入可选部位") { store(choices + [part]) }
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+            if let message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+        }
+        .navigationTitle("管理训练部位")
+        .keyboardDoneButton()
+        .sheet(item: $renameTarget) { target in
+            NavigationStack {
+                Form {
+                    TextField("部位名称", text: $editedName)
+                    Text("改名会同时更新全部历史训练和动作库中的对应部位。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if let message { Text(message).foregroundStyle(.red) }
+                }
+                .navigationTitle("部位改名")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("取消") { renameTarget = nil; message = nil } }
+                    ToolbarItem(placement: .confirmationAction) { Button("保存") { rename(target.name) } }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+    }
+
+    private func store(_ values: [String]) {
+        WorkoutBodyParts.saveChoices(values)
+        catalogRaw = UserDefaults.standard.string(forKey: WorkoutBodyParts.key) ?? ""
+    }
+
+    private func addPart() {
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard WorkoutBodyParts.isValid(name),
+              !choices.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
+            message = "名称需在 30 字以内，且不能与可选部位重复。"; return
+        }
+        store(choices + [name])
+        newName = ""; message = nil
+    }
+
+    private func rename(_ oldName: String) {
+        let name = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard WorkoutBodyParts.isValid(name),
+              name == oldName || !choices.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame })
+                && !workouts.contains(where: { $0.bodyParts.contains(name) }) else {
+            message = "请输入不重复且不超过 30 字的名称。"; return
+        }
+        guard name != oldName else { renameTarget = nil; message = nil; return }
+        for entry in workouts where entry.bodyParts.contains(oldName) {
+            entry.bodyParts = entry.bodyParts.map { $0 == oldName ? name : $0 }
+            var exercises = entry.exercises
+            for index in exercises.indices where exercises[index].bodyPart == oldName { exercises[index].bodyPart = name }
+            entry.exercises = exercises
+            entry.updatedAt = .now
+        }
+        do { try context.save() }
+        catch { context.rollback(); message = error.localizedDescription; return }
+        var updatedChoices = choices
+        if let index = updatedChoices.firstIndex(of: oldName) { updatedChoices[index] = name }
+        else { updatedChoices.append(name) }
+        store(updatedChoices)
+        var templates = ExerciseLibrary.decode(libraryRaw)
+        for index in templates.indices where templates[index].bodyPart == oldName { templates[index].bodyPart = name }
+        libraryRaw = ExerciseLibrary.encode(templates)
+        onRename?(oldName, name)
+        Task { await sync.sync(context: context, settings: settings) }
+        renameTarget = nil; message = nil
+    }
+
+    private struct PartName: Identifiable {
+        let name: String
+        var id: String { name }
+        nonisolated init(_ name: String) { self.name = name }
+    }
+}
+
 struct WorkoutBodyPartsPicker: View {
     @Binding var selection: [String]
-    @Query private var workouts: [WorkoutEntry]
     @AppStorage(WorkoutBodyParts.key) private var catalogRaw = ""
     @State private var newPart = ""
     @State private var error: String?
@@ -72,7 +219,7 @@ struct WorkoutBodyPartsPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                ForEach(WorkoutBodyParts.normalized(WorkoutBodyParts.choices + workouts.flatMap(\.bodyParts) + selection), id: \.self) { part in
+                ForEach(WorkoutBodyParts.normalized(WorkoutBodyParts.decodedChoices(catalogRaw) + selection), id: \.self) { part in
                     let selected = selection.contains(part)
                     Button {
                         if selected { selection.removeAll { $0 == part } }
@@ -170,7 +317,6 @@ struct WorkoutExerciseFields: View {
 private struct TrainingBodyPartPicker: View {
     let title: String
     @Binding var selection: String?
-    @Query private var workouts: [WorkoutEntry]
     @AppStorage(WorkoutBodyParts.key) private var catalogRaw = ""
     private let columns = [GridItem(.adaptive(minimum: 64), spacing: 8)]
 
@@ -178,7 +324,7 @@ private struct TrainingBodyPartPicker: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                ForEach(WorkoutBodyParts.normalized(WorkoutBodyParts.choices + workouts.flatMap(\.bodyParts) + [selection ?? ""]) + ["未分类"], id: \.self) { part in
+                ForEach(WorkoutBodyParts.normalized(WorkoutBodyParts.decodedChoices(catalogRaw) + [selection ?? ""]) + ["未分类"], id: \.self) { part in
                     let selected = (selection ?? "未分类") == part
                     Button {
                         selection = part == "未分类" ? nil : part

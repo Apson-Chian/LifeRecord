@@ -26,6 +26,10 @@ struct WorkoutDetailTests {
         assert(WorkoutBodyParts.isValid("自定义部位") && !WorkoutBodyParts.isValid(" 未分类 "))
         try WorkoutExercise.validate([.init(name: "弹力带", sets: [], bodyPart: "自定义部位")])
         assert(WorkoutBodyParts.fromExercises([.init(name: "卧推", sets: [], bodyPart: "胸部")]) == ["胸部"])
+        assert(WorkoutBodyParts.defaults.contains("二头") && WorkoutBodyParts.defaults.contains("三头") && WorkoutBodyParts.defaults.contains("小臂"))
+        assert(!WorkoutBodyParts.defaults.contains("手臂"))
+        assert(WorkoutBodyParts.splittingArms(in: ["胸部", "手臂", "核心"]) == ["胸部", "二头", "三头", "小臂", "核心"])
+        assert(WorkoutBodyParts.splittingArms(in: ["手臂", "二头", "胸部"]) == ["二头", "三头", "小臂", "胸部"])
         print("PASS: per-set values, AI JSON decoding, round-trip, optional fields, validation and custom library")
     }
 }
