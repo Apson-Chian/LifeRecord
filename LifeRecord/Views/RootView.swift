@@ -25,44 +25,29 @@ struct RootView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            TodayView()
-                .tabItem { Label("今日", systemImage: "house.fill") }
-                .tag(0)
-            ProgressDashboardView()
-                .tabItem { Label("趋势", systemImage: "chart.line.uptrend.xyaxis") }
-                .tag(1)
-            CoachView()
-                .tabItem { Label("教练", systemImage: "wand.and.sparkles") }
-                .tag(2)
-            SettingsView()
-                .tabItem { Label("设置", systemImage: "gearshape.fill") }
-                .tag(3)
-        }
+        tabs
         .environmentObject(coachTaskCenter)
-        .task {
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
             DemoDataService.installIfNeeded(context: modelContext)
             refreshReminders()
             await syncCoordinator.sync(context: modelContext, settings: settings)
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
-                guard !Task.isCancelled else { break }
+                do { try await Task.sleep(for: .seconds(15)) }
+                catch { return }
+                guard !Task.isCancelled, scenePhase == .active else { return }
                 await syncCoordinator.sync(context: modelContext, settings: settings)
             }
         }
         .onChange(of: syncFingerprint) { _, _ in
             refreshReminders()
-            Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
+            syncWhenActive()
         }
         .onChange(of: settings.profileUpdatedAt) { _, _ in
-            Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
+            syncWhenActive()
         }
         .onChange(of: scenePhase) { _, phase in
             updateCoachVisibility(for: phase)
-            refreshReminders()
-            if phase == .active {
-                Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
-            }
         }
         .onChange(of: reminderRaw) { _, _ in refreshReminders() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in refreshReminders() }
@@ -79,6 +64,42 @@ struct RootView: View {
         .fullScreenCover(isPresented: $showsOnboarding) {
             OnboardingView()
         }
+    }
+
+    @ViewBuilder
+    private var tabs: some View {
+        if #available(iOS 18.0, *) {
+            TabView(selection: $selectedTab) {
+                Tab("今日", systemImage: "house.fill", value: 0) { TodayView() }
+                Tab("趋势", systemImage: "chart.line.uptrend.xyaxis", value: 1) { ProgressDashboardView() }
+                Tab("教练", systemImage: "wand.and.sparkles", value: 2) { CoachView() }
+                Tab("设置", systemImage: "gearshape.fill", value: 3) { SettingsView() }
+            }
+        } else {
+            legacyTabs
+        }
+    }
+
+    private var legacyTabs: some View {
+        TabView(selection: $selectedTab) {
+            TodayView()
+                .tabItem { Label("今日", systemImage: "house.fill") }
+                .tag(0)
+            ProgressDashboardView()
+                .tabItem { Label("趋势", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(1)
+            CoachView()
+                .tabItem { Label("教练", systemImage: "wand.and.sparkles") }
+                .tag(2)
+            SettingsView()
+                .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                .tag(3)
+        }
+    }
+
+    private func syncWhenActive() {
+        guard scenePhase == .active else { return }
+        Task { await syncCoordinator.sync(context: modelContext, settings: settings) }
     }
 
     private func refreshReminders() {

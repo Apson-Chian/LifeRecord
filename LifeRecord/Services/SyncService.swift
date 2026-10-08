@@ -114,6 +114,7 @@ final class SyncCoordinator {
     }
 
     func sync(context: ModelContext, settings: AppSettings) async {
+        guard !Task.isCancelled else { return }
         let key = KeychainStore.loadSyncKey().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         if isSyncing {
@@ -129,12 +130,18 @@ final class SyncCoordinator {
         repeat {
             needsAnotherSync = false
             do {
+                try Task.checkCancellation()
                 let outbound = try makeSnapshot(context: context, settings: settings)
                 let inbound = try await exchange(outbound, key: key)
+                try Task.checkCancellation()
                 try apply(inbound, context: context, settings: settings)
                 lastSyncedAt = .now
                 statusMessage = "所有设备已同步"
             } catch {
+                if Task.isCancelled || error is CancellationError {
+                    statusMessage = "同步已暂停，等待下次同步"
+                    break
+                }
                 lastError = SyncFailureDescription.message(for: error)
                 statusMessage = "同步失败"
                 break

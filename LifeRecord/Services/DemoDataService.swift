@@ -55,7 +55,6 @@ enum DemoDataService {
         // 30 天完整饮食，偶尔留一个缺口用于展示记录连续性。
         for offset in (0..<30).reversed() {
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
-            let progress = Double(29 - offset)
             let trainingDay = offset % 3 != 2
             let skippedDinner = offset == 10
 
