@@ -26,6 +26,7 @@ struct AddMealView: View {
     @State private var isRequestingCamera = false
     @State private var errorMessage: String?
     @State private var wasAIAnalyzed = false
+    @State private var analyzedInput = ""
     @FocusState private var focusedField: Field?
 
     private enum Field { case description, name, nutrition, note }
@@ -154,6 +155,8 @@ struct AddMealView: View {
                                           note: [food.portion, food.note].filter { !$0.isEmpty }.joined(separator: " · "))
                         imageData = food.photoData.map { [$0] } ?? []
                         wasAIAnalyzed = false
+                        analyzedInput = ""
+                        description = ""
                     })
                 }
             }
@@ -208,9 +211,14 @@ struct AddMealView: View {
     private func analyze() async {
         isAnalyzing = true
         defer { isAnalyzing = false }
+        let submittedDescription = description
+        let submittedImages = imageData
         do {
-            draft = try await AIClient(settings: settings).analyzeMeal(description: description, images: imageData, mode: scanMode)
+            draft = try await AIClient(settings: settings).analyzeMeal(description: submittedDescription, images: submittedImages, mode: scanMode)
             wasAIAnalyzed = true
+            analyzedInput = submittedDescription.isEmpty
+                ? "[发送了 \(submittedImages.count) 张图片]"
+                : submittedDescription
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             errorMessage = error.localizedDescription
@@ -326,7 +334,8 @@ struct AddMealView: View {
                 fiber: draft.fiber,
                 note: draft.note,
                 source: wasAIAnalyzed ? .ai : .manual,
-                photoIDs: photoIDs
+                photoIDs: photoIDs,
+                inputText: wasAIAnalyzed ? analyzedInput : description
             )
             mealEntry = entry
             modelContext.insert(entry)

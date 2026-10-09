@@ -9,7 +9,7 @@ const assert = require('assert/strict');
  const page = await browser.newPage({viewport:{width:1440,height:1100}});
  const errors=[]; page.on('pageerror', e => errors.push(e.message));
  const timestamp = Date.now()/1000;
- let snapshot={meals:[{id:'d0a4f4ee-2222-4444-8888-555555555555',date:timestamp,kind:'午餐',name:'鸡胸肉拌饭',calories:650,protein:42,carbs:78,fat:18,fiber:5,note:'米饭 200g',source:'AI 估算',createdAt:timestamp-3600,updatedAt:timestamp,photoIDs:[]}],bodyMetrics:Array.from({length:12},(_,i)=>({id:`body-${i}`,date:timestamp-(11-i)*86400,weight:70-i*.1,bodyFat:i===11?null:19-i*.08,waist:80,note:'晨起空腹',updatedAt:timestamp})),deletions:[],settings:null};
+ let snapshot={meals:[{id:'d0a4f4ee-2222-4444-8888-555555555555',date:timestamp,kind:'午餐',name:'鸡胸肉拌饭',calories:650,protein:42,carbs:78,fat:18,fiber:5,note:'米饭 200g',inputText:'只吃了一半\n<script>throw new Error("unescaped input")</script>',source:'AI 估算',createdAt:timestamp-3600,updatedAt:timestamp,photoIDs:[]}],bodyMetrics:Array.from({length:12},(_,i)=>({id:`body-${i}`,date:timestamp-(11-i)*86400,weight:70-i*.1,bodyFat:i===11?null:19-i*.08,waist:80,note:'晨起空腹',updatedAt:timestamp})),deletions:[],settings:null};
  await page.route('http://liferecord.test/**', async route => {
   const url=new URL(route.request().url());
   if(url.pathname.startsWith('/liferecord-api')) {
@@ -35,6 +35,10 @@ const assert = require('assert/strict');
   return route.fulfill({body:fs.readFileSync(path.join(__dirname,'../Web',name)),contentType:name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html'});
  });
  await page.goto('http://liferecord.test/');
+ await page.locator('#mealPreview [data-show-meal]').click();
+ assert.match(await page.locator('#detailDialog').innerText(), /给 AI 的描述.*只吃了一半.*<script>/s);
+ assert.equal(await page.locator('#detailDialog script').count(), 0);
+ await page.locator('#closeDetail').click();
  await page.locator('#mealPreview [data-edit-meal]').click();
  await page.locator('#mealForm [name=calories]').fill('325');
  await page.locator('#mealForm [name=protein]').fill('0');
@@ -43,6 +47,10 @@ const assert = require('assert/strict');
  await page.waitForFunction(()=>!document.querySelector('#mealDialog').open);
  assert.equal(snapshot.meals.length,1); assert.equal(snapshot.meals[0].calories,325); assert.equal(snapshot.meals[0].protein,0);
  assert.equal(snapshot.meals[0].source,'AI 估算'); assert.equal(snapshot.meals[0].createdAt,timestamp-3600); assert.equal(snapshot.meals[0].fiber,5); assert.equal(snapshot.meals[0].date,timestamp);
+ assert.equal(snapshot.meals[0].inputText, '只吃了一半\n<script>throw new Error("unescaped input")</script>');
+ await page.locator('#mealPreview [data-show-meal]').click();
+ assert.match(await page.locator('#detailDialog').innerText(), /给 AI 的描述.*只吃了一半/s);
+ await page.locator('#closeDetail').click();
  await page.locator('#mealSearch').fill('不存在'); assert.match(await page.locator('#mealPreview').innerText(),/没有匹配/);
  await page.locator('#mealSearch').fill('');
  await page.locator('[data-trend-key=weight][data-trend-id=body-0]').click();
@@ -76,6 +84,6 @@ const assert = require('assert/strict');
  await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:'/tmp/liferecord-mobile.png',fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS: meal/body editing, AI preview+apply, nullable body fat, chart selection+range, calendar, search, 4 responsive widths');
+ console.log('PASS: original meal input escaped and preserved across edits, meal/body editing, AI preview+apply, nullable body fat, chart selection+range, calendar, search, 4 responsive widths');
  } finally {await browser.close();}
 })();

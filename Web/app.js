@@ -332,11 +332,12 @@ function showColumnDetail(type) {
 function showMealDetail(meal) {
   const photoIDs = Array.isArray(meal.photoIDs) ? meal.photoIDs.filter(id => /^[a-f0-9]{32}$/.test(id)) : [];
   const photos = photoIDs.length ? `<section class="detail-photos"><h3>餐食照片 <small>${photoIDs.length} 张</small></h3><div class="photo-gallery">${photoIDs.map((id, index) => `<img loading="lazy" src="${API_BASE}/images/${id}" alt="${escapeHtml(meal.name)}照片 ${index + 1}">`).join("")}</div></section>` : "";
+  const input = meal.inputText ? `<section class="detail-note"><h3>${meal.source === "AI 估算" ? "给 AI 的描述" : "原始描述"}</h3><p>${escapeHtml(meal.inputText).replace(/\n/g, "<br>")}</p></section>` : (meal.source === "AI 估算" ? `<section class="detail-note"><h3>给 AI 的描述</h3><p>这条历史记录未保存原始描述，无法还原当时输入的内容。</p></section>` : "");
   openDetail({
     eyebrow: `${meal.kind} · ${recordSource(meal, "meal")}`,
     title: meal.name,
     subtitle: fmtShortDate(meal.date),
-    html: `<div class="detail-kpis"><div><span>热量</span><strong>${Math.round(meal.calories)} kcal</strong></div><div><span>蛋白质</span><strong>${Math.round(meal.protein)} g</strong></div><div><span>碳水</span><strong>${Math.round(meal.carbs)} g</strong></div><div><span>脂肪</span><strong>${Math.round(meal.fat)} g</strong></div></div>${meal.note ? `<section class="detail-note"><h3>记录说明</h3><p>${escapeHtml(meal.note)}</p></section>` : ""}<div class="detail-actions"><button class="primary-button" type="button" data-edit-meal="${meal.id}">编辑记录</button><button class="delete-record" type="button" data-delete-meal="${meal.id}">删除这条记录</button></div>${photos}`
+    html: `${input}<div class="detail-kpis"><div><span>热量</span><strong>${Math.round(meal.calories)} kcal</strong></div><div><span>蛋白质</span><strong>${Math.round(meal.protein)} g</strong></div><div><span>碳水</span><strong>${Math.round(meal.carbs)} g</strong></div><div><span>脂肪</span><strong>${Math.round(meal.fat)} g</strong></div></div>${meal.note ? `<section class="detail-note"><h3>记录说明</h3><p>${escapeHtml(meal.note)}</p></section>` : ""}<div class="detail-actions"><button class="primary-button" type="button" data-edit-meal="${meal.id}">编辑记录</button><button class="delete-record" type="button" data-delete-meal="${meal.id}">删除这条记录</button></div>${photos}`
   });
 }
 

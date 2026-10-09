@@ -32,6 +32,8 @@ private struct SyncedMeal: Codable {
     var createdAt: Double
     var updatedAt: Double
     var photoIDs: [String]?
+    var inputText: String?
+    var sourceConversationID: String?
 }
 
 private struct SyncedBodyMetric: Codable {
@@ -218,7 +220,9 @@ final class SyncCoordinator {
                     source: $0.source.rawValue,
                     createdAt: $0.createdAt.timeIntervalSince1970,
                     updatedAt: $0.updatedAt.timeIntervalSince1970,
-                    photoIDs: $0.photoIDs
+                    photoIDs: $0.photoIDs,
+                    inputText: $0.inputText,
+                    sourceConversationID: $0.sourceConversationID
                 )
             }
         let bodyMetrics = try context.fetch(FetchDescriptor<BodyMetric>())
@@ -340,6 +344,8 @@ final class SyncCoordinator {
                 local.createdAt = Date(timeIntervalSince1970: remote.createdAt)
                 local.updatedAt = updatedAt
                 local.photoIDs = remote.photoIDs ?? []
+                if let inputText = remote.inputText { local.inputText = inputText }
+                if let conversationID = remote.sourceConversationID { local.sourceConversationID = conversationID }
             } else {
                 let entry = MealEntry(
                     id: id,
@@ -353,7 +359,9 @@ final class SyncCoordinator {
                     fiber: remote.fiber,
                     note: remote.note,
                     source: EntrySource(rawValue: remote.source) ?? .manual,
-                    photoIDs: remote.photoIDs ?? []
+                    photoIDs: remote.photoIDs ?? [],
+                    inputText: remote.inputText ?? "",
+                    sourceConversationID: remote.sourceConversationID ?? ""
                 )
                 entry.createdAt = Date(timeIntervalSince1970: remote.createdAt)
                 entry.updatedAt = updatedAt

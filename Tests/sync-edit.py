@@ -26,6 +26,29 @@ with tempfile.TemporaryDirectory() as folder:
     assert server.current_snapshot()['meals'] == []
     print('PASS: same-ID update, photos preserved, stale snapshots ignored, deletion preserved')
 
+    # The user's original input is separate from AI output and survives old-client edits.
+    provenance = {**original, 'id': 'meal-input', 'updatedAt': 4000,
+                  'inputText': '午餐一碗牛肉面，少油\n加一个蛋',
+                  'sourceConversationID': '12345678-1234-1234-1234-123456789abc'}
+    server.merge_snapshot({'meals': [provenance]})
+    old_meal = {k: v for k, v in provenance.items() if k not in ('inputText', 'sourceConversationID')}
+    old_meal.update(note='更正份量', updatedAt=4001)
+    server.merge_snapshot({'meals': [old_meal]})
+    saved = server.current_snapshot()['meals'][0]
+    assert saved['inputText'] == provenance['inputText']
+    assert saved['sourceConversationID'] == provenance['sourceConversationID']
+    assert saved['note'] == '更正份量' and saved['photoIDs'] == provenance['photoIDs']
+    for field in ('inputText', 'sourceConversationID'):
+        try:
+            server.merge_snapshot({'meals': [{**saved, field: [], 'updatedAt': 4002}]})
+            raise AssertionError('invalid provenance accepted')
+        except ValueError:
+            pass
+    cleared = {**saved, 'inputText': '', 'sourceConversationID': '', 'updatedAt': 4003}
+    server.merge_snapshot({'meals': [cleared]})
+    assert server.current_snapshot()['meals'][0] == cleared
+    print('PASS: original input round-trip, old-client preservation, explicit clearing and validation')
+
     workout = dict(id='workout-test', date=4000, endDate=None, note='深蹲 4 组', updatedAt=4000)
     server.merge_snapshot({'workoutEntries': [workout]})
     assert server.current_snapshot()['workoutEntries'] == [workout]

@@ -531,6 +531,8 @@ struct CoachView: View {
                     let execution = try await apply(
                         reply.actions,
                         attachedImages: attachedImages,
+                        inputText: displayText,
+                        conversationID: conversationID,
                         explicitlyRequestedDate: requestedActionDate(in: requestText)
                     )
                     let content: String
@@ -628,6 +630,8 @@ struct CoachView: View {
     private func apply(
         _ actions: [AIAgentAction],
         attachedImages: [Data],
+        inputText: String,
+        conversationID: UUID,
         explicitlyRequestedDate: Date?
     ) async throws -> ActionExecution {
         var receipts: [String] = []
@@ -772,7 +776,9 @@ struct CoachView: View {
                     fiber: max(action.fiber ?? 0, 0),
                     note: action.note ?? "由 AI 助手按要求记录",
                     source: action.source.flatMap(EntrySource.init(rawValue:)) ?? .ai,
-                    photoIDs: photoIDs
+                    photoIDs: photoIDs,
+                    inputText: inputText,
+                    sourceConversationID: conversationID.uuidString.lowercased()
                 ))
                 receipts.append("新增\(kind.rawValue)：\(name)，\(Int(calories)) kcal · \(receiptDate(date))")
             case "add_weight", "record_weight", "log_weight":

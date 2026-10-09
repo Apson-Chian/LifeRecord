@@ -97,13 +97,13 @@ struct ProgressDashboardView: View {
                 ScrollView {
                     LazyVStack(spacing: 16) {
                         rangeCard
-                        qualityCheckCard
-                        GoalFeedbackCard(summary: feedback, goals: .init(settings))
                         weightChart
                         bodyCompositionCard
                         calorieChart
                         workoutChart
                         aiReportCard
+                        GoalFeedbackCard(summary: feedback, goals: .init(settings))
+                        qualityCheckCard
                     }
                     .padding(16)
                     .padding(.bottom, 26)

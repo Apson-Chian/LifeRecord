@@ -139,6 +139,9 @@ def validate_record(record_type: str, item: dict) -> None:
             for image_id in photo_ids
         ):
             raise ValueError("invalid meal photo ids")
+        for field in ("inputText", "sourceConversationID"):
+            if field in item and not isinstance(item[field], str):
+                raise ValueError(f"invalid meal {field}")
     elif record_type == "body":
         if not valid_number(item.get("weight"), 20, 400):
             raise ValueError("invalid weight")
@@ -215,17 +218,18 @@ def merge_snapshot(snapshot: dict) -> None:
     deleted_image_files: list[str] = []
     deleted_meal_ids = [record_id for record_type, record_id, _, _, deleted in operations if record_type == "meal" and deleted]
     with _db_lock, connect() as connection:
-        # Older clients omit structured details and workout parts. Preserve them
-        # on a newer edit; an explicit empty list intentionally clears either.
+        # Older clients omit newer fields. Preserve them on an edit;
+        # explicitly empty values intentionally clear them.
         preserved = []
         for kind, record_id, payload, stamp, deleted in operations:
-            if kind == "workout" and not deleted:
+            fields = {"workout": ("exercises", "bodyParts"), "meal": ("inputText", "sourceConversationID")}.get(kind, ())
+            if fields and not deleted:
                 incoming = json.loads(payload)
-                if "exercises" not in incoming or "bodyParts" not in incoming:
+                if any(field not in incoming for field in fields):
                     row = connection.execute("SELECT payload FROM records WHERE record_type = ? AND record_id = ? AND deleted = 0", (kind, record_id)).fetchone()
                     if row:
                         previous = json.loads(row["payload"])
-                        for field in ("exercises", "bodyParts"):
+                        for field in fields:
                             if field not in incoming and field in previous:
                                 incoming[field] = previous[field]
                         payload = json.dumps(incoming, ensure_ascii=False, separators=(",", ":"))

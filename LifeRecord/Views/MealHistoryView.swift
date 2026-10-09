@@ -69,6 +69,7 @@ struct MealDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     let meal: MealEntry
+    @Query private var conversations: [CoachConversation]
 
     @State private var isConfirmingDelete = false
     @State private var isEditing = false
@@ -104,6 +105,26 @@ struct MealDetailView: View {
                     }
                 }
 
+                if !meal.inputText.isEmpty || meal.source == .ai {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label(meal.source == .ai ? "给 AI 的描述" : "原始描述", systemImage: "text.bubble")
+                                .font(.headline)
+                            if meal.inputText.isEmpty {
+                                Text("这条历史记录未保存原始描述，无法还原当时输入的内容。")
+                                    .font(.subheadline).foregroundStyle(.secondary)
+                            } else {
+                                Text(meal.inputText).font(.subheadline).textSelection(.enabled)
+                            }
+                            if let conversation = conversations.first(where: { $0.id.uuidString.lowercased() == meal.sourceConversationID.lowercased() }) {
+                                Button("查看原对话", systemImage: "bubble.left.and.bubble.right") {
+                                    AppRouter.shared.openCoach(conversationID: conversation.id)
+                                }.font(.subheadline).frame(minHeight: 44)
+                            }
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
                 GlassCard {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("营养详情").font(.headline)
@@ -127,7 +148,15 @@ struct MealDetailView: View {
                     }
                 }
 
-                if !meal.photoIDs.isEmpty {
+                if meal.photoIDs.isEmpty && meal.source == .ai {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("餐食照片", systemImage: "photo").font(.headline)
+                            Text("这条记录没有保存照片。")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else if !meal.photoIDs.isEmpty {
                     GlassCard {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {

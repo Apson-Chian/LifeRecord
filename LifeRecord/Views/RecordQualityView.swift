@@ -6,9 +6,6 @@ struct RecordQualityView: View {
     @Query(sort: \BodyMetric.date) private var bodyMetrics: [BodyMetric]
     @Query(sort: \WorkoutEntry.date) private var workouts: [WorkoutEntry]
     @AppStorage("recordQuality.acknowledged") private var acknowledgedRaw = "[]"
-    @State private var editingMeal: MealEntry?
-    @State private var editingBody: BodyMetric?
-    @State private var editingWorkout: WorkoutEntry?
     @State private var filter = "待核对"
     @State private var confirming: RecordQuality.Issue?
 
@@ -41,10 +38,7 @@ struct RecordQualityView: View {
                                 Text("\(issue.category.rawValue) · \(issue.date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
                                 Text(issue.detail).font(.subheadline)
                                 ForEach(issue.recordIDs, id: \.self) { id in
-                                    Button { edit(id, category: issue.category) } label: {
-                                        Label(recordLabel(id, category: issue.category), systemImage: "square.and.pencil")
-                                            .font(.subheadline).frame(minHeight: 44, alignment: .leading)
-                                    }.buttonStyle(.borderless)
+                                    recordLink(id, category: issue.category)
                                 }
                                 Button(filter == "待核对" ? "确认记录无误" : "重新核对") {
                                     if filter == "待核对" { confirming = issue }
@@ -64,9 +58,6 @@ struct RecordQualityView: View {
         }
         .navigationTitle("记录质量检查")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $editingMeal) { MealEditView(meal: $0) }
-        .sheet(item: $editingBody) { AddWeightView(defaultDate: $0.date, lastWeight: $0.weight, editing: $0) }
-        .sheet(item: $editingWorkout) { WorkoutEditor(entry: $0, date: $0.date) }
         .confirmationDialog("确认记录无误？", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), titleVisibility: .visible) {
             Button("确认无误") { if let confirming { setAcknowledged(confirming, true) }; confirming = nil }
             Button("取消", role: .cancel) { confirming = nil }
@@ -78,22 +69,77 @@ struct RecordQualityView: View {
         if value { ids.insert(issue.id) } else { ids.remove(issue.id) }
         acknowledgedRaw = String(decoding: (try? JSONEncoder().encode(ids.sorted())) ?? Data(), as: UTF8.self)
     }
-    private func edit(_ id: UUID, category: RecordQuality.Category) {
-        switch category {
-        case .meal: editingMeal = meals.first { $0.id == id }
-        case .body: editingBody = bodyMetrics.first { $0.id == id }
-        case .workout: editingWorkout = workouts.first { $0.id == id }
-        }
-    }
-    private func recordLabel(_ id: UUID, category: RecordQuality.Category) -> String {
+    @ViewBuilder
+    private func recordLink(_ id: UUID, category: RecordQuality.Category) -> some View {
         switch category {
         case .meal:
-            guard let entry = meals.first(where: { $0.id == id }) else { return "记录已删除" }
-            return "编辑 \(entry.name) · \(entry.date.formatted(.dateTime.hour().minute()))"
+            if let entry = meals.first(where: { $0.id == id }) {
+                NavigationLink { MealDetailView(meal: entry) } label: {
+                    recordLabel(entry.name, detail: "\(entry.date.formatted(.dateTime.hour().minute())) · 查看详情\(entry.photoIDs.isEmpty ? "" : " · \(entry.photoIDs.count) 张照片")", symbol: entry.kind.symbol)
+                }.buttonStyle(.borderless)
+            }
         case .body:
-            guard let entry = bodyMetrics.first(where: { $0.id == id }) else { return "记录已删除" }
-            return "编辑 \(entry.weight.formatted()) kg · \(entry.date.formatted(.dateTime.month().day().hour().minute()))"
-        case .workout: return "编辑训练起止时间"
+            if let entry = bodyMetrics.first(where: { $0.id == id }) {
+                NavigationLink { QualityBodyDetailView(entry: entry) } label: {
+                    recordLabel("\(entry.weight.formatted()) kg", detail: "\(entry.date.formatted(date: .abbreviated, time: .shortened)) · 查看详情", symbol: AppSymbol.weight)
+                }.buttonStyle(.borderless)
+            }
+        case .workout:
+            if let entry = workouts.first(where: { $0.id == id }) {
+                NavigationLink { QualityWorkoutDetailView(entry: entry) } label: {
+                    recordLabel("训练记录", detail: "\(entry.date.formatted(date: .abbreviated, time: .shortened)) · 查看详情", symbol: AppSymbol.workout)
+                }.buttonStyle(.borderless)
+            }
         }
+    }
+    private func recordLabel(_ title: String, detail: String, symbol: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption).accessibilityHidden(true)
+        }.frame(minHeight: 44, alignment: .leading)
+    }
+}
+
+private struct QualityBodyDetailView: View {
+    let entry: BodyMetric
+    @State private var isEditing = false
+
+    var body: some View {
+        List {
+            Section("测量数据") {
+                LabeledContent("时间", value: entry.date.formatted(date: .long, time: .shortened))
+                LabeledContent("体重", value: "\(entry.weight.formatted()) kg")
+                if let bodyFat = entry.bodyFat { LabeledContent("体脂率", value: "\(bodyFat.formatted()) %") }
+                if let waist = entry.waist { LabeledContent("腰围", value: "\(waist.formatted()) cm") }
+            }
+            if !entry.note.isEmpty { Section("备注") { Text(entry.note).textSelection(.enabled) } }
+        }
+        .navigationTitle("测量详情").navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .primaryAction) { Button("编辑") { isEditing = true } } }
+        .sheet(isPresented: $isEditing) { AddWeightView(defaultDate: entry.date, lastWeight: entry.weight, editing: entry) }
+    }
+}
+
+private struct QualityWorkoutDetailView: View {
+    let entry: WorkoutEntry
+    @State private var isEditing = false
+
+    var body: some View {
+        List {
+            Section("训练时间") {
+                LabeledContent("开始", value: entry.date.formatted(date: .long, time: .shortened))
+                LabeledContent("结束", value: entry.endDate?.formatted(date: .long, time: .shortened) ?? "尚未结束")
+                LabeledContent("时长", value: "\(entry.minutes.formatted(.number.precision(.fractionLength(0)))) 分钟")
+            }
+            if !entry.contentSummary.isEmpty { Section("训练内容") { Text(entry.contentSummary).textSelection(.enabled) } }
+        }
+        .navigationTitle("训练详情").navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .primaryAction) { Button("编辑") { isEditing = true } } }
+        .sheet(isPresented: $isEditing) { WorkoutEditor(entry: entry, date: entry.date) }
     }
 }

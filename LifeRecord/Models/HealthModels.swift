@@ -43,6 +43,9 @@ final class MealEntry {
     var updatedAt: Date = Date.now
     // Only compact server image identifiers are kept on device; image bytes live on the private server.
     var photoIDsRaw: String = "[]"
+    // Keep the user's words separate from the AI-generated nutrition and note.
+    var inputText: String = ""
+    var sourceConversationID: String = ""
 
     init(
         id: UUID = UUID(),
@@ -57,7 +60,9 @@ final class MealEntry {
         note: String = "",
         source: EntrySource = .manual,
         isDemo: Bool = false,
-        photoIDs: [String] = []
+        photoIDs: [String] = [],
+        inputText: String = "",
+        sourceConversationID: String = ""
     ) {
         self.id = id
         self.date = date
@@ -74,6 +79,8 @@ final class MealEntry {
         self.isDemo = isDemo
         self.updatedAt = .now
         self.photoIDs = photoIDs
+        self.inputText = inputText
+        self.sourceConversationID = sourceConversationID
     }
 
     var kind: MealKind { MealKind(rawValue: kindRaw) ?? .snack }
