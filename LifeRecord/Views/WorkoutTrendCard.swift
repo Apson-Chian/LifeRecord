@@ -35,16 +35,14 @@ struct WorkoutTrendCard: View {
         GlassCard(tint: tint) {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(spacing: 12) {
-                    Image(systemName: "figure.strengthtraining.traditional")
-                        .font(.title3.weight(.semibold)).foregroundStyle(tint)
-                        .frame(width: 42, height: 42).background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                    IconBadge(symbol: AppSymbol.workout, tint: tint)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("训练节奏").font(.headline)
                         Text("每一次投入，都算数").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     NavigationLink { detail } label: {
-                        Image(systemName: "arrow.up.right").font(.subheadline.weight(.semibold)).frame(width: 44, height: 44)
+                        Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).frame(width: 44, height: 44)
                     }.tint(tint).accessibilityLabel("查看健身记录详情")
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 6) {

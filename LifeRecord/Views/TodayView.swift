@@ -212,10 +212,10 @@ struct TodayView: View {
 
     private var quickActions: some View {
         HStack(spacing: 10) {
-            ActionTile(title: "记一餐", subtitle: "拍照识别 · 手动记录", symbol: "fork.knife", tint: AppTheme.accent) {
+            ActionTile(title: "记一餐", subtitle: "拍照识别 · 手动记录", symbol: AppSymbol.meal, tint: AppTheme.accent) {
                 activeSheet = .meal
             }
-            ActionTile(title: "记体重", subtitle: "追踪趋势", symbol: "scalemass.fill", tint: AppTheme.protein) {
+            ActionTile(title: "记体重", subtitle: "追踪趋势", symbol: AppSymbol.weight, tint: AppTheme.protein) {
                 activeSheet = .weight
             }
         }
@@ -226,12 +226,7 @@ struct TodayView: View {
         if let activity = lifeTrackActivity, Calendar.current.isDateInToday(activity.date) {
             GlassCard {
                 HStack(alignment: .top, spacing: 13) {
-                    Image(systemName: "figure.run")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.title3)
-                        .foregroundStyle(AppTheme.accent)
-                        .frame(width: 38, height: 38)
-                        .background(AppTheme.accent.opacity(0.12), in: Circle())
+                    IconBadge(symbol: "figure.run", tint: AppTheme.accent, size: 38)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Text("LifeTrack 今日运动").font(.headline)
@@ -313,20 +308,7 @@ struct TodayView: View {
             router.openCoach(draft: "请根据我今天的数据，进一步分析这条提示并给出可执行建议：\n\(localInsight)")
         } label: {
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "lightbulb.max.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(
-                        LinearGradient(
-                            colors: [AppTheme.accentSoft, AppTheme.accent],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        in: Circle()
-                    )
-                    .shadow(color: AppTheme.accent.opacity(0.25), radius: 10, y: 5)
+                IconBadge(symbol: "lightbulb", tint: AppTheme.accent)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
@@ -796,11 +778,7 @@ private struct MealSection: View {
                         MealDetailView(meal: meal)
                     } label: {
                         HStack(spacing: 11) {
-                            Image(systemName: meal.kind.symbol)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(AppTheme.accent)
-                                .frame(width: 38, height: 38)
-                                .background(AppTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            IconBadge(symbol: meal.kind.symbol, tint: AppTheme.accent, size: 38)
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: 5) {
                                     Text(meal.name)

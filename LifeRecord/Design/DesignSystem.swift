@@ -16,6 +16,43 @@ enum AppTheme {
     static let success = Color(red: 0.20, green: 0.52, blue: 0.88)
 }
 
+/// Keep repeated destinations and measurements recognizable across screens.
+enum AppSymbol {
+    static let today = "house"
+    static let trends = "chart.line.uptrend.xyaxis"
+    static let coach = "bubble.left.and.bubble.right"
+    static let settings = "gearshape"
+    static let meal = "fork.knife"
+    static let weight = "scalemass"
+    static let bodyFat = "percent"
+    static let fat = "drop"
+    static let workout = "dumbbell"
+}
+
+struct IconBadge: View {
+    let symbol: String
+    let tint: Color
+    var size: CGFloat = 44
+    @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        let dimension = size * scale
+        let shape = RoundedRectangle(cornerRadius: dimension * 0.3, style: .continuous)
+        Image(systemName: symbol)
+            .symbolRenderingMode(.monochrome)
+            .font(.system(size: dimension * 0.45, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: dimension, height: dimension)
+            .background(tint.opacity(colorScheme == .dark ? 0.18 : 0.10), in: shape)
+            .overlay {
+                shape.strokeBorder(tint.opacity(contrast == .increased ? 0.5 : 0.14), lineWidth: 1)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
 struct AppBackground: View {
     var body: some View {
         LinearGradient(
@@ -144,18 +181,14 @@ struct ActionTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Image(systemName: symbol)
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(tint)
-                        .frame(width: 44, height: 44)
-                        .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    IconBadge(symbol: symbol, tint: tint)
                     Spacer(minLength: 8)
                     Image(systemName: "plus")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(tint)
                         .frame(width: 26, height: 26)
                         .background(tint.opacity(0.08), in: Circle())
+                        .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 5) {
                     Text(title).font(.headline).foregroundStyle(.primary)

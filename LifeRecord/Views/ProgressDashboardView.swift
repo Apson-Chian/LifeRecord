@@ -14,6 +14,24 @@ struct ProgressDashboardView: View {
     @State private var report = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
+    @State private var insightNow = Date.now
+    @AppStorage("recordQuality.acknowledged") private var acknowledgedRaw = "[]"
+
+    private var acknowledgedQualityIDs: Set<String> {
+        Set((try? JSONDecoder().decode([String].self, from: Data(acknowledgedRaw.utf8))) ?? [])
+    }
+
+    private var feedback: GoalFeedback.Summary {
+        GoalFeedback.summarize(goals: .init(settings), meals: meals.map { InsightRecords.Meal($0) },
+                               body: bodyMetrics.map { InsightRecords.Body($0) }, workouts: workouts.map { InsightRecords.Workout($0) },
+                               days: range.days, now: max(insightNow, .now), acknowledgedIssueIDs: acknowledgedQualityIDs)
+    }
+
+    private var pendingQualityIssues: [RecordQuality.Issue] {
+        return RecordQuality.issues(meals: meals.map { InsightRecords.Meal($0) }, body: bodyMetrics.map { InsightRecords.Body($0) },
+                                    workouts: workouts.map { InsightRecords.Workout($0) }, now: max(insightNow, .now))
+            .filter { !acknowledgedQualityIDs.contains($0.id) }
+    }
 
     private enum TrendRange: String, CaseIterable, Identifiable {
         case week = "7 天"
@@ -45,7 +63,7 @@ struct ProgressDashboardView: View {
 
     private var fatSeries: [BodyTrend.Point] {
         BodyTrend.series(bodyMetrics.compactMap { metric in
-            metric.bodyFat.map { .init(date: metric.date, value: $0) }
+            metric.bodyFat.flatMap { (1...80).contains($0) ? BodyTrend.Sample(date: metric.date, value: $0) : nil }
         })
     }
 
@@ -79,6 +97,8 @@ struct ProgressDashboardView: View {
                 ScrollView {
                     LazyVStack(spacing: 16) {
                         rangeCard
+                        qualityCheckCard
+                        GoalFeedbackCard(summary: feedback, goals: .init(settings))
                         weightChart
                         bodyCompositionCard
                         calorieChart
@@ -91,6 +111,8 @@ struct ProgressDashboardView: View {
                 .scrollIndicators(.hidden)
             }
             .navigationTitle("趋势")
+            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { insightNow = $0 }
+            .onAppear { insightNow = .now }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
@@ -118,11 +140,7 @@ struct ProgressDashboardView: View {
         } label: {
             GlassCard {
                 HStack(spacing: 12) {
-                    Image(systemName: "figure.arms.open")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(AppTheme.accent)
-                        .frame(width: 46, height: 46)
-                        .background(AppTheme.accent.opacity(0.12), in: Circle())
+                    IconBadge(symbol: "figure.arms.open", tint: AppTheme.accent)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("身体总览").font(.headline)
                         Text("趋势体重 · 今日基准 · 身体组成").font(.caption).foregroundStyle(.secondary)
@@ -137,6 +155,24 @@ struct ProgressDashboardView: View {
         .buttonStyle(.plain)
     }
 
+    private var qualityCheckCard: some View {
+        let count = pendingQualityIssues.count
+        return NavigationLink { RecordQualityView() } label: {
+            GlassCard(tint: count == 0 ? AppTheme.recorded : .orange) {
+                HStack(spacing: 12) {
+                    IconBadge(symbol: count == 0 ? "checkmark.shield" : "exclamationmark.shield", tint: count == 0 ? AppTheme.recorded : .orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("记录质量检查").font(.headline)
+                        Text(count == 0 ? "暂无待核对项 · 检查全部真实记录" : "\(count) 项待核对 · 查看疑点并修正")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                }
+            }
+        }.buttonStyle(.plain)
+    }
+
     private var rangeCard: some View {
         Picker("时间范围", selection: $range) {
             ForEach(TrendRange.allCases) { Text($0.rawValue).tag($0) }
@@ -147,13 +183,13 @@ struct ProgressDashboardView: View {
     private var summaryStrip: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 10) {
-                SummaryMetric(title: "最近体重", value: latestWeight, detail: weightChangeText, symbol: "scalemass", tint: AppTheme.protein)
-                SummaryMetric(title: "体脂率", value: latestBodyFat, detail: bodyFatChangeText, symbol: "figure.arms.open", tint: AppTheme.fat)
+                SummaryMetric(title: "最近体重", value: latestWeight, detail: weightChangeText, symbol: AppSymbol.weight, tint: AppTheme.protein)
+                SummaryMetric(title: "体脂率", value: latestBodyFat, detail: bodyFatChangeText, symbol: AppSymbol.bodyFat, tint: AppTheme.fat)
                 SummaryMetric(title: "日均热量", value: averageCalories, detail: "\(dailyNutrition.count) 天记录", symbol: "flame", tint: .orange)
                 SummaryMetric(title: "日均蛋白", value: averageProtein, detail: goalText(settings.proteinGoal), symbol: "bolt.fill", tint: .red)
                 SummaryMetric(title: "日均碳水", value: averageCarbs, detail: goalText(settings.carbsGoal), symbol: "leaf.fill", tint: AppTheme.carbs)
-                SummaryMetric(title: "日均脂肪", value: averageFat, detail: goalText(settings.fatGoal), symbol: "drop.triangle.fill", tint: AppTheme.fat)
-                SummaryMetric(title: "日均纤维", value: averageFiber, detail: "建议 30 g", symbol: "leaf.circle.fill", tint: AppTheme.accent)
+                SummaryMetric(title: "日均脂肪", value: averageFat, detail: goalText(settings.fatGoal), symbol: AppSymbol.fat, tint: AppTheme.fat)
+                SummaryMetric(title: "日均纤维", value: averageFiber, detail: "建议 30 g", symbol: "leaf", tint: AppTheme.accent)
                 SummaryMetric(title: "有记录天数", value: consistencyText, detail: "最近 7 天", symbol: "calendar.badge.checkmark", tint: AppTheme.carbs)
                 SummaryMetric(title: "距目标", value: distanceToGoal, detail: "目标 \(settings.targetWeight.formatted(.number.precision(.fractionLength(1)))) kg", symbol: "flag.checkered", tint: AppTheme.accent)
             }
@@ -172,7 +208,7 @@ struct ProgressDashboardView: View {
 
     private var bodyCompositionCard: some View {
         InspectableTrendCard(title: "体脂趋势", unit: "%", tint: AppTheme.fat,
-            points: bodyFatPoints.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1))))% · \($0.count) 次测量") }, samples: bodyMetrics.compactMap { metric in metric.bodyFat.map { .init(date: metric.date, value: $0) } }, cutoff: cutoff)
+            points: bodyFatPoints.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1))))% · \($0.count) 次测量") }, samples: bodyMetrics.compactMap { metric in metric.bodyFat.flatMap { (1...80).contains($0) ? BodyTrend.Sample(date: metric.date, value: $0) : nil } }, cutoff: cutoff)
     }
 
     private var measurementList: some View {
@@ -325,7 +361,7 @@ struct ProgressDashboardView: View {
                     }.padding(.vertical, 6)
                 }
                 .buttonStyle(AppButtonStyle())
-                .disabled(isGenerating || (bodyMetrics.isEmpty && meals.isEmpty && workouts.isEmpty))
+                .disabled(isGenerating || (!bodyMetrics.contains { !$0.isDemo && $0.date <= insightNow } && !meals.contains { !$0.isDemo && $0.date <= insightNow } && !workouts.contains { $0.date <= insightNow }))
             }
         }
     }
@@ -452,25 +488,29 @@ struct ProgressDashboardView: View {
         isGenerating = true
         defer { isGenerating = false }
         let weekStart = Calendar.current.date(byAdding: .day, value: -6, to: Calendar.current.startOfDay(for: .now))!
-        let recentWeights = weightSeries.filter { $0.date >= weekStart && $0.date <= .now }.map {
+        let reportNow = Date.now
+        let realBody = bodyMetrics.filter { !$0.isDemo && $0.date <= reportNow && InsightRecords.Body($0).validWeight }
+        let recentWeights = BodyTrend.series(realBody.map { .init(date: $0.date, value: $0.weight) }).filter { $0.date >= weekStart && $0.date <= .now }.map {
             "\($0.date.formatted(date: .numeric, time: .omitted)): 中位数\($0.value)kg，趋势\($0.trend)kg，\($0.count)次"
         }.joined(separator: ", ")
-        let fat = fatSeries.filter { $0.date >= weekStart && $0.date <= .now }.map {
+        let fat = BodyTrend.series(realBody.compactMap { metric in metric.bodyFat.flatMap { (1...80).contains($0) ? BodyTrend.Sample(date: metric.date, value: $0) : nil } }).filter { $0.date >= weekStart && $0.date <= .now }.map {
             "\($0.date.formatted(date: .numeric, time: .omitted)): 中位数\($0.value)%，趋势\($0.trend)%"
         }.joined(separator: ", ")
-        let weekMeals = meals.filter { $0.date >= weekStart && $0.date <= .now }
+        let weekMeals = meals.filter { !$0.isDemo && $0.date >= weekStart && $0.date <= reportNow && InsightRecords.Meal($0).validNutrition }
         let nutrition = Dictionary(grouping: weekMeals) { Calendar.current.startOfDay(for: $0.date) }
         let calories = nutrition.keys.sorted().map { day in
             let entries = nutrition[day]!
             return "\(day.formatted(date: .numeric, time: .omitted)): \(Int(entries.reduce(0) { $0 + $1.calories }))kcal / P\(Int(entries.reduce(0) { $0 + $1.protein }))g"
         }.joined(separator: ", ")
-        let workoutContext = WorkoutSummary.context(workouts.filter { $0.date >= weekStart }.map {
+        let workoutContext = WorkoutSummary.context(workouts.filter { $0.date >= weekStart && $0.date <= reportNow }.map {
             .init(date: $0.date, endDate: $0.endDate, note: $0.contentSummary)
         })
-        let context = "健身记录：\(workoutContext)。最近7天（含今天）。目标体重 \(settings.targetWeight)kg，热量目标 \(settings.calorieGoal)kcal。体重：\(recentWeights)。体脂：\(fat)。每日营养：\(calories)。身体数据每日中位数后指数平滑；无记录不代表零，不要把日内波动解释为脂肪变化。"
+        let weekFeedback = GoalFeedback.summarize(goals: .init(settings), meals: meals.map { InsightRecords.Meal($0) }, body: bodyMetrics.map { InsightRecords.Body($0) }, workouts: workouts.map { InsightRecords.Workout($0) }, days: 7, now: reportNow, acknowledgedIssueIDs: acknowledgedQualityIDs)
+        let weekIssues = pendingQualityIssues.filter { $0.date >= weekStart && $0.date <= reportNow }
+        let context = "目标类型：\(settings.fitnessGoal.rawValue)，起始体重 \(settings.baselineWeight)kg，设定每周变化 \(settings.weeklyWeightTarget)kg，蛋白质目标 \(settings.proteinGoal)g。本机目标反馈：\(weekFeedback.context)。记录质量待核对：\(weekIssues.map(\.title).joined(separator: "、"))。健身记录：\(workoutContext)。最近7天（含今天）。目标体重 \(settings.targetWeight)kg，热量目标 \(settings.calorieGoal)kcal。体重：\(recentWeights)。体脂：\(fat)。每日营养：\(calories)。身体数据每日中位数后指数平滑；无记录不代表零，不要把日内波动解释为脂肪变化。"
         do {
             report = try await AIClient(settings: settings).coachText(
-                system: "你是克制、循证的健身记录教练。根据有限数据指出趋势和不确定性，用中文给出 3 条可执行建议，不做医疗诊断，不鼓励极端热量缺口。",
+                system: "你是克制、循证的健身记录教练。依据用户设定目标与本机统计，用中文按“目标距离、执行情况、记录不足、下周行动”复盘。引用已记录天数和达标天数，缺失日期不按零摄入计算，今日记录尚未结束。先提醒待核对数据；体重进度不等同于肌肉或脂肪变化，不预测到达日期，不自动调整目标。最后给出 2–3 条具体可执行行动，不做医疗诊断，不鼓励极端热量缺口。",
                 messages: [AIChatMessage(role: "user", content: context)]
             )
         } catch {
@@ -489,11 +529,7 @@ private struct SummaryMetric: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: symbol)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 28, height: 28)
-                    .background(tint.opacity(0.11), in: Circle())
+                IconBadge(symbol: symbol, tint: tint, size: 30)
                 Spacer()
             }
             Text(value)
@@ -549,17 +585,25 @@ private struct InspectableTrendCard: View {
         let first = points.first?.date ?? .now, last = points.last?.date ?? .now
         return first.addingTimeInterval(-43200)...last.addingTimeInterval(43200)
     }
+
+    private var symbol: String {
+        switch unit {
+        case "kg": AppSymbol.weight
+        case "%": AppSymbol.bodyFat
+        case "kcal": "flame"
+        default: bars ? "chart.bar" : AppSymbol.trends
+        }
+    }
+
     var body: some View {
         GlassCard(tint: tint) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Image(systemName: bars ? "chart.bar.fill" : "waveform.path.ecg")
-                        .foregroundStyle(tint).frame(width: 36, height: 36)
-                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    IconBadge(symbol: symbol, tint: tint, size: 36)
                     Text(title).font(.headline)
                     Spacer()
                     if !isDetail {
-                        NavigationLink { detail } label: { Image(systemName: "arrow.up.right").frame(width: 44, height: 44) }
+                        NavigationLink { detail } label: { Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).frame(width: 44, height: 44) }
                             .accessibilityLabel("查看\(title)详情")
                     }
                 }

@@ -281,9 +281,9 @@ struct BodyDashboardView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("身体组成").font(.headline)
                 HStack(spacing: 10) {
-                    CompositionStat(title: "体脂率", value: bodyFatText, symbol: "figure.arms.open", tint: AppTheme.fat)
-                    CompositionStat(title: "脂肪量", value: fatMassText, unit: "kg", symbol: "drop.triangle.fill", tint: AppTheme.fat)
-                    CompositionStat(title: "瘦体重", value: leanMassText, unit: "kg", symbol: "figure.strengthtraining.traditional", tint: AppTheme.protein)
+                    CompositionStat(title: "体脂率", value: bodyFatText, symbol: AppSymbol.bodyFat, tint: AppTheme.fat)
+                    CompositionStat(title: "脂肪量", value: fatMassText, unit: "kg", symbol: AppSymbol.fat, tint: AppTheme.fat)
+                    CompositionStat(title: "瘦体重", value: leanMassText, unit: "kg", symbol: AppSymbol.weight, tint: AppTheme.protein)
                 }
                 Text(compositionBasisText).font(.caption).foregroundStyle(.secondary)
             }
@@ -344,11 +344,7 @@ private struct KeyValueStat: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(tint.opacity(0.11), in: Circle())
+            IconBadge(symbol: symbol, tint: tint, size: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.caption).foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
@@ -375,9 +371,11 @@ private struct CompositionStat: View {
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: symbol)
+                .symbolRenderingMode(.monochrome)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(tint)
                 .frame(height: 22)
+                .accessibilityHidden(true)
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(value).font(.headline.monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
                 if !unit.isEmpty {

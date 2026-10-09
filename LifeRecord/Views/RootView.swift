@@ -70,10 +70,10 @@ struct RootView: View {
     private var tabs: some View {
         if #available(iOS 18.0, *) {
             TabView(selection: $selectedTab) {
-                Tab("今日", systemImage: "house.fill", value: 0) { TodayView() }
-                Tab("趋势", systemImage: "chart.line.uptrend.xyaxis", value: 1) { ProgressDashboardView() }
-                Tab("教练", systemImage: "wand.and.sparkles", value: 2) { CoachView() }
-                Tab("设置", systemImage: "gearshape.fill", value: 3) { SettingsView() }
+                Tab("今日", systemImage: AppSymbol.today, value: 0) { TodayView() }
+                Tab("趋势", systemImage: AppSymbol.trends, value: 1) { ProgressDashboardView() }
+                Tab("教练", systemImage: AppSymbol.coach, value: 2) { CoachView() }
+                Tab("设置", systemImage: AppSymbol.settings, value: 3) { SettingsView() }
             }
         } else {
             legacyTabs
@@ -83,16 +83,16 @@ struct RootView: View {
     private var legacyTabs: some View {
         TabView(selection: $selectedTab) {
             TodayView()
-                .tabItem { Label("今日", systemImage: "house.fill") }
+                .tabItem { Label("今日", systemImage: AppSymbol.today) }
                 .tag(0)
             ProgressDashboardView()
-                .tabItem { Label("趋势", systemImage: "chart.line.uptrend.xyaxis") }
+                .tabItem { Label("趋势", systemImage: AppSymbol.trends) }
                 .tag(1)
             CoachView()
-                .tabItem { Label("教练", systemImage: "wand.and.sparkles") }
+                .tabItem { Label("教练", systemImage: AppSymbol.coach) }
                 .tag(2)
             SettingsView()
-                .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                .tabItem { Label("设置", systemImage: AppSymbol.settings) }
                 .tag(3)
         }
     }

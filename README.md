@@ -87,3 +87,13 @@ AI 营养结果会在保存前保持可编辑；它仅用于日常记录参考�
 - `swiftc LifeRecord/Services/MealPhotoStore.swift Tests/meal-photo-cache.swift -o /tmp/meal-photo-cache-test && /tmp/meal-photo-cache-test`：隔离检查并发下载合并、跨实例离线缓存、密钥隔离、无效数据重试、取消与磁盘容量限制。
 - `swiftc LifeRecord/Services/SyncFailureDescription.swift Tests/sync-failure-description.swift -o /tmp/sync-failure-test && /tmp/sync-failure-test`：检查数据格式错误位置、网络错误文案及响应内容不泄露。
 - `python3 Tests/sync-edit.py`：验证训练记录及删除标记、旧客户端兼容与过期数据不覆盖。
+
+## 目标反馈与记录质量
+
+- 趋势页的“目标反馈”随 7 天、30 天或全部范围更新，使用当前设置中的起始体重、目标体重、每周变化、热量和蛋白质目标。显示趋势体重、距目标与进度、饮食记录覆盖、热量在目标 ±10% 内的记录日、蛋白质达到目标的记录日、测量天数与完成训练次数，以及最多三条下一步行动。
+- 反馈只使用真实、非未来且数值有效的记录；示例数据不参与，缺失日期不按零摄入计算，有记录不保证当天记全，今日结果仍可能变化。体重使用每日中位数后指数平滑；每周节奏需要至少三个测量日且跨度至少七天，7 天范围额外参考一周前的测量作为节奏起点。维持模式显示与目标的距离，不显示增减重进度。过期测量与方向不一致的目标会提示核对，不预测达标日期，也不自动调整目标。
+- 目标反馈遇到待核对身体记录时先提示确认趋势，并把当期检查项纳入下一步行动；已确认无误的版本不再重复提醒。
+- AI 周报接入同一份本机目标反馈和当周待核对问题，按目标距离、执行情况、记录不足及下周行动复盘。“和教练制定下一周计划”只预填对话草稿，由用户发送。
+- “记录质量检查”检查全部真实记录，并提供编辑入口：10 分钟内同名、同餐次、营养相同的疑似重复餐食；非有限、负值或很大的营养数值；热量与宏量换算差异；AI 餐食名称模糊或备注明确表示份量不明；身体数值超出录入范围；三天内相邻有效体重相差至少 3 kg 且达到前次体重的 5%；超过六小时或结束早于开始的训练；未来时间。
+- 这些规则是核对线索，不代表记录错误，不自动修改或删除数据。“确认无误”只在本机隐藏当前记录版本的提示，可在“已确认”中重新核对；记录修改或同步更新后重新检查。身体数据修正更新原 ID，保留腰围等未编辑字段，并在同步更新冲突时阻止覆盖。
+- 回归检查：`swiftc LifeRecord/Services/BodyTrend.swift LifeRecord/Services/RecordQuality.swift LifeRecord/Services/GoalFeedback.swift Tests/record-insights.swift -o /tmp/record-insights-test && /tmp/record-insights-test`，覆盖缺失日期、示例与未来记录、目标方向、维持模式、过期测量、跨午夜训练、疑似重复、AI 信息不足、数值异常和夏令时。

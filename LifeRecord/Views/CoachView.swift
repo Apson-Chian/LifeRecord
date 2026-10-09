@@ -152,7 +152,7 @@ struct CoachView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showsFavorites = true } label: {
-                        Image(systemName: "fork.knife.circle")
+                        Image(systemName: AppSymbol.meal)
                     }
                     .accessibilityLabel("选择常用餐食")
                 }
@@ -247,7 +247,7 @@ struct CoachView: View {
         if messages.isEmpty {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 9) {
-                    Label(settings.aiCanWrite ? "今天想聊什么？" : "AI 助手", systemImage: "wand.and.sparkles")
+                    Label(settings.aiCanWrite ? "今天想聊什么？" : "AI 助手", systemImage: AppSymbol.coach)
                         .font(.title2.bold())
                     Text(settings.supportsVision
                          ? "可以发送食物、配料表、营养表或训练截图，也可以让我替你记录数据。"

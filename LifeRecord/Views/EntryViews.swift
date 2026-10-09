@@ -393,20 +393,26 @@ struct AddWeightView: View {
     @Environment(\.modelContext) private var modelContext
     let defaultDate: Date
     let lastWeight: Double?
+    let editing: BodyMetric?
 
     @State private var date: Date
     @State private var weight: Double
     @State private var bodyFatText = ""
     @State private var note = ""
     @State private var errorMessage: String?
+    @State private var originalUpdatedAt: Date
     private enum Field: Hashable { case weight, bodyFat, note }
     @FocusState private var focusedField: Field?
 
-    init(defaultDate: Date, lastWeight: Double?) {
+    init(defaultDate: Date, lastWeight: Double?, editing: BodyMetric? = nil) {
         self.defaultDate = defaultDate
         self.lastWeight = lastWeight
-        _date = State(initialValue: defaultDate)
-        _weight = State(initialValue: lastWeight ?? 70)
+        self.editing = editing
+        _date = State(initialValue: editing?.date ?? defaultDate)
+        _weight = State(initialValue: editing?.weight ?? lastWeight ?? 70)
+        _bodyFatText = State(initialValue: editing?.bodyFat.map { String($0) } ?? "")
+        _note = State(initialValue: editing?.note ?? "")
+        _originalUpdatedAt = State(initialValue: editing?.updatedAt ?? .distantPast)
     }
 
     var body: some View {
@@ -426,7 +432,7 @@ struct AddWeightView: View {
                 }
                 Section("可选数据") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("体脂率", systemImage: "figure.arms.open").font(.headline)
+                        Label("体脂率", systemImage: AppSymbol.bodyFat).font(.headline)
                         HStack(alignment: .firstTextBaseline) {
                             TextField("例如 18.5", text: $bodyFatText)
                                 .font(.system(.largeTitle, design: .rounded).weight(.semibold))
@@ -447,14 +453,14 @@ struct AddWeightView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .keyboardDismissControl()
-            .navigationTitle("记录身体数据")
+            .navigationTitle(editing == nil ? "记录身体数据" : "编辑身体数据")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存", action: save)
                     .fontWeight(.semibold)
-                    .disabled(weight < 20 || weight > 400)
+                    .disabled(!weight.isFinite || weight < 20 || weight > 400)
                 }
             }
             .alert("无法保存身体数据", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -466,6 +472,10 @@ struct AddWeightView: View {
     }
 
     private func save() {
+        if let editing {
+            guard !editing.isDeleted else { errorMessage = "该记录已被删除，请关闭编辑页。"; return }
+            guard editing.updatedAt == originalUpdatedAt else { errorMessage = "该记录已在其他设备更新，请关闭后重新编辑。"; return }
+        }
         let normalized = bodyFatText.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
         let bodyFat = Double(normalized)
         guard weight.isFinite, (20...400).contains(weight), normalized.isEmpty || bodyFat.map({ $0.isFinite && (1...80).contains($0) }) == true else {
@@ -473,19 +483,19 @@ struct AddWeightView: View {
             return
         }
         focusedField = nil
-        let entry = BodyMetric(
-            date: date,
-            weight: weight,
-            bodyFat: bodyFat,
-            note: note
-        )
-        modelContext.insert(entry)
+        let entry = editing ?? BodyMetric(date: date, weight: weight)
+        if editing == nil { modelContext.insert(entry) }
+        entry.date = date
+        entry.weight = weight
+        entry.bodyFat = bodyFat
+        entry.note = note
+        entry.updatedAt = .now
         do {
             try modelContext.save()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
         } catch {
-            modelContext.delete(entry)
+            modelContext.rollback()
             errorMessage = error.localizedDescription
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }

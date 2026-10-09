@@ -15,7 +15,7 @@ struct SettingsView: View {
                         SettingsDestinationLabel(
                             title: "身体与目标",
                             subtitle: "\(settings.fitnessGoal.rawValue) · \(Int(settings.height)) cm · 目标 \(settings.targetWeight.formatted(.number.precision(.fractionLength(1)))) kg",
-                            symbol: "person.crop.circle.fill",
+                            symbol: "person",
                             tint: AppTheme.accent
                         )
                     }
@@ -39,7 +39,7 @@ struct SettingsView: View {
                         SettingsDestinationLabel(
                             title: "AI 助手",
                             subtitle: "\(settings.provider.rawValue) · \(settings.aiCanWrite ? "可管理记录" : "只读")",
-                            symbol: "wand.and.sparkles",
+                            symbol: AppSymbol.coach,
                             tint: AppTheme.accentSoft
                         )
                     }
@@ -50,7 +50,7 @@ struct SettingsView: View {
                         SettingsDestinationLabel(
                             title: "同步与联动",
                             subtitle: syncCoordinator.isConfigured ? syncCoordinator.statusMessage : "尚未配置跨设备同步",
-                            symbol: "arrow.triangle.2.circlepath.icloud.fill",
+                            symbol: "arrow.triangle.2.circlepath",
                             tint: AppTheme.recorded
                         )
                     }
@@ -58,13 +58,13 @@ struct SettingsView: View {
 
                 Section("常用记录与提醒") {
                     NavigationLink { FavoriteFoodsView() } label: {
-                        SettingsDestinationLabel(title: "常用餐食", subtitle: "固定名称、照片与每份营养", symbol: "fork.knife.circle.fill", tint: .orange)
+                        SettingsDestinationLabel(title: "常用餐食", subtitle: "固定名称、照片与每份营养", symbol: AppSymbol.meal, tint: .orange)
                     }
                     NavigationLink { ExerciseLibraryView() } label: {
-                        SettingsDestinationLabel(title: "我的动作库", subtitle: "自定义动作与默认组数", symbol: "dumbbell.fill", tint: .teal)
+                        SettingsDestinationLabel(title: "我的动作库", subtitle: "自定义动作与默认组数", symbol: AppSymbol.workout, tint: .teal)
                     }
                     NavigationLink { ReminderSettingsView() } label: {
-                        SettingsDestinationLabel(title: "漏记提醒", subtitle: "提醒时间、记录类别与训练日", symbol: "bell.badge.fill", tint: .orange)
+                        SettingsDestinationLabel(title: "漏记提醒", subtitle: "提醒时间、记录类别与训练日", symbol: "bell", tint: .orange)
                     }
                 }
 
@@ -75,7 +75,7 @@ struct SettingsView: View {
                         SettingsDestinationLabel(
                             title: "隐私、数据与帮助",
                             subtitle: "隐私说明、使用引导与示例数据",
-                            symbol: "lock.shield.fill",
+                            symbol: "lock.shield",
                             tint: .blue
                         )
                     }
@@ -97,13 +97,7 @@ private struct SettingsDestinationLabel: View {
 
     var body: some View {
         HStack(spacing: 13) {
-            Image(systemName: symbol)
-                .symbolRenderingMode(.hierarchical)
-                .font(.headline)
-                .foregroundStyle(tint)
-                .frame(width: 42, height: 42)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: 13).strokeBorder(tint.opacity(0.12), lineWidth: 1) }
+            IconBadge(symbol: symbol, tint: tint)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.body.weight(.medium))
                 Text(subtitle)

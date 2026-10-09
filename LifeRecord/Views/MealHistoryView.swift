@@ -89,18 +89,14 @@ struct MealDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Image(systemName: meal.kind.symbol)
-                                .font(.title2)
-                                .foregroundStyle(AppTheme.accent)
-                                .frame(width: 44, height: 44)
-                                .background(AppTheme.accent.opacity(0.12), in: Circle())
+                            IconBadge(symbol: meal.kind.symbol, tint: AppTheme.accent)
                         }
                         HStack(spacing: 8) {
-                            Label(meal.kind.rawValue, systemImage: "clock")
+                            Label(meal.kind.rawValue, systemImage: meal.kind.symbol)
                             if meal.source == .ai {
                                 Label("AI 估算", systemImage: "sparkles")
                             } else {
-                                Label("手动记录", systemImage: "hand.tap")
+                                Label("手动记录", systemImage: "square.and.pencil")
                             }
                         }
                         .font(.caption.weight(.semibold))
@@ -219,10 +215,7 @@ private struct MealHistoryRow: View {
                 MealPhotoView(imageID: imageID)
                     .frame(width: 48, height: 48)
             } else {
-                Image(systemName: meal.kind.symbol)
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(width: 48, height: 48)
-                    .background(AppTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                IconBadge(symbol: meal.kind.symbol, tint: AppTheme.accent, size: 48)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(meal.name).font(.subheadline.weight(.semibold))
