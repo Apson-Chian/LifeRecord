@@ -39,7 +39,7 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().callTime
         require(images.size <= config.optInt("maxPhotos", 6)) { "图片超出设置中的数量限制" }
         val list = JSONArray().put(JSONObject().put("role", "system").put("content", system + "\n" + config.optString("instructions")))
         messages.takeLast(14).forEachIndexed { index, original ->
-            val m = original.copy()
+            val m = JSONObject().put("role", original.getString("role")).put("content", original.getString("content"))
             if(index == messages.takeLast(14).lastIndex && images.isNotEmpty()) {
                 val content = JSONArray().put(JSONObject().put("type", "text").put("text", m.getString("content")))
                 images.forEach { bytes -> content.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)).apply { if(config.optString("provider") == "Dots") put("detail", "medium") })) }

@@ -12,6 +12,7 @@ import org.json.*
 import java.time.*
 import java.util.UUID
 
+data class WeeklyReport(val text: String = "", val generating: Boolean = false, val error: String = "", val generatedAt: Double? = null)
 data class Proposal(val actions: List<JSONObject>, val original: Snapshot, val conversation: String, val user: String)
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     val app = application as LifeRecordApplication
@@ -20,13 +21,58 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var config = MutableStateFlow(JSONObject(app.store.get("aiConfig", providerConfig("DeepSeek").toString())))
     val status = MutableStateFlow("记录保存在本机")
     val aiBusy = MutableStateFlow(false)
+    val draftPhotos = MutableStateFlow<List<ByteArray>>(emptyList())
     val syncing = MutableStateFlow(false)
     val conversations = MutableStateFlow(JSONArray(app.store.get("conversations", "[]")).objects())
     val selectedConversation = MutableStateFlow(conversations.value.firstOrNull()?.getString("id") ?: "")
     val proposal = MutableStateFlow<Proposal?>(null)
     val todayRequest = MutableStateFlow(0)
     val onboarding = MutableStateFlow(app.store.get("onboarded") != "yes")
+    val acknowledgedQuality = MutableStateFlow(JSONArray(app.store.get("recordQuality.acknowledged", "[]")).strings().toSet())
+    val weeklyReport = MutableStateFlow(app.store.get("weeklyReport").takeIf { it.isNotBlank() }?.let { raw ->
+        runCatching { JSONObject(raw).let { WeeklyReport(it.getString("text"), generatedAt = it.getDouble("generatedAt")) } }.getOrDefault(WeeklyReport())
+    } ?: WeeklyReport())
     private var syncJob: Job? = null
+    fun confirmQuality(issue: RecordQuality.Issue, confirmed: Boolean) {
+        require(RecordQuality.issues(snapshot.value.records).any { it.id == issue.id }) { "记录已更改，请重新核对" }
+        val ids = if(confirmed) acknowledgedQuality.value + issue.id else acknowledgedQuality.value - issue.id
+        app.store.set("recordQuality.acknowledged", JSONArray(ids.sorted()).toString()); acknowledgedQuality.value = ids
+    }
+    fun generateWeeklyReport() {
+        if(weeklyReport.value.generating) return
+        val source = snapshot.value; val at = now(); val start = at.day().minusDays(6)
+        val real = source.records.filter { !it.demo && it.date <= at }
+        if(real.none { it.type in listOf(RecordType.MEAL, RecordType.BODY, RecordType.WORKOUT) }) {
+            weeklyReport.value = weeklyReport.value.copy(error = "先添加真实记录，再生成周报"); return
+        }
+        val feedback = GoalFeedback.summarize(source.records, source.profile, 7, at, acknowledgedQuality.value)
+        val weights = BodyTrend.records(real, "weight", at).filter { it.day >= start }
+        val fat = BodyTrend.records(real, "bodyFat", at).filter { it.day >= start }
+        val nutrition = real.filter { it.type == RecordType.MEAL && it.date.day() >= start && RecordQuality.validNutrition(it) }.groupBy { it.date.day() }.toSortedMap().map { (day, entries) ->
+            "$day: ${format(Insights.total(entries, "calories"))} kcal / P${format(Insights.total(entries, "protein"))} g"
+        }
+        val workouts = real.filter { it.type == RecordType.WORKOUT && it.date.day() >= start }
+        val issues = RecordQuality.issues(source.records, at).filter { it.date.day() >= start && it.date <= at && it.id !in acknowledgedQuality.value }
+        val context = """最近七天（含今天），$start 至 ${at.day()}。目标：${source.profile}。
+本机目标反馈：${feedback.context}。待核对：${issues.joinToString("、") { it.title }}。
+体重：${weights.joinToString { "${it.day}: 中位数 ${it.value} kg，趋势 ${it.trend} kg，${it.count} 次" }}。
+体脂：${fat.joinToString { "${it.day}: 中位数 ${it.value}%，趋势 ${it.trend}%" }}。
+每日营养：${nutrition.joinToString("；")}。
+训练起止、部位、备注和逐组数据：${JSONArray(workouts.map { it.json.copy().apply { remove("localPhotoFiles"); remove("uploadedPhotoFiles") } })}。
+每日中位数后按实际间隔指数平滑；无记录不代表零，今日记录尚未结束。"""
+        val c = config.value.copy(); val key = app.secrets.get("ai.${c.getString("provider")}")
+        weeklyReport.value = weeklyReport.value.copy(generating = true, error = "")
+        viewModelScope.launch {
+            try {
+                val text = withContext(Dispatchers.IO) { app.network.complete(c, key,
+                    "依据用户设定目标与本机统计，用中文按“目标距离、执行情况、记录不足、下周行动”复盘。引用记录天数和达标天数，缺失日期不按零摄入计算，今日尚未结束。先提醒待核对数据；体重进度不等同于肌肉或脂肪变化，不预测到达日期，不自动调整目标，不输出写入操作。最后给 2–3 条具体行动，不做医疗诊断，不鼓励极端热量缺口。",
+                    listOf(JSONObject().put("role", "user").put("content", context))) }
+                app.store.set("weeklyReport", JSONObject().put("text", text).put("generatedAt", at).toString())
+                weeklyReport.value = WeeklyReport(text, generatedAt = at)
+            } catch(e: CancellationException) { weeklyReport.value = weeklyReport.value.copy(generating = false); throw e }
+            catch(e: Exception) { weeklyReport.value = weeklyReport.value.copy(generating = false, error = e.message.orEmpty()) }
+        }
+    }
     private fun persist(s: Snapshot) { app.store.commit(s); _snapshot.value = s; ReminderWorker.schedule(app) }
     fun save(r: Record, photos: List<ByteArray> = emptyList()) {
         Validation.record(r)
@@ -114,21 +160,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         saveChats(listOf(JSONObject().put("id", id).put("title", "新的对话").put("messages", JSONArray())) + conversations.value)
         selectedConversation.value = id; return id
     }
-    fun deleteConversation(id: String) { saveChats(conversations.value.filterNot { it.getString("id") == id }); selectedConversation.value = conversations.value.firstOrNull()?.getString("id") ?: ""; if(proposal.value?.conversation == id) proposal.value = null }
-    private fun append(id: String, role: String, content: String) {
+    fun deleteConversation(id: String) {
+        require(!aiBusy.value) { "回答仍在生成，请稍后删除" }
+        val photos = conversations.value.firstOrNull { it.optString("id") == id }?.optJSONArray("messages")?.objects()?.flatMap { it.optJSONArray("localPhotoFiles")?.strings().orEmpty() }.orEmpty()
+        saveChats(conversations.value.filterNot { it.getString("id") == id })
+        photos.forEach { runCatching { app.photos.deleteChat(it) } }
+        selectedConversation.value = conversations.value.firstOrNull()?.getString("id") ?: ""; if(proposal.value?.conversation == id) proposal.value = null }
+    private fun append(id: String, role: String, content: String, photos: List<String> = emptyList()) {
         saveChats(conversations.value.map { chat -> if(chat.getString("id") == id) chat.copy().apply {
-            put("messages", JSONArray(getJSONArray("messages").objects() + JSONObject().put("role", role).put("content", content)))
+            put("messages", JSONArray(getJSONArray("messages").objects() + JSONObject().put("role", role).put("content", content).put("localPhotoFiles", JSONArray(photos))))
             if(role == "user" && getString("title") == "新的对话") put("title", content.take(20))
         } else chat })
     }
     fun send(text: String, images: List<ByteArray> = emptyList()) {
         if(aiBusy.value || (text.isBlank() && images.isEmpty())) return
         val id = selectedConversation.value.ifBlank { newConversation() }; val user = text.ifBlank { "请分析图片" }
-        append(id, "user", user); aiBusy.value = true; proposal.value = null
+        val localPhotos = mutableListOf<String>()
+        try { images.forEach { localPhotos += app.photos.saveChat(it) }; append(id, "user", user, localPhotos) }
+        catch(e: Exception) { localPhotos.forEach { app.photos.deleteChat(it) }; throw e }
+        aiBusy.value = true; proposal.value = null
         viewModelScope.launch {
             try {
                 val original = snapshot.value
-                val context = Merge.wire(original).put("favorites", JSONArray(original.records.filter { it.type == RecordType.FAVORITE }.map { it.json })).put("exerciseTemplates", JSONArray(original.records.filter { it.type == RecordType.EXERCISE }.map { it.json }))
+                val context = Merge.wire(original).put("favorites", JSONArray(original.records.filter { it.type == RecordType.FAVORITE }.map { it.json.copy().apply { remove("localPhotoFiles");remove("uploadedPhotoFiles") } })).put("exerciseTemplates", JSONArray(original.records.filter { it.type == RecordType.EXERCISE }.map { it.json }))
                 val c = config.value.copy()
                 val history = conversations.value.first { it.getString("id") == id }.getJSONArray("messages").objects()
                 val reply = withContext(Dispatchers.IO) { parseObject(app.network.complete(c, app.secrets.get("ai.${c.getString("provider")}"), AgentActions.PROMPT + "\n本地时间：${OffsetDateTime.now()}\n当前数据：$context", history, images, true)) }

@@ -13,10 +13,12 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.ui.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.graphicsLayer
@@ -27,6 +29,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
 import android.graphics.BitmapFactory
+import android.os.Build
 import kotlinx.coroutines.*
 import ltd.apsonchian.liferecord.AppViewModel
 import ltd.apsonchian.liferecord.data.*
@@ -208,19 +211,48 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
     }
     if(delete) AlertDialog(onDismissRequest={delete=false},title={Text("删除${r.type.label}？")},text={Text("启用同步后，删除会同步到你的其他设备。")},confirmButton={TextButton(onClick={runCatching { vm.delete(r); dismiss(); notify("记录已删除") }.onFailure { notify(it.message.orEmpty()) }}) { Text("删除") }},dismissButton={TextButton(onClick={delete=false}) { Text("保留") }})
 }
-@Composable fun PhotoBytes(bytes: ByteArray, modifier: Modifier = Modifier) {
+@Composable fun PhotoBytes(bytes: ByteArray, modifier: Modifier = Modifier, contentScale: androidx.compose.ui.layout.ContentScale = androidx.compose.ui.layout.ContentScale.Crop) {
     val bitmap = remember(bytes) { BitmapFactory.decodeByteArray(bytes,0,bytes.size)?.asImageBitmap() }
-    bitmap?.let { Image(it,"餐食照片",modifier.clip(RoundedCornerShape(16.dp)),contentScale=androidx.compose.ui.layout.ContentScale.Crop) }
+    bitmap?.let { Image(it,"照片",modifier.clip(RoundedCornerShape(16.dp)),contentScale=contentScale) }
 }
 @Composable fun PhotoRecord(vm: AppViewModel,r:Record,id:String,local:Boolean) {
     var bytes by remember(id) { mutableStateOf<ByteArray?>(null) }; var error by remember { mutableStateOf("") }; var retry by remember { mutableIntStateOf(0) }; var full by remember { mutableStateOf(false) }
     LaunchedEffect(id,retry) { try { bytes=vm.photo(r,id,local); error="" } catch(e:Exception) { error=e.message.orEmpty() } }
     bytes?.let { data -> Box(Modifier.fillMaxWidth().height(220.dp).clickable { full=true }) { PhotoBytes(data,Modifier.fillMaxSize()) } } ?: if(error.isBlank()) CircularProgressIndicator() else TextButton(onClick={retry++}) { Text("照片加载失败，点此重试") }
-    if(full) Dialog(onDismissRequest={full=false},properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        var scale by remember { mutableFloatStateOf(1f) }; var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-        Box(Modifier.fillMaxSize().background(Color.Black).transformable(rememberTransformableState { zoom,pan,_ -> scale=(scale*zoom).coerceIn(1f,5f); offset=if(scale>1) offset+pan else androidx.compose.ui.geometry.Offset.Zero })) {
-            bytes?.let { PhotoBytes(it,Modifier.fillMaxSize().graphicsLayer { scaleX=scale;scaleY=scale;translationX=offset.x;translationY=offset.y }) }
-            IconButton(onClick={full=false},Modifier.align(Alignment.TopEnd).statusBarsPadding()) { Icon(Icons.Default.Close,"关闭照片",tint=Color.White) }
+    if(full) bytes?.let { PhotoViewer(vm,it) { full=false } }
+}
+
+@Composable fun PhotoViewer(vm:AppViewModel,data:ByteArray,dismiss:()->Unit) {
+    val context=LocalContext.current
+    val scope=rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) };var notice by remember { mutableStateOf("") }
+    val document=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) { uri ->
+        if(uri!=null) scope.launch {
+            saving=true
+            try { withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)?.use { it.write(data) } ?: error("无法写入照片") };notice="照片已保存" }
+            catch(e:Exception) { notice="保存失败：${e.message.orEmpty()}" } finally { saving=false }
+        }
+    }
+    Dialog(onDismissRequest=dismiss,properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
+        var scale by remember { mutableFloatStateOf(1f) };var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) };var swipe by remember { mutableFloatStateOf(0f) }
+        val threshold=with(LocalDensity.current) { 96.dp.toPx() }
+        Box(Modifier.fillMaxSize().background(Color.Black).testTag("photo-viewer")
+            .transformable(rememberTransformableState { zoom,pan,_ -> scale=(scale*zoom).coerceIn(1f,5f);offset=if(scale>1) offset+pan else androidx.compose.ui.geometry.Offset.Zero },canPan={scale>1f})
+            .pointerInput(scale) { detectTapGestures(onDoubleTap={scale=if(scale>1) 1f else 2f;offset=androidx.compose.ui.geometry.Offset.Zero}) }
+            .pointerInput(scale) { if(scale<=1f) detectVerticalDragGestures(onVerticalDrag={change,delta -> change.consume();swipe=(swipe+delta).coerceAtLeast(0f)},onDragEnd={if(swipe>threshold) dismiss() else swipe=0f},onDragCancel={swipe=0f}) }) {
+            PhotoBytes(data,Modifier.fillMaxSize().graphicsLayer { scaleX=scale;scaleY=scale;translationX=offset.x;translationY=offset.y+swipe },androidx.compose.ui.layout.ContentScale.Fit)
+            Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                IconButton(onClick=dismiss) { Icon(Icons.Default.Close,"关闭照片",tint=Color.White) }
+                Spacer(Modifier.weight(1f))
+                TextButton(enabled=!saving,onClick={
+                    if(Build.VERSION.SDK_INT<29) document.launch("LifeRecord-${System.currentTimeMillis()}.jpg") else scope.launch {
+                        saving=true
+                        try { withContext(Dispatchers.IO) { vm.app.photos.saveToGallery(data) };notice="已保存到系统相册" }
+                        catch(e:Exception) { notice="保存失败：${e.message.orEmpty()}" } finally { saving=false }
+                    }
+                }) { Text(if(saving) "保存中…" else "保存到相册",color=Color.White) }
+            }
+            if(notice.isNotBlank()) Text(notice,color=Color.White,modifier=Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp))
         }
     }
 }

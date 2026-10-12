@@ -2,6 +2,8 @@
 package ltd.apsonchian.liferecord.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -62,7 +65,7 @@ import java.time.format.DateTimeFormatter
                             if(type == RecordType.WORKOUT) { json.put("date", minOf(this.date, now())); json.put("endDate", minOf(this.date + 3600, now())) }
                         } }, notify, { editor = it.copy() },
                             { draft -> coachDraft = draft; tab = 2 }, { photos -> mealHistory = photos })
-                        1 -> Trends(vm, snapshot, { detail = it }, { tab = 2; coachDraft = "请结合最近七天的饮食、身体测量和训练，生成周报，说明记录覆盖与下周行动，不修改记录。" })
+                        1 -> Trends(vm, snapshot, { detail = it }, { draft -> tab = 2; coachDraft = draft }, notify)
                         2 -> Box(Modifier.fillMaxSize().padding(bottom = if(keyboardVisible) 0.dp else glassPageBottomPadding() - 16.dp)) {
                             Coach(vm, notify, coachDraft) { coachDraft = "" }
                         }
@@ -137,7 +140,7 @@ import java.time.format.DateTimeFormatter
             }
         }
         if(meals.any { it.demo } || s.records.any { it.demo && it.type == RecordType.BODY }) item { Panel { Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { Text("完整示例数据已写入", style = MaterialTheme.typography.titleMedium); Text("首页、趋势、教练都会展示对应效果", style = MaterialTheme.typography.bodySmall) }
+            Column(Modifier.weight(1f)) { Text("已加载示例数据", style = MaterialTheme.typography.titleMedium); Text("用于首页预览，不计入真实趋势和 AI 反馈", style = MaterialTheme.typography.bodySmall) }
             TextButton(onClick = vm::clearDemo) { Text("清除") }
         } } }
         item { Panel {
@@ -197,11 +200,22 @@ import java.time.format.DateTimeFormatter
 }
 @Composable fun Metric(label: String, value: String, color: Color) { Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(7.dp).background(color, RoundedCornerShape(4.dp))); Spacer(Modifier.width(8.dp)); Column { Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value, style = MaterialTheme.typography.labelLarge) } } }
 @Composable fun Ring(modifier: Modifier, values: List<Float>, thickness: Float) {
-    val track = MaterialTheme.colorScheme.surfaceVariant
+    val animated = values.mapIndexed { index, value -> animateFloatAsState(value.coerceIn(0f,1f), spring(dampingRatio=.88f,stiffness=380f),label="activity ring $index").value }
     Canvas(modifier) {
-        val stroke = thickness.dp.toPx(); val gap = 0f
-        values.forEachIndexed { i, value -> val inset = stroke/2+i*(stroke+gap); val diameter = size.minDimension-2*inset
-            if(diameter > 0) { drawArc(track, -90f, 360f, false, androidx.compose.ui.geometry.Offset(inset,inset), androidx.compose.ui.geometry.Size(diameter,diameter), style = Stroke(stroke)); drawArc(listOf(Protein,Carbs,Meals)[i], -90f, value.coerceIn(0f,1f)*360, false, androidx.compose.ui.geometry.Offset(inset,inset), androidx.compose.ui.geometry.Size(diameter,diameter), style = Stroke(stroke, cap = StrokeCap.Round)) }
+        val stroke = thickness.dp.toPx()
+        animated.forEachIndexed { i, value ->
+            val color = listOf(Protein,Carbs,Meals)[i]
+            val inset = stroke/2+i*stroke; val diameter = size.minDimension-2*inset
+            if(diameter>0) {
+                val top = androidx.compose.ui.geometry.Offset(inset,inset); val dimensions = androidx.compose.ui.geometry.Size(diameter,diameter)
+                drawArc(color.copy(alpha=.13f),-90f,360f,false,top,dimensions,style=Stroke(stroke))
+                if(value>0) {
+                    drawArc(Color.Black.copy(alpha=.13f),-90f,value*360f,false,top+androidx.compose.ui.geometry.Offset(.8.dp.toPx(),1.4.dp.toPx()),dimensions,style=Stroke(stroke,cap=StrokeCap.Round))
+                    val center=top+androidx.compose.ui.geometry.Offset(diameter/2,diameter/2)
+                    val gradient=Brush.sweepGradient(listOf(color.copy(alpha=.72f),color,color.copy(alpha=.88f),color),center)
+                    rotate(-90f,center) { drawArc(gradient,0f,value*360f,false,top,dimensions,style=Stroke(stroke,cap=StrokeCap.Round)) }
+                }
+            }
         }
     }
 }

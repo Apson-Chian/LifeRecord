@@ -61,4 +61,15 @@ class AuthenticationTest {
         val error=assertThrows(IllegalStateException::class.java) { Network(client).complete(providerConfig("DeepSeek"),secret,"测试",emptyList()) }
         assertTrue(error.message!!.contains("401")); assertTrue(error.message!!.contains("鉴权")); assertFalse(error.message!!.contains(secret))
     }
+    @Test fun conversationLocalPhotoMetadataIsNeverSentAsMessageFields() {
+        var body=""
+        val client=OkHttpClient.Builder().addInterceptor { chain ->
+            val buffer=okio.Buffer();chain.request().body!!.writeTo(buffer);body=buffer.readUtf8()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body("""{"choices":[{"message":{"content":"OK"}}]}""".toResponseBody("application/json".toMediaType())).build()
+        }.build()
+        Network(client).complete(providerConfig("DeepSeek"),"sk-local-test-only","测试",listOf(JSONObject().put("role","user").put("content","照片分析").put("localPhotoFiles",org.json.JSONArray().put("private-local-photo.jpg"))))
+        assertTrue(body.contains("照片分析"));assertFalse(body.contains("localPhotoFiles"));assertFalse(body.contains("private-local-photo.jpg"))
+    }
+
 }

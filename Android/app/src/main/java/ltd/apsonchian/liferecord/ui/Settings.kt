@@ -56,7 +56,7 @@ import android.net.Uri
             SettingsRow("重看引导","了解记录、AI 与私有同步") { vm.onboarding.value=true }
             SettingsRow("清除示例数据","仅清除带有示例标记的记录") { clear=true }
         } }
-        item { Text("LifeRecord · Android 1.1\n记录保存在本机，密钥由 Android Keystore 加密。使用 AI 时，记录上下文会发送至你选择的接口。同步使用原有私有服务器。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text("LifeRecord · Android 1.2\n记录保存在本机，密钥由 Android Keystore 加密。使用 AI 时，记录上下文会发送至你选择的接口。同步使用原有私有服务器。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     when(page) {
         "profile" -> ProfileForm(vm,s.profile,{page=""},notify)

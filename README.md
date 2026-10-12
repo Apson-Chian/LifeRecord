@@ -83,4 +83,4 @@ node Tests/web-smoke.cjs
 
 上述检查使用临时数据库或模拟 API，不访问真实健康记录。Swift 测试与安卓设备测试分别位于 `iOS/Tests/` 和 `Android/app/src/androidTest/`；具体命令见各平台文档。
 
-[身体趋势统计口径](Docs/body-trends.md)描述 iOS 的中位数和指数平滑规则；[历史网页设计参考](Docs/DesignReferences/qianwen.html)只作参考，实际 Web 入口为 `Web/index.html`。
+[身体趋势统计口径](Docs/body-trends.md)描述 iOS 与 Android 的中位数和指数平滑规则；[历史网页设计参考](Docs/DesignReferences/qianwen.html)只作参考，实际 Web 入口为 `Web/index.html`。

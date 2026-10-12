@@ -1,6 +1,9 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package ltd.apsonchian.liferecord.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -88,3 +91,12 @@ import java.time.YearMonth
     }
 }
 private fun Int?.orZero()=this ?: 0
+
+/** A navigation destination inside its tab; the floating navigation remains available. */
+@Composable fun SubPage(title:String,dismiss:()->Unit,content:@Composable ColumnScope.()->Unit) {
+    BackHandler { dismiss() }
+    Column(Modifier.fillMaxSize().imePadding()) {
+        TopAppBar(title={Text(title,style=MaterialTheme.typography.titleLarge)},navigationIcon={IconButton(onClick=dismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"返回") }},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color.Transparent))
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start=16.dp,end=16.dp,top=16.dp,bottom=glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
+    }
+}
