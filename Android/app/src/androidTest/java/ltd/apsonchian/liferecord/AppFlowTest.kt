@@ -287,7 +287,7 @@ class AppFlowTest {
         val instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         if(android.os.Build.VERSION.SDK_INT<29 || androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("captureScreenshots")!="true") return
         compose.waitUntil(8000) {compose.onAllNodesWithTag("status-message").fetchSemanticsNodes().isEmpty()}
-        compose.waitForIdle();instrumentation.waitForIdleSync()
+        compose.waitForIdle()
         // SurfaceFlinger presents Compose and RenderEffect layers after the semantics commit.
         android.os.SystemClock.sleep(400)
         val bitmap=instrumentation.uiAutomation.takeScreenshot() ?: error("Screenshot unavailable")
