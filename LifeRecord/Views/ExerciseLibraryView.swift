@@ -73,6 +73,7 @@ struct WorkoutBodyPartManagerView: View {
     @State private var editedName = ""
     @State private var renameTarget: PartName?
     @State private var message: String?
+    @State private var confirmsArmRepair = false
 
     init(initialRename: String? = nil, onRename: ((String, String) -> Void)? = nil) {
         self.onRename = onRename
@@ -84,6 +85,14 @@ struct WorkoutBodyPartManagerView: View {
         Array(Set(workouts.flatMap(\.bodyParts)).subtracting(choices)).sorted()
     }
     private var choices: [String] { WorkoutBodyParts.decodedChoices(catalogRaw) }
+    private var armRepairCandidates: [(entry: WorkoutEntry, parts: [String])] {
+        workouts.compactMap { entry in
+            guard !entry.isDeleted else { return nil }
+            let description = ([entry.note] + entry.exercises.map(\.name)).joined(separator: "、")
+            let parts = WorkoutBodyParts.refineArms(entry.bodyParts, describedBy: description)
+            return parts == entry.bodyParts ? nil : (entry, parts)
+        }
+    }
 
     var body: some View {
         Form {
@@ -102,6 +111,18 @@ struct WorkoutBodyPartManagerView: View {
                         store(WorkoutBodyParts.splittingArms(in: choices))
                         message = "已加入三个细分部位。旧的手臂训练仍保留，可逐条改成对应部位。"
                     }
+                }
+            }
+            if !armRepairCandidates.isEmpty {
+                Section {
+                    Button("修复 \(armRepairCandidates.count) 条手臂归类", systemImage: "arrow.triangle.2.circlepath") {
+                        confirmsArmRepair = true
+                        message = nil
+                    }
+                } header: {
+                    Text("修复历史训练")
+                } footer: {
+                    Text("预览后再保存。仅处理已标为“手臂”、且备注或动作名称明确写了二头、三头或小臂的训练；含否定、计划或不确定描述的记录请逐条核对。")
                 }
             }
             Section {
@@ -140,6 +161,37 @@ struct WorkoutBodyPartManagerView: View {
         }
         .navigationTitle("管理训练部位")
         .keyboardDoneButton()
+        .sheet(isPresented: $confirmsArmRepair) {
+            NavigationStack {
+                List {
+                    Section {
+                        ForEach(armRepairCandidates, id: \.entry.id) { candidate in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(candidate.entry.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.subheadline.weight(.semibold))
+                                Text("\(candidate.entry.bodyParts.joined(separator: "、")) → \(candidate.parts.joined(separator: "、"))")
+                                    .font(.subheadline)
+                                if !candidate.entry.note.isEmpty { Text(candidate.entry.note).font(.caption).foregroundStyle(.secondary) }
+                                if !candidate.entry.exercises.isEmpty {
+                                    Text(candidate.entry.exercises.map(\.name).joined(separator: "、"))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    } footer: { Text("仅修改预览中的部位标签，训练时间、备注和动作保持原样。") }
+                    if let message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                }
+                .navigationTitle("手臂归类修复预览")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("取消") { confirmsArmRepair = false } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("保存 \(armRepairCandidates.count) 条") { repairArmParts() }
+                            .disabled(armRepairCandidates.isEmpty)
+                    }
+                }
+            }
+        }
         .sheet(item: $renameTarget) { target in
             NavigationStack {
                 Form {
@@ -171,6 +223,21 @@ struct WorkoutBodyPartManagerView: View {
         }
         store(choices + [name])
         newName = ""; message = nil
+    }
+
+    private func repairArmParts() {
+        let candidates = armRepairCandidates
+        guard !candidates.isEmpty else { return }
+        for (entry, parts) in candidates {
+            entry.bodyParts = parts
+            entry.updatedAt = .now
+        }
+        do { try context.save() }
+        catch { context.rollback(); message = "修复失败：\(error.localizedDescription)"; return }
+        store(WorkoutBodyParts.splittingArms(in: choices))
+        message = "已修复 \(candidates.count) 条训练；没有明确细分部位的记录请逐条修改。"
+        confirmsArmRepair = false
+        Task { await sync.sync(context: context, settings: settings) }
     }
 
     private func rename(_ oldName: String) {

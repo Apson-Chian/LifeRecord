@@ -18,9 +18,24 @@ struct WorkoutStorageTests {
         assert(loaded.contentSummary.contains("旧版训练") && loaded.contentSummary.contains("自定义划船"))
         loaded.bodyParts = ["背部", "核心"]
         try reader.save()
-        let reread = try ModelContext(container).fetch(FetchDescriptor<WorkoutEntry>()).first!
+        let repairContext = ModelContext(container)
+        let reread = try repairContext.fetch(FetchDescriptor<WorkoutEntry>()).first!
         assert(reread.bodyParts == ["背部", "核心"])
         assert(reread.overviewSummary.contains("背部 · 核心"))
+        reread.bodyParts = ["胸部", "手臂"]
+        reread.note = "卧推、二头和三头"
+        try repairContext.save()
+        let originalID = reread.id, originalDate = reread.date, originalEnd = reread.endDate
+        let originalExercises = reread.exercisesRaw, originalNote = reread.note
+        reread.bodyParts = WorkoutBodyParts.refineArms(reread.bodyParts, describedBy: reread.note)
+        reread.updatedAt = .now
+        try repairContext.save()
+        let repaired = try ModelContext(container).fetch(FetchDescriptor<WorkoutEntry>()).first!
+        assert(repaired.bodyParts == ["胸部", "二头", "三头"])
+        assert(repaired.id == originalID && repaired.date == originalDate && repaired.endDate == originalEnd)
+        assert(repaired.note == originalNote && repaired.exercisesRaw == originalExercises)
+        let count = try reader.fetchCount(FetchDescriptor<WorkoutEntry>())
+        assert(count == 1)
         print("PASS: SwiftData default, save and independent-context structured workout read")
     }
 }

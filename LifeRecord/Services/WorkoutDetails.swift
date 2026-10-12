@@ -101,6 +101,20 @@ enum WorkoutBodyParts {
         return Array(preceding) + armParts + Array(remaining)
     }
 
+    // Keep the user's specific labels when a classifier returned the broader legacy label.
+    static func refineArms(_ parts: [String], describedBy text: String) -> [String] {
+        guard parts.contains("手臂") else { return parts }
+        // Keyword matching cannot establish whether a mentioned part was actually trained.
+        // Leave ambiguous descriptions for a user-reviewed edit rather than guessing their meaning.
+        let ambiguous = ["不", "没", "未", "无", "勿", "别", "非", "取消", "跳过", "略过", "放弃", "排除", "避免", "除外", "休息", "停练",
+                         "计划", "准备", "打算", "想", "待", "可能", "也许", "或", "是否", "其中", "之一", "？", "?",
+                         "下次", "明天", "明日", "后天", "下周", "改天", "上次", "之前", "以前", "昨天", "昨日"]
+        guard !ambiguous.contains(where: text.contains) else { return parts }
+        let mentioned = armParts.filter { text.contains($0) }
+        guard !mentioned.isEmpty else { return parts }
+        return normalized(parts.filter { $0 != "手臂" } + mentioned)
+    }
+
     static func normalized(_ values: [String]) -> [String] {
         var seen = Set<String>()
         let valid = values.filter { isValid($0) && seen.insert($0).inserted }

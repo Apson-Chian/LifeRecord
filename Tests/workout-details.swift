@@ -30,6 +30,14 @@ struct WorkoutDetailTests {
         assert(!WorkoutBodyParts.defaults.contains("手臂"))
         assert(WorkoutBodyParts.splittingArms(in: ["胸部", "手臂", "核心"]) == ["胸部", "二头", "三头", "小臂", "核心"])
         assert(WorkoutBodyParts.splittingArms(in: ["手臂", "二头", "胸部"]) == ["二头", "三头", "小臂", "胸部"])
+        assert(WorkoutBodyParts.refineArms(["手臂"], describedBy: "三头、二头、小臂训练") == ["二头", "三头", "小臂"])
+        assert(WorkoutBodyParts.refineArms(["胸部", "手臂"], describedBy: "卧推和三头") == ["胸部", "三头"])
+        assert(WorkoutBodyParts.refineArms(["手臂"], describedBy: "上肢训练") == ["手臂"])
+        for ambiguous in ["没练二头，只练三头", "二头没有练，练了三头", "三头、二头都没练", "今天三头，下次练二头",
+                          "准备练二头和三头", "二头训练？", "二头或三头", "上次二头，这次三头", "跳过二头，只练小臂"] {
+            assert(WorkoutBodyParts.refineArms(["胸部", "手臂"], describedBy: ambiguous) == ["胸部", "手臂"])
+        }
+        assert(WorkoutBodyParts.refineArms(["二头"], describedBy: "三头训练") == ["二头"])
         print("PASS: per-set values, AI JSON decoding, round-trip, optional fields, validation and custom library")
     }
 }

@@ -13,6 +13,8 @@ struct WorkoutTrendCard: View {
     @State private var detailCategory = "训练记录"
     @State private var isClassifying = false
     @State private var classificationMessage: String?
+    @State private var showsPartAssistant = false
+    @State private var assistantFocusedPart: String?
     private let tint = Color.teal
     private var completed: [WorkoutEntry] { workouts.filter { $0.endDate != nil && $0.date <= .now } }
     private var days: [Day] {
@@ -139,6 +141,9 @@ struct WorkoutTrendCard: View {
             }
         }.background(AppBackground()).navigationTitle("训练明细")
             .sheet(item: $editing) { WorkoutEditor(entry: $0, date: $0.date) }
+            .sheet(isPresented: $showsPartAssistant) {
+                WorkoutPartAssistantView(focusedPart: assistantFocusedPart, recordIDs: Set(workouts.map(\.id)))
+            }
     }
 
     private var bodyPartSummaries: some View {
@@ -146,6 +151,16 @@ struct WorkoutTrendCard: View {
         let parts = Array(Set(finished.flatMap(\.bodyParts))).sorted()
         let unclassified = workouts.filter { $0.bodyParts.isEmpty && (!$0.note.isEmpty || !$0.exercises.isEmpty) }
         return Group {
+            Button {
+                assistantFocusedPart = nil
+                showsPartAssistant = true
+            } label: {
+                Label("与 AI 对话调整训练部位", systemImage: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(tint)
             NavigationLink { WorkoutBodyPartManagerView() } label: {
                 Label("管理训练部位", systemImage: "slider.horizontal.3")
                     .font(.subheadline.weight(.medium))
@@ -230,6 +245,12 @@ struct WorkoutTrendCard: View {
                                     Label("选择训练记录", systemImage: "calendar")
                                 }
                                 Spacer()
+                                Button {
+                                    assistantFocusedPart = part
+                                    showsPartAssistant = true
+                                } label: {
+                                    Label("AI 调整", systemImage: "sparkles")
+                                }
                                 NavigationLink {
                                     WorkoutBodyPartManagerView(initialRename: part)
                                 } label: {
