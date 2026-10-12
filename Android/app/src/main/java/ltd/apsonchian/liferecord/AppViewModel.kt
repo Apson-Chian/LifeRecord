@@ -51,7 +51,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         require(c.optString("endpoint").startsWith("https://")) { "请使用 HTTPS 接口" }
         require(c.optString("model").isNotBlank()) { "请填写模型名" }
         require(c.optInt("maxPhotos") in 1..12 && c.optInt("maxTokens") in 256..4096 && c.optDouble("temperature") in 0.0..2.0) { "请核对生成参数" }
-        if(apiKey != null) app.secrets.save("ai.${c.getString("provider")}", apiKey.trim())
+        if(AIAuthentication.officialDeepSeek(c.getString("endpoint"))) c.put("auth", "Bearer")
+        if(apiKey != null) app.secrets.save("ai.${c.getString("provider")}", AIAuthentication.normalizedKey(apiKey, c.optString("auth") == "Bearer"))
         app.store.set("aiConfig", c.toString()); config.value = c.copy()
     }
     fun saveSyncKey(key: String) { app.secrets.save("sync", key.trim()); status.value = if(key.isBlank()) "同步已关闭" else "同步密钥已保存"; sync() }

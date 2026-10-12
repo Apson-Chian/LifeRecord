@@ -27,6 +27,12 @@
 - LifeTrack 联动：通过 App Group 共享身体档案、今日饮食与运动摘要，并支持两个 App 之间一键跳转
 - 首次启动引导：自动写入 30 天示例数据，并展示真实的首页、趋势、教练和隐私效果，可随时在设置中重看或清除
 
+## DeepSeek 配置
+
+官方接口为 `https://api.deepseek.com/chat/completions`，固定使用 Bearer 认证，默认模型为 `deepseek-flash`。旧版官方认证设置会自动纠正；保存和发送时清理常见的密钥粘贴前缀并检查无效字符。`deepseek-flash` 支持图片，新预设默认开启，已有关闭设置可手动开启。
+
+重新构建并安装更新后，在「设置 → AI 接口 → API Key」粘贴开放平台的完整密钥，执行“保存并测试”。401 表示鉴权失败，402 表示余额不足；若仍返回 401，需要重新生成官方 API Key。详细配置与验证边界见[仓库说明](../README.md#deepseek-配置与-401-修复)。
+
 ## Dots 配置
 
 Dots 开放平台使用托管模型 `dots3-note-prev`，接口地址为
@@ -60,7 +66,7 @@ API Key 不会写入源码或 GitHub。如果测试失败，App 会区分“保�
 
 ## 回归检查
 
-运行 `./Tests/run.sh` 可一次编译并执行本目录的 11 个 Swift 回归程序。该脚本使用 Xcode 工具链，在临时目录生成产物并自动清理。
+运行 `./Tests/run.sh` 可一次编译并执行本目录的 12 个 Swift 回归程序。该脚本使用 Xcode 工具链，在临时目录生成产物并自动清理。
 
 - `python3 ../Tests/sync-edit.py`：使用临时 SQLite 检查原记录更新、照片保留及旧数据合并。
 - `swiftc LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift Tests/favorite-food-storage.swift -o /tmp/favorite-food-test && /tmp/favorite-food-test`：检查常用餐食照片和营养持久化，以及旧餐食数据库升级。

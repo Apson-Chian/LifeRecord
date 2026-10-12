@@ -12,6 +12,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
@@ -20,6 +24,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalDensity
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.*
 import ltd.apsonchian.liferecord.AppViewModel
@@ -29,17 +35,43 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 
 @Composable fun FullForm(title: String, dismiss: () -> Unit, actions: @Composable RowScope.() -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
-    Dialog(onDismissRequest = dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.systemBarsPadding().imePadding().widthIn(max = 760.dp)) {
-                TopAppBar(title = { Text(title) }, navigationIcon = { IconButton(onClick = dismiss) { Icon(Icons.Default.Close, "关闭") } }, actions = actions)
+    val keyboard = LocalSoftwareKeyboardController.current
+    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = MaterialTheme.colorScheme.background) {
+        Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.imePadding().widthIn(max = 760.dp)) {
+                TopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, navigationIcon = { TextButton(onClick = dismiss) { Text("取消") } }, actions = actions, colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent))
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
+                if(keyboardVisible) TextButton(onClick = { keyboard?.hide() }, modifier = Modifier.align(Alignment.End)) { Text("收起键盘") }
             }
         }
     }
 }
 @Composable fun TextFieldRow(label: String, value: String, change: (String) -> Unit, number: Boolean = false, lines: Int = 1) {
     OutlinedTextField(value, change, Modifier.fillMaxWidth(), label = { Text(label) }, keyboardOptions = KeyboardOptions(keyboardType = if(number && !label.contains("负数")) KeyboardType.Decimal else KeyboardType.Text), singleLine = lines == 1, minLines = lines, shape = RoundedCornerShape(14.dp))
+}
+/** Native date and time pickers avoid format-dependent typing, like the iOS editor. */
+@Composable fun DateTimeField(label: String, value: String, change: (String) -> Unit, optional: Boolean = false) {
+    val context = LocalContext.current
+    val choose = {
+        val initial = runCatching { LocalDateTime.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) }.getOrElse { LocalDateTime.now() }
+        DatePickerDialog(context, { _, year, month, day ->
+            TimePickerDialog(context, { _, hour, minute ->
+                change(LocalDateTime.of(year, month + 1, day, hour, minute).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
+            }, initial.hour, initial.minute, true).show()
+        }, initial.year, initial.monthValue - 1, initial.dayOfMonth).show()
+        Unit
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedButton(onClick = choose, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(16.dp)) {
+            Icon(Icons.Default.DateRange, null)
+            Column(Modifier.weight(1f).padding(start = 12.dp), horizontalAlignment = Alignment.Start) {
+                Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value.ifBlank { "进行中 · 未设置结束时间" }, color = MaterialTheme.colorScheme.onSurface)
+            }
+        }
+        if(optional && value.isNotBlank()) TextButton(onClick = { change("") }) { Text("清除结束时间，设为进行中") }
+    }
 }
 fun Double.localText(): String = Instant.ofEpochMilli((this*1000).toLong()).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
 fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()/1000.0
@@ -57,18 +89,19 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
     var ai by remember { mutableStateOf(false) }; var aiBusy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
     var customPart by remember { mutableStateOf("") }
     var showFavorites by remember { mutableStateOf(false) }
+    var showExercises by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) { uris ->
         scope.launch { runCatching { vm.readPhotos(uris) }.onSuccess { images = it }.onFailure { error = it.message.orEmpty() } }
     }
     val s by vm.snapshot.collectAsState()
     val build: () -> Record = {
-        val edited = r.copy(); edited.json.put("date", date.timestamp())
+        val edited = r.copy(); edited.json.put("date", if(date == r.date.localText()) r.date else date.timestamp())
         listOf("name","note","portion","bodyPart").forEach { edited.json.put(it, fields[it].orEmpty().trim()) }
         val numeric = when(r.type) { RecordType.MEAL, RecordType.FAVORITE -> listOf("calories","protein","carbs","fat","fiber"); RecordType.BODY -> listOf("weight","bodyFat","waist"); else -> emptyList() }
         numeric.forEach { key -> val text = fields[key].orEmpty(); if(text.isBlank() && key in listOf("bodyFat","waist")) edited.json.put(key, JSONObject.NULL) else edited.json.put(key, text.toDoubleOrNull() ?: error("请检查数字输入")) }
         if(r.type in listOf(RecordType.MEAL, RecordType.FAVORITE)) { edited.json.put("kind", kind); edited.json.put("inputText", input) }
-        if(r.type == RecordType.WORKOUT) { edited.json.put("endDate", if(end.isBlank()) JSONObject.NULL else end.timestamp()); edited.json.put("bodyParts", JSONArray(selectedParts)); edited.json.put("exercises", JSONArray(exercises)) }
+        if(r.type == RecordType.WORKOUT) { edited.json.put("endDate", if(end.isBlank()) JSONObject.NULL else if(!r.json.isNull("endDate") && end == r.json.optDouble("endDate").localText()) r.json.optDouble("endDate") else end.timestamp()); edited.json.put("bodyParts", JSONArray(selectedParts)); edited.json.put("exercises", JSONArray(exercises)) }
         edited
     }
     FullForm("编辑${r.type.label}", dismiss, actions = {
@@ -111,16 +144,19 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
             Text("训练部位", style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { (parts + selectedParts).distinct().forEach { part -> FilterChip(selected = part in selectedParts, onClick = { selectedParts = if(part in selectedParts) selectedParts - part else selectedParts + part }, label = { Text(part) }) } }
             Row(verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(customPart, { customPart = it }, Modifier.weight(1f), label = { Text("自定义部位") }, singleLine = true); TextButton(onClick = { if(customPart.trim().isNotEmpty()) { selectedParts = (selectedParts + customPart.trim()).distinct(); customPart = "" } }) { Text("添加") } }
-            TextFieldRow("结束时间 yyyy-MM-dd HH:mm（留空表示进行中）", end, { end = it })
-            Panel {
-                Text("具体动作与组数（可选）", style = MaterialTheme.typography.titleMedium)
+            DateTimeField("结束时间", end, { end = it }, optional = true)
+            TextButton(onClick = { showExercises = !showExercises }) {
+                Text("具体动作与组数（可选）", modifier = Modifier.weight(1f))
+                Icon(if(showExercises) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, if(showExercises) "收起动作" else "展开动作")
+            }
+            if(showExercises) Panel {
                 exercises.forEachIndexed { index, ex -> Row(verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = { exEdit = index }, Modifier.weight(1f)) { Text("${ex.optString("name")} · ${ex.optJSONArray("sets")?.length() ?: 0} 组") }; IconButton(onClick = { exercises = exercises.filterIndexed { i,_ -> i != index } }) { Icon(Icons.Default.Delete, "移除动作") } } }
                 OutlinedButton(onClick = { exercises = exercises + JSONObject().put("name", "").put("sets", JSONArray()).put("bodyPart", selectedParts.firstOrNull() ?: "未分类"); exEdit = exercises.lastIndex }) { Text("添加动作") }
                 val templates = s.records.filter { it.type == RecordType.EXERCISE }
                 if(templates.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { templates.forEach { template -> AssistChip(onClick = { exercises = exercises + JSONObject().put("name", template.title).put("bodyPart", template.json.optString("bodyPart", "未分类")).put("sets", JSONArray()) }, label = { Text(template.title) }) } }
             }
         }
-        TextFieldRow(if(r.type == RecordType.WORKOUT) "开始时间 yyyy-MM-dd HH:mm" else "记录时间 yyyy-MM-dd HH:mm", date, { date = it })
+        DateTimeField(if(r.type == RecordType.WORKOUT) "开始时间" else "记录时间", date, { date = it })
         TextFieldRow("备注", fields["note"].orEmpty(), { fields["note"] = it }, lines = 3)
         Spacer(Modifier.height(12.dp))
     }

@@ -13,6 +13,7 @@ check() {
   echo "PASS: $name"
 }
 
+check ai-authentication LifeRecord/Services/AIAuthentication.swift
 check body-trend LifeRecord/Services/BodyTrend.swift
 check favorite-food-storage LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check meal-photo-cache LifeRecord/Services/MealPhotoStore.swift

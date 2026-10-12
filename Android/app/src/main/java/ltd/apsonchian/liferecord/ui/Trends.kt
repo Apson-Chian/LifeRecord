@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
@@ -16,16 +17,16 @@ import java.time.LocalDate
 import kotlin.math.abs
 
 @Composable fun Trends(vm: AppViewModel,s:Snapshot,detail:(Record)->Unit,report:()->Unit) {
-    var range by remember { mutableIntStateOf(30) }; var search by remember { mutableStateOf("") }; var filter by remember { mutableStateOf<RecordType?>(null) }
+    var range by rememberSaveable { mutableIntStateOf(30) }; var search by rememberSaveable { mutableStateOf("") }; var filter by rememberSaveable { mutableStateOf<RecordType?>(null) }
     val today=LocalDate.now(); val start=if(range==0) LocalDate.MIN else today.minusDays(range.toLong()-1)
     val records=s.records.filter { !it.demo && it.date.day() in start..today }
     val meals=records.filter { it.type==RecordType.MEAL }; val weights=Insights.weights(records)
     val workouts=records.filter { it.type==RecordType.WORKOUT }.sortedByDescending { it.date }
     val days=meals.map { it.date.day() }.distinct().size
     val quality=records.flatMap { r -> Insights.quality(r).map { r to it } }
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-        item { PageTitle("看见你的进步","身体的变化，需要时间") }
-        item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { listOf(7 to "7 天",30 to "30 天",0 to "全部").forEach { (value,label) -> FilterChip(selected=range==value,onClick={range=value},label={Text(label)}) } } }
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,20.dp,16.dp,glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        item { PageTitle("趋势","回顾训练与身体变化") }
+        item { RangePicker(range) { range=it } }
         item { Panel {
             Text("训练概览",style=MaterialTheme.typography.titleLarge)
             val complete=workouts.filter { !it.json.isNull("endDate") }

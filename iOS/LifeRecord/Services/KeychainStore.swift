@@ -23,8 +23,7 @@ enum KeychainStore {
     }
 
     static func saveAPIKey(_ key: String, for provider: AIProvider) throws {
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw KeychainError.emptyKey }
+        let trimmed = try AIAuthentication.normalizedKey(key, bearer: provider == .deepSeek)
         try upsert(Data(trimmed.utf8), account: account(for: provider))
     }
 

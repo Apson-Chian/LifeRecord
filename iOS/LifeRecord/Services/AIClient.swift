@@ -297,8 +297,8 @@ struct AIClient {
         compatibilityProbe: Bool = false
     ) async throws -> String {
         let override = apiKeyOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let apiKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider) : override
-        guard !apiKey.isEmpty else { throw AIClientError.missingKey }
+        let storedKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider) : override
+        guard !storedKey.isEmpty else { throw AIClientError.missingKey }
         let endpoint = settings.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !model.isEmpty else { throw AIClientError.missingModel }
@@ -312,16 +312,8 @@ struct AIClient {
         request.httpMethod = "POST"
         request.timeoutInterval = 90
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        switch settings.authStyle {
-        case .bearer:
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        case .apiKey:
-            request.setValue(apiKey, forHTTPHeaderField: "api-key")
-        case .custom:
-            let header = settings.customHeaderName.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !header.isEmpty else { throw AIClientError.server("自定义认证请求头不能为空。") }
-            request.setValue(apiKey, forHTTPHeaderField: header)
-        }
+        let authentication = try AIAuthentication.header(endpoint: endpoint, style: settings.authStyle.rawValue, customHeader: settings.customHeaderName, key: storedKey)
+        request.setValue(authentication.value, forHTTPHeaderField: authentication.name)
 
         var userContent: Any = user
         if !images.isEmpty {
@@ -372,15 +364,20 @@ struct AIClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AIClientError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
+            if AIAuthentication.isOfficialDeepSeek(endpoint), let failure = AIAuthentication.deepSeekFailure(status: http.statusCode) {
+                throw AIClientError.server(failure)
+            }
             let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let error = payload?["error"] as? [String: Any]
-            let message = error?["message"] as? String
+            let rawMessage = error?["message"] as? String
                 ?? payload?["message"] as? String
                 ?? payload?["detail"] as? String
                 ?? payload?["title"] as? String
                 ?? payload?["error_type"] as? String
                 ?? String(data: data, encoding: .utf8)
                 ?? "未知错误"
+            let message = rawMessage.replacingOccurrences(of: storedKey, with: "[密钥已隐藏]")
+                .replacingOccurrences(of: try AIAuthentication.normalizedKey(storedKey, bearer: settings.authStyle == .bearer || AIAuthentication.isOfficialDeepSeek(endpoint)), with: "[密钥已隐藏]")
             if settings.provider == .dots && http.statusCode == 401 {
                 throw AIClientError.server("Dots API Key 缺失或无效。请粘贴 Dots API 开放平台生成的完整密钥。")
             }

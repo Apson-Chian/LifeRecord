@@ -69,10 +69,14 @@ private struct LegacySettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .focused($focusedField, equals: .model)
-                    Picker("认证方式", selection: $settings.authStyle) {
-                        ForEach(AIAuthStyle.allCases) { Text($0.rawValue).tag($0) }
+                    if AIAuthentication.isOfficialDeepSeek(settings.endpoint) {
+                        LabeledContent("认证方式", value: "Bearer Token（官方固定）")
+                    } else {
+                        Picker("认证方式", selection: $settings.authStyle) {
+                            ForEach(AIAuthStyle.allCases) { Text($0.rawValue).tag($0) }
+                        }
                     }
-                    if settings.authStyle == .custom {
+                    if settings.authStyle == .custom && !AIAuthentication.isOfficialDeepSeek(settings.endpoint) {
                         TextField("认证请求头名称", text: $settings.customHeaderName)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
@@ -115,7 +119,11 @@ private struct LegacySettingsView: View {
                     Text("AI 接口")
                 } footer: {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("兼容 OpenAI Chat Completions 格式。每个服务商的 API Key 分开保存在本机钥匙串。当前预设：DeepSeek deepseek-v4-flash、Dots dots3-note-prev、GLM glm-4.6v-flash。")
+                        Text("兼容 OpenAI Chat Completions 格式。每个服务商的 API Key 分开保存在本机钥匙串。当前预设：DeepSeek deepseek-flash、Dots dots3-note-prev、GLM glm-4.6v-flash。")
+                        if settings.provider == .deepSeek {
+                            Text("官方接口固定使用 Bearer 认证。deepseek-flash 支持图片；已有配置可开启“支持图片输入”。HTTP 401 表示密钥未通过鉴权；HTTP 402 表示 API 余额不足。")
+                            Link("DeepSeek API Key 管理", destination: URL(string: "https://platform.deepseek.com/api_keys")!)
+                        }
                         if settings.provider == .dots {
                             Link("Dots API 开放平台与接口文档", destination: URL(string: "https://dots.ai/platform/docs")!)
                         }
@@ -486,6 +494,10 @@ struct APIKeyEditorView: View {
                         if settings.provider == .dots {
                             Text("Dots 必须使用 dots.ai API 开放平台创建的完整 API Key；普通账号凭证、旧密钥或其他平台密钥会被 401/403 拒绝。")
                             Link("打开 Dots API 文档", destination: URL(string: "https://dots.ai/platform/docs")!)
+                        }
+                        if settings.provider == .deepSeek {
+                            Text("请复制开放平台创建的完整密钥；网页登录凭证或其他平台的密钥不能用于官方接口。粘贴的 Bearer 前缀会自动清理。")
+                            Link("打开 DeepSeek API Key 管理", destination: URL(string: "https://platform.deepseek.com/api_keys")!)
                         }
                     }
                 }

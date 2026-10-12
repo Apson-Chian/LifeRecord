@@ -13,15 +13,17 @@ import androidx.compose.material.icons.automirrored.filled.Send
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import ltd.apsonchian.liferecord.AppViewModel
 import ltd.apsonchian.liferecord.data.*
 
-@Composable fun Coach(vm:AppViewModel,notify:(String)->Unit) {
+@Composable fun Coach(vm:AppViewModel,notify:(String)->Unit,draft:String="",consumeDraft:()->Unit={}) {
     val chats by vm.conversations.collectAsState(); val selected by vm.selectedConversation.collectAsState(); val busy by vm.aiBusy.collectAsState(); val proposal by vm.proposal.collectAsState()
-    var text by remember { mutableStateOf("") }; var images by remember { mutableStateOf<List<ByteArray>>(emptyList()) }; var sidebar by remember { mutableStateOf(false) }; var deleteId by remember { mutableStateOf<String?>(null) }
+    var text by rememberSaveable { mutableStateOf("") }; var images by remember { mutableStateOf<List<ByteArray>>(emptyList()) }; var sidebar by remember { mutableStateOf(false) }; var deleteId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(draft) { if(draft.isNotBlank()) { text=draft; consumeDraft() } }
     val scope=rememberCoroutineScope(); val list=rememberLazyListState()
     val chat=chats.firstOrNull { it.getString("id")==selected }; val messages=chat?.getJSONArray("messages")?.objects().orEmpty()
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) { uris -> scope.launch { runCatching { vm.readPhotos(uris) }.onSuccess { images=it }.onFailure { notify(it.message.orEmpty()) } } }
@@ -40,7 +42,7 @@ import ltd.apsonchian.liferecord.data.*
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { TextButton(onClick={vm.proposal.value=null}) { Text("放弃") }; Button(onClick={runCatching { vm.applyProposal() }.onFailure { notify(it.message.orEmpty()) }}) { Text("确认并保存 ${p.actions.size} 项") } }
             } } }
         }
-        Surface(shadowElevation=3.dp) { Column(Modifier.padding(horizontal=12.dp,vertical=8.dp)) {
+        Surface(shape=androidx.compose.foundation.shape.RoundedCornerShape(24.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,MaterialTheme.colorScheme.primary.copy(alpha=.13f)),modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp)) { Column(Modifier.padding(horizontal=8.dp,vertical=6.dp)) {
             if(images.isNotEmpty()) Row(verticalAlignment=Alignment.CenterVertically) { Text("已选 ${images.size} 张照片",modifier=Modifier.weight(1f)); TextButton(onClick={images=emptyList()}) { Text("清除") } }
             Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                 IconButton(onClick={picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))},enabled=!busy) { Icon(Icons.Default.Add,"添加照片") }

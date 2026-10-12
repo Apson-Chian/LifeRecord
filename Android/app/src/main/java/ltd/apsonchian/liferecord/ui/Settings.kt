@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -25,15 +26,17 @@ import ltd.apsonchian.liferecord.data.*
 import ltd.apsonchian.liferecord.service.*
 import org.json.*
 import java.time.LocalTime
+import android.content.Intent
+import android.net.Uri
 
 @Composable fun Settings(vm:AppViewModel,s:Snapshot,notify:(String)->Unit) {
-    var page by remember { mutableStateOf("") }; var clear by remember { mutableStateOf(false) }
+    var page by rememberSaveable { mutableStateOf("") }; var clear by remember { mutableStateOf(false) }
     val status by vm.status.collectAsState(); val context=LocalContext.current; val scope=rememberCoroutineScope()
     val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if(uri!=null) scope.launch {
         runCatching { val text=vm.export(); withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: error("无法写入文件") } }.onSuccess { notify("记录已导出") }.onFailure { notify(it.message.orEmpty()) }
     } }
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-        item { PageTitle("照顾好自己","偏好与个人目标") }
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,20.dp,16.dp,glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(18.dp)) {
+        item { PageTitle("设置","偏好与个人目标") }
         item { Panel {
             Text(s.profile.optString("displayName").ifBlank { "我的档案" },style=MaterialTheme.typography.titleLarge)
             Text("${s.profile.optString("fitnessGoal")} · 目标 ${format(s.profile.optDouble("targetWeight"))} kg",color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -53,7 +56,7 @@ import java.time.LocalTime
             SettingsRow("重看引导","了解记录、AI 与私有同步") { vm.onboarding.value=true }
             SettingsRow("清除示例数据","仅清除带有示例标记的记录") { clear=true }
         } }
-        item { Text("LifeRecord · Android 1.0\n记录保存在本机，密钥由 Android Keystore 加密。使用 AI 时，记录上下文会发送至你选择的接口。同步使用原有私有服务器。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text("LifeRecord · Android 1.1\n记录保存在本机，密钥由 Android Keystore 加密。使用 AI 时，记录上下文会发送至你选择的接口。同步使用原有私有服务器。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     when(page) {
         "profile" -> ProfileForm(vm,s.profile,{page=""},notify)
@@ -86,6 +89,8 @@ import java.time.LocalTime
     var vision by remember { mutableStateOf(current.optBoolean("vision")) }; var canWrite by remember { mutableStateOf(current.optBoolean("canWrite")) }
     var key by remember { mutableStateOf("") }; var keyTouched by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
     val scope=rememberCoroutineScope()
+    val context=LocalContext.current
+    val officialDeepSeek=AIAuthentication.officialDeepSeek(fields["endpoint"].orEmpty())
     val save:()->Unit={
         val c=JSONObject().put("provider",provider).put("vision",vision).put("canWrite",canWrite)
         fields.forEach { (name,value) -> c.put(name,when(name) { "temperature" -> value.toDouble(); "maxPhotos","maxTokens" -> value.toInt(); else -> value }) }
@@ -97,8 +102,11 @@ import java.time.LocalTime
             if(provider!=p) { provider=p; val c=providerConfig(p); fields.keys.toList().forEach { fields[it]=c.opt(it)?.toString().orEmpty() }; vision=c.optBoolean("vision"); key="";keyTouched=false }
         },label={Text(p)}) } }
         TextFieldRow("接口地址（HTTPS）",fields["endpoint"].orEmpty(),{fields["endpoint"]=it});TextFieldRow("模型名",fields["model"].orEmpty(),{fields["model"]=it})
-        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) { listOf("Bearer","api-key","自定义").forEach { auth -> FilterChip(fields["auth"]==auth,{fields["auth"]=auth},label={Text(auth)}) } }
-        if(fields["auth"]=="自定义") TextFieldRow("认证请求头",fields["header"].orEmpty(),{fields["header"]=it})
+        if(officialDeepSeek) {
+            Text("DeepSeek 官方接口使用 Authorization: Bearer；更新会自动纠正旧认证配置。请使用开放平台创建的完整 API Key。deepseek-flash 支持图片；已有配置可开启下方的“支持图片”。",style=MaterialTheme.typography.bodySmall)
+            TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://platform.deepseek.com/api_keys")))}) { Text("打开 DeepSeek API Key 页面") }
+        } else FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) { listOf("Bearer","api-key","自定义").forEach { auth -> FilterChip(fields["auth"]==auth,{fields["auth"]=auth},label={Text(auth)}) } }
+        if(!officialDeepSeek && fields["auth"]=="自定义") TextFieldRow("认证请求头",fields["header"].orEmpty(),{fields["header"]=it})
         OutlinedTextField(key,{key=it;keyTouched=true},Modifier.fillMaxWidth(),label={Text("API Key（留空保留已有密钥）")},visualTransformation=PasswordVisualTransformation(),singleLine=true)
         Text("每个服务商的密钥分别保存。切换不会把其他服务商的密钥发到当前接口。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         Toggle("支持图片","需要模型本身支持视觉输入",vision,{vision=it})

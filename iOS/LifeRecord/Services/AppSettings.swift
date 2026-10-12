@@ -58,7 +58,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
 
     var model: String {
         switch self {
-        case .deepSeek: "deepseek-v4-flash"
+        case .deepSeek: "deepseek-flash"
         case .dots: "dots3-note-prev"
         case .glm: "glm-4.6v-flash"
         case .custom: "vision-model-name"
@@ -66,7 +66,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
     }
 
     var authStyle: AIAuthStyle { self == .dots ? .apiKey : .bearer }
-    var supportsVisionByDefault: Bool { self == .dots || self == .glm || self == .custom }
+    var supportsVisionByDefault: Bool { true }
 }
 
 @MainActor
@@ -147,9 +147,12 @@ final class AppSettings {
 
         let savedProvider = AIProvider(rawValue: defaults.string(forKey: Key.provider) ?? "") ?? .glm
         let savedModel = defaults.string(forKey: Key.model)
+        let savedEndpoint = defaults.string(forKey: Key.endpoint) ?? savedProvider.endpoint
         provider = savedProvider
-        endpoint = defaults.string(forKey: Key.endpoint) ?? savedProvider.endpoint
-        if savedProvider == .dots && savedModel == "dots.llm1.inst" {
+        endpoint = savedEndpoint
+        if savedProvider == .deepSeek && AIAuthentication.isOfficialDeepSeek(savedEndpoint) && savedModel == "deepseek-v4-flash" {
+            model = savedProvider.model
+        } else if savedProvider == .dots && savedModel == "dots.llm1.inst" {
             // 修复旧版 Dots 预设：开源权重名并不是开放平台的托管模型名。
             model = savedProvider.model
         } else if savedProvider == .glm && savedModel?.lowercased() == "glm-4.5v" {
@@ -160,6 +163,7 @@ final class AppSettings {
             model = savedModel ?? savedProvider.model
         }
         authStyle = AIAuthStyle(rawValue: defaults.string(forKey: Key.authStyle) ?? "") ?? savedProvider.authStyle
+        if AIAuthentication.isOfficialDeepSeek(savedEndpoint) { authStyle = .bearer }
         customHeaderName = defaults.string(forKey: Key.customHeaderName) ?? "Authorization"
         supportsVision = defaults.object(forKey: Key.supportsVision) as? Bool ?? savedProvider.supportsVisionByDefault
         maxPhotos = defaults.object(forKey: Key.maxPhotos) as? Int ?? 6

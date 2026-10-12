@@ -1,0 +1,47 @@
+# Android 1.1.0 与 iOS 对齐记录
+
+2026-10-12。以仓库内 `iOS/LifeRecord/Views/` 与 `AppTheme` 为参照，保留两个独立原生工程，共享已有同步协议。
+
+## 主要变化
+
+| Before | After | Why |
+| --- | --- | --- |
+| Material 底部实色栏 | 浮动胶囊玻璃栏，真实背景模糊、边缘折射、高光、选中胶囊、按压反馈，可滑动选择 | 接近 iOS 导航的材质、层次和操作 |
+| 通用配色与首页排列 | iOS 蓝紫主题、蓝/橙/红相邻圆环、问候、周历、目标、快捷记录、训练、营养、餐次、提示 | 保持两端信息位置和识别方式一致 |
+| 添加类型的底部选单 | 顶部加号展开“记一餐 / 记体重”，训练仍在训练卡操作 | 对齐 iOS 记录入口 |
+| 普通日期输入与系统日历 | 记录月历绿点、前后月份、回到今天；编辑使用原生日期和时间选择器 | 快速找到有记录日期，避免手输日期格式 |
+| 训练结束仅保存 | 保存结束时间后立即进入编辑，动作/组数默认收起；未修改时间时保留秒精度 | 对齐 iOS 训练收尾流程与可选填写 |
+| 页面切换丢失局部状态 | 保留标签滚动、趋势范围、搜索、日期及教练未发送文字 | 支持跨页面查看后继续操作 |
+| 首页 AI 提示缺少上下文入口 | 点击“问 AI”先填入所选日期的提示草稿，不自动发送 | 对齐 iOS 的可控输入与发送 |
+| 饮食列表缺少首页历史入口 | 首页“查看全部”和“照片”进入完整历史/照片列表 | 对齐 iOS 常用浏览路径 |
+| 官方 DeepSeek 可选择错误认证头，粘贴前缀原样发出 | iOS/Android 都固定官方 Bearer、归一化粘贴格式、校验完整密钥、区分 401 与 402 | 修正客户端可能导致鉴权失败的配置与输入 |
+
+## 玻璃实现与支持
+
+只捕获导航下方的页面图层，导航作为独立层绘制，避免循环捕获。背景采用 RenderEffect 模糊，AGSL 根据胶囊边缘距离调整采样位置；文字和图标不参与模糊。未增加第三方玻璃依赖，也没有复制第三方源码。
+
+| 系统/设备 | 效果 |
+| --- | --- |
+| Android 13 / API 33 及以上 | 背景模糊 + AGSL 边缘折射 + 高光与边框；着色器创建失败时回退模糊 |
+| Android 12 / API 31–32 | 背景模糊 + 高光与边框 |
+| Android 8–11 / API 26–30、低内存设备 | 高不透明度磨砂底色 + 高光与边框 |
+
+导航遵循系统底部安全区，键盘出现时隐藏；文字放大时增高导航。动画只涉及选择胶囊与按压缩放，使用平台 Compose 动画时长机制。对话/表单采用安卓返回与键盘规则。
+
+参考的原始项目与官方说明：
+
+- [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)：Compose 背景折射与玻璃底部导航的实现经验。
+- [Haze](https://github.com/chrisbanes/haze)：将背景源和模糊显示层分离。
+- [Compose Floating Tab Bar](https://github.com/elyesmansour/compose-floating-tab-bar)：浮动导航的交互参考。
+- [Compose GraphicsLayer](https://developer.android.com/develop/ui/compose/graphics/draw/modifiers)：记录和复用页面图层。
+- [Android AGSL / RenderEffect](https://developer.android.com/develop/ui/views/graphics/agsl/using-agsl)：API 33 的运行时着色器与渲染效果。
+
+## 已验证与剩余差异
+
+Android 15 / API 35 ARM64 模拟器验证深浅色界面、滚动背景、键盘避让与玻璃导航操作；自动设备检查覆盖保存/删除餐食、训练开始/结束/编辑、标签状态、AI 草稿不自动发送、滑动导航及存储。API 26–32 的材质分支尚未在这些系统的设备上运行验证。
+
+本次对齐主要界面和记录流程。Android 仍使用基础趋势统计，未移植 iOS 完整指数平滑、全部质量规则及质量确认列表；周报填入教练草稿，未复刻独立周报展示；照片没有保存到系统相册按钮；对话切换使用底部面板，聊天附件不持久化；圆环未复刻完整立体光照。苹果原生 Liquid Glass 不能直接用于安卓，当前为安卓原生渲染近似。
+
+DeepSeek 的真实有效密钥未提供，自动回归验证请求构造和模拟响应，不能证明用户账户的密钥有效。新安装包/新 iOS 构建安装后才会应用修复；如果仍为 401，需要在官方平台重新生成密钥，不能通过改模型名或充值替代鉴权。[官方接口与模型](https://api-docs.deepseek.com/)、[错误码](https://api-docs.deepseek.com/quick_start/error_codes/)。
+
+具体检查结果见 [Android/VALIDATION.md](../Android/VALIDATION.md)，界面截图见 [Android/README.md](../Android/README.md#界面预览)。

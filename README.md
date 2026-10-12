@@ -29,7 +29,7 @@ LifeRecord/
 | iOS | Xcode 打开 `iOS/LifeRecord.xcodeproj` | [运行、功能与平台配置](iOS/README.md) |
 | Web / 后端 | 部署 `Web/` 与 `Backend/` | 下方说明与现有服务配置 |
 
-安卓端界面已按 Material 3 重绘，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。平台实现差异见安卓说明。
+安卓端使用 Compose 实现接近 iOS 的浮动玻璃导航、主题与主要记录流程，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。界面变化、系统效果支持与剩余差异见[安卓与 iOS 对齐记录](Docs/android-ios-parity.md)。
 
 ## 快速构建
 
@@ -51,6 +51,14 @@ xcodebuild -project iOS/LifeRecord.xcodeproj -scheme LifeRecord \
 ```
 
 安卓 APK 生成于 `Android/app/build/outputs/apk/debug/app-debug.apk`。构建缓存、安装包、本机 SDK 路径和签名密钥均被 Git 忽略。API Key 与同步密钥由用户在各端设置中录入，不写入仓库。
+
+## DeepSeek 配置与 401 修复
+
+两端官方接口均使用 `https://api.deepseek.com/chat/completions`、`Authorization: Bearer`，预设模型更新为 `deepseek-flash`。发送时自动纠正旧认证选项，清理密钥粘贴中的 Bearer / Authorization 前缀和外围空白，阻止隐藏或包含不可见字符的密钥进入网络请求。密钥继续按服务商独立存储。
+
+更新 App 后，在「设置 → AI 接口」选择 DeepSeek，复制[开放平台的完整 API Key](https://platform.deepseek.com/api_keys)，保存并测试。不要使用网页登录凭证或第三方服务的密钥。401 表示鉴权失败，402 表示 API 余额不足；错误提示不回显密钥。若新版仍返回 401，请重新创建官方密钥。已有失效密钥无法通过修改客户端恢复。[官方配置](https://api-docs.deepseek.com/)、[错误码说明](https://api-docs.deepseek.com/quick_start/error_codes/)。
+
+`deepseek-flash` 支持图片；新预设开启图片能力，已有关闭设置继续保留，可手动开启。模型别名 `deepseek-v4-flash` 仍受官方支持，模型名更新并非 401 的原因。自动回归使用模拟响应检查实际请求头和错误处理，未使用用户密钥进行真实连通性验证。
 
 ## Web 页面
 

@@ -14,10 +14,13 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.platform.LocalContext
@@ -38,34 +41,40 @@ import java.time.format.DateTimeFormatter
     LaunchedEffect(todayRequest) { if(todayRequest > 0) { tab = 0; dateText = LocalDate.now().toString() } }
     var editor by remember { mutableStateOf<Record?>(null) }
     var detail by remember { mutableStateOf<Record?>(null) }
-    var chooseType by remember { mutableStateOf(false) }
+    var coachDraft by rememberSaveable { mutableStateOf("") }
+    var mealHistory by remember { mutableStateOf<Boolean?>(null) }
+    val pages = rememberSaveableStateHolder()
+    val sourceLayer = rememberGraphicsLayer()
+    val backdrop = remember(sourceLayer) { GlassBackdrop(sourceLayer) }
+    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val snack = remember { SnackbarHostState() }; val scope = rememberCoroutineScope()
     val notify: (String) -> Unit = { scope.launch { snack.showSnackbar(it) } }
     if(first) { Onboarding(vm); return@LifeTheme }
     BackHandler(enabled = tab != 0) { tab = 0 }
-    Scaffold(snackbarHost = { SnackbarHost(snack) }, bottomBar = {
-        NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-            val labels = listOf("今日", "趋势", "教练", "设置")
-            val icons = listOf(Icons.Default.Home, Icons.Default.DateRange, Icons.Default.Person, Icons.Default.Settings)
-            labels.forEachIndexed { i, title -> NavigationBarItem(selected = tab == i, onClick = { tab = i }, icon = { Icon(icons[i], title) }, label = { Text(title) }) }
-        }
-    }) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            when(tab) {
-                0 -> Today(vm, snapshot, date, { dateText = it.toString() }, { detail = it }, { editor = Record.create(it, date.epochAt()) }, notify, { chooseType = true })
-                1 -> Trends(vm, snapshot, { detail = it }, { tab = 2; vm.send("请结合最近七天的饮食、身体测量和训练，生成周报，说明记录覆盖与下周行动，不修改记录。") })
-                2 -> Coach(vm, notify)
-                3 -> Settings(vm, snapshot, notify)
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Box(Modifier.fillMaxSize().glassSource(backdrop)) {
+            AppBackground()
+            Box(Modifier.fillMaxSize().statusBarsPadding()) {
+                pages.SaveableStateProvider(tab) {
+                    when(tab) {
+                        0 -> Today(vm, snapshot, date, { dateText = it.toString() }, { detail = it }, { type -> editor = Record.create(type, date.epochAt()).apply {
+                            if(type == RecordType.BODY) json.put("weight", snapshot.records.filter { it.type == RecordType.BODY }.maxByOrNull { it.date }?.json?.optDouble("weight") ?: snapshot.profile.optDouble("baselineWeight"))
+                            if(type == RecordType.WORKOUT) { json.put("date", minOf(this.date, now())); json.put("endDate", minOf(this.date + 3600, now())) }
+                        } }, notify, { editor = it.copy() },
+                            { draft -> coachDraft = draft; tab = 2 }, { photos -> mealHistory = photos })
+                        1 -> Trends(vm, snapshot, { detail = it }, { tab = 2; coachDraft = "请结合最近七天的饮食、身体测量和训练，生成周报，说明记录覆盖与下周行动，不修改记录。" })
+                        2 -> Box(Modifier.fillMaxSize().padding(bottom = if(keyboardVisible) 0.dp else glassPageBottomPadding() - 16.dp)) {
+                            Coach(vm, notify, coachDraft) { coachDraft = "" }
+                        }
+                        3 -> Settings(vm, snapshot, notify)
+                    }
+                }
             }
         }
+        if(!keyboardVisible) GlassNavigationBar(backdrop, tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp))
+        SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding().padding(bottom = if(keyboardVisible) 8.dp else glassBarHeight() + 24.dp))
     }
-    if(chooseType) ModalBottomSheet(onDismissRequest = { chooseType = false }) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("记录生活的一小步", style = MaterialTheme.typography.titleLarge)
-            listOf(RecordType.MEAL, RecordType.BODY, RecordType.WORKOUT).forEach { type -> OutlinedButton(onClick = { chooseType = false; editor = Record.create(type, date.epochAt()).apply { if(type == RecordType.WORKOUT) json.put("endDate", date.epochAt()) } }, Modifier.fillMaxWidth()) { Text("记录${type.label}") } }
-            Spacer(Modifier.height(16.dp))
-        }
-    }
+    mealHistory?.let { photos -> MealHistory(vm, snapshot, photos, { mealHistory = null }, { detail = it }) }
     detail?.let { selected ->
         val current = snapshot.records.find { it.id == selected.id && it.type == selected.type }
         if(current == null) { detail = null } else RecordDetail(vm, current, { detail = null }, { detail = null; editor = current.copy() }, notify)
@@ -79,20 +88,36 @@ import java.time.format.DateTimeFormatter
     }
 }
 @Composable fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content) }
+    val color = MaterialTheme.colorScheme.primary
+    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, color.copy(alpha = .13f))) {
+        Column(Modifier.background(Brush.linearGradient(listOf(color.copy(alpha = .055f), Color.Transparent))).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    }
 }
 @Composable fun Empty(title: String, text: String) { Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(title, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-@Composable fun Today(vm: AppViewModel, s: Snapshot, date: LocalDate, select: (LocalDate) -> Unit, detail: (Record) -> Unit, add: (RecordType) -> Unit, notify: (String) -> Unit, onAdd: () -> Unit) {
+@Composable fun Today(vm: AppViewModel, s: Snapshot, date: LocalDate, select: (LocalDate) -> Unit, detail: (Record) -> Unit, add: (RecordType) -> Unit, notify: (String) -> Unit, edit: (Record) -> Unit, coach: (String) -> Unit, history: (Boolean) -> Unit) {
     var datePicker by remember { mutableStateOf(false) }
+    var addMenu by remember { mutableStateOf(false) }
     val meals = Insights.daily(s.records, date)
-    val body = s.records.filter { it.type == RecordType.BODY && it.date.day() <= date }.maxByOrNull { it.date }
+    val body = s.records.filter { it.type == RecordType.BODY }.maxByOrNull { it.date }
     val workouts = s.records.filter { it.type == RecordType.WORKOUT && it.date.day() == date }.sortedByDescending { it.date }
     val status by vm.status.collectAsState()
     val activeWorkout = s.records.firstOrNull { it.type == RecordType.WORKOUT && it.json.isNull("endDate") }
     var liveNow by remember { mutableDoubleStateOf(now()) }
     LaunchedEffect(activeWorkout?.id) { if(activeWorkout != null) while(true) { liveNow = now(); delay(1000) } }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp, 20.dp, 20.dp, 100.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        item { PageTitle(if(date == LocalDate.now()) "今天，也在进步" else "每天，都有记录", s.profile.optString("displayName").ifBlank { "生活记录" }) { FilledIconButton(onClick = onAdd) { Icon(Icons.Default.Add, "添加记录") } } }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 20.dp, 16.dp, glassPageBottomPadding()), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        item {
+            val greeting = when { LocalTime.now().hour < 11 -> "早上好"; LocalTime.now().hour < 18 -> "今天状态如何"; else -> "晚上好" }
+            val name = s.profile.optString("displayName")
+            PageTitle(greeting + if(name.isBlank()) "" else "，$name", "生活记录") {
+                Box {
+                    OutlinedIconButton(onClick = { addMenu = true }, border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .24f))) { Icon(Icons.Default.Add, "添加记录", tint = MaterialTheme.colorScheme.primary) }
+                    DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
+                        DropdownMenuItem(text = { Text("记一餐") }, onClick = { addMenu = false; add(RecordType.MEAL) })
+                        DropdownMenuItem(text = { Text("记体重") }, onClick = { addMenu = false; add(RecordType.BODY) })
+                    }
+                }
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { select(date.minusDays(1)) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "前一天") }
@@ -111,55 +136,99 @@ import java.time.format.DateTimeFormatter
                 }
             }
         }
+        if(meals.any { it.demo } || s.records.any { it.demo && it.type == RecordType.BODY }) item { Panel { Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("完整示例数据已写入", style = MaterialTheme.typography.titleMedium); Text("首页、趋势、教练都会展示对应效果", style = MaterialTheme.typography.bodySmall) }
+            TextButton(onClick = vm::clearDemo) { Text("清除") }
+        } } }
         item { Panel {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(s.profile.optString("fitnessGoal"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium); Text("每日目标", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(150.dp), contentAlignment = Alignment.Center) {
-                    Ring(Modifier.fillMaxSize(), listOf((Insights.total(meals,"protein") / s.profile.optDouble("proteinGoal")).toFloat(), (Insights.total(meals,"carbs") / s.profile.optDouble("carbsGoal")).toFloat(), meals.size/4f), 12f)
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(format(Insights.total(meals,"calories")), style = MaterialTheme.typography.headlineMedium); Text("kcal 已摄入", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
+                Ring(Modifier.size(116.dp), listOf((Insights.total(meals,"protein") / s.profile.optDouble("proteinGoal")).toFloat(), (Insights.total(meals,"carbs") / s.profile.optDouble("carbsGoal")).toFloat(), meals.size/4f), 11f)
                 Spacer(Modifier.width(20.dp)); Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Metric("蛋白质", "${format(Insights.total(meals,"protein"))} / ${format(s.profile.optDouble("proteinGoal"))} g", Protein)
                     Metric("碳水", "${format(Insights.total(meals,"carbs"))} / ${format(s.profile.optDouble("carbsGoal"))} g", Carbs)
-                    Metric("用餐", "${meals.size} / 4 次", Meals)
+                    Metric("体重", body?.title ?: "暂无记录", MaterialTheme.colorScheme.primary)
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("目标 ${format(s.profile.optDouble("calorieGoal"))} kcal", style = MaterialTheme.typography.bodyMedium)
-                Text("脂肪 ${format(Insights.total(meals,"fat"))} g", style = MaterialTheme.typography.bodyMedium)
+                Text("${format(Insights.total(meals,"calories"))} 千卡", style = MaterialTheme.typography.headlineMedium)
+                val remaining = s.profile.optDouble("calorieGoal") - Insights.total(meals,"calories")
+                Text(if(remaining >= 0) "还差 ${format(remaining)} 千卡" else "超出 ${format(-remaining)} 千卡", style = MaterialTheme.typography.bodyMedium)
             }
         } }
         item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Panel(Modifier.weight(1f).clickable { add(RecordType.BODY) }) { Text("最近体重", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(body?.title ?: "尚未测量", style = MaterialTheme.typography.titleLarge); Text(body?.date?.day()?.toString() ?: "点此记录身体数据", style = MaterialTheme.typography.labelSmall) }
-            Panel(Modifier.weight(1f)) { Text("记录连续性", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant); Text("${Insights.streak(s.records)} 天", style = MaterialTheme.typography.titleLarge); Text("每一次记录都算数", style = MaterialTheme.typography.labelSmall) }
+            ActionTile("记一餐", "拍照识别 · 手动记录", MaterialTheme.colorScheme.primary, Modifier.weight(1f)) { add(RecordType.MEAL) }
+            ActionTile("记体重", "追踪趋势", Protein, Modifier.weight(1f)) { add(RecordType.BODY) }
         } }
         item { Panel {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("健身记录", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)); TextButton(onClick = { add(RecordType.WORKOUT) }) { Text("补记") } }
             if(date == LocalDate.now()) {
                 val active = activeWorkout
-                Button(onClick = { runCatching { if(active == null) vm.startWorkout() else vm.endWorkout(active) }.onFailure { notify(it.message ?: "保存失败") } }, Modifier.fillMaxWidth()) { Text(if(active == null) "开始训练" else "结束训练 · ${format((liveNow - active.date)/60)} 分钟") }
+                Button(onClick = { runCatching {
+                    if(active == null) vm.startWorkout() else {
+                        vm.endWorkout(active)
+                        vm.snapshot.value.records.firstOrNull { it.id == active.id }?.let(edit)
+                    }
+                }.onFailure { notify(it.message ?: "保存失败") } }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D6E6E), contentColor = Color.White)) { Text(if(active == null) "开始训练" else "结束训练 · ${format((liveNow - active.date)/60)} 分钟") }
             } else if(workouts.isEmpty()) Text("这一天还没有训练记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
             workouts.forEach { r -> RecordRow(r, { detail(r) }) }
         } }
-        item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("今天吃了什么", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)); TextButton(onClick = { add(RecordType.MEAL) }) { Text("记一餐") } } }
+        item { Panel {
+            Text("营养目标", style = MaterialTheme.typography.titleLarge)
+            listOf(Triple("蛋白质", "protein", Protein), Triple("碳水", "carbs", Carbs), Triple("脂肪", "fat", Fat)).forEach { (label, key, color) ->
+                val value = Insights.total(meals, key); val goal = s.profile.optDouble("${key}Goal")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, style = MaterialTheme.typography.bodyMedium); Text("${format(value)} / ${format(goal)} g", style = MaterialTheme.typography.bodyMedium) }
+                LinearProgressIndicator(progress = { (value / goal).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp)), color = color, trackColor = color.copy(alpha = .12f))
+            }
+        } }
+        item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("饮食记录", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)); TextButton(onClick = { history(true) }) { Text("照片") }; TextButton(onClick = { history(false) }) { Text("查看全部") } } }
         if(meals.isEmpty()) item { Panel { Empty("第一餐，从这里开始", "手动记录，或让 AI 帮你分析照片") } }
-        items(meals.sortedByDescending { it.date }, key = { it.id }) { r -> Panel { RecordRow(r, { detail(r) }) } }
+        listOf("早餐", "午餐", "晚餐", "加餐").forEach { kind ->
+            val group = meals.filter { it.json.optString("kind") == kind }
+            if(group.isNotEmpty()) item { Panel { Text(kind, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary); group.sortedByDescending { it.date }.forEach { r -> RecordRow(r, { detail(r) }) } } }
+        }
         val measurements = s.records.filter { it.type == RecordType.BODY && it.date.day() == date }
         if(measurements.isNotEmpty()) item { Panel { Text("身体测量", style = MaterialTheme.typography.titleLarge); measurements.forEach { RecordRow(it, { detail(it) }) } } }
-        item { Text(status, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Panel(Modifier.clickable { coach("请根据我在 $date 的饮食和训练，给出可执行的下一步建议，不修改记录。") }) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("今日提示", style = MaterialTheme.typography.titleMedium); Text("问 AI", color = MaterialTheme.colorScheme.primary) }; Text(if(meals.isEmpty()) "先记下第一餐，让今天的进步有迹可循。" else "已记录 ${meals.size} 餐，蛋白质 ${format(Insights.total(meals,"protein"))} g。结合训练安排下一餐。", style = MaterialTheme.typography.bodyMedium) } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(status, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); TextButton(onClick = vm::sync) { Text("同步") } } }
     }
-    if(datePicker) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
-        DatePickerDialog(onDismissRequest = { datePicker = false }, confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let { select(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) }; datePicker = false }) { Text("选择") } }, dismissButton = { TextButton(onClick = { datePicker = false }) { Text("取消") } }) { DatePicker(state, title = { Text("选择记录日期", Modifier.padding(24.dp)) }) }
-    }
+    if(datePicker) RecordCalendar(date, s.records, { datePicker = false }, select)
 }
 @Composable fun Metric(label: String, value: String, color: Color) { Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(7.dp).background(color, RoundedCornerShape(4.dp))); Spacer(Modifier.width(8.dp)); Column { Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value, style = MaterialTheme.typography.labelLarge) } } }
 @Composable fun Ring(modifier: Modifier, values: List<Float>, thickness: Float) {
     val track = MaterialTheme.colorScheme.surfaceVariant
     Canvas(modifier) {
-        val stroke = thickness.dp.toPx(); val gap = stroke*0.35f
+        val stroke = thickness.dp.toPx(); val gap = 0f
         values.forEachIndexed { i, value -> val inset = stroke/2+i*(stroke+gap); val diameter = size.minDimension-2*inset
             if(diameter > 0) { drawArc(track, -90f, 360f, false, androidx.compose.ui.geometry.Offset(inset,inset), androidx.compose.ui.geometry.Size(diameter,diameter), style = Stroke(stroke)); drawArc(listOf(Protein,Carbs,Meals)[i], -90f, value.coerceIn(0f,1f)*360, false, androidx.compose.ui.geometry.Offset(inset,inset), androidx.compose.ui.geometry.Size(diameter,diameter), style = Stroke(stroke, cap = StrokeCap.Round)) }
+        }
+    }
+}
+@Composable fun ActionTile(title: String, subtitle: String, tint: Color, modifier: Modifier, action: () -> Unit) {
+    Panel(modifier.clickable(onClick = action)) {
+        ActionGlyph(title == "记一餐", tint)
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+@Composable private fun ActionGlyph(meal: Boolean, tint: Color) {
+    Canvas(Modifier.size(26.dp)) {
+        val scale = size.width / 24f
+        fun point(x: Float, y: Float) = androidx.compose.ui.geometry.Offset(x * scale, y * scale)
+        val stroke = Stroke(1.8f * scale, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        if(meal) {
+            val path = Path().apply {
+                moveTo(4*scale, 2*scale); lineTo(4*scale, 7*scale); quadraticTo(4*scale, 10*scale, 8*scale, 10*scale)
+                quadraticTo(12*scale, 10*scale, 12*scale, 7*scale); lineTo(12*scale, 2*scale)
+                moveTo(8*scale, 2*scale); lineTo(8*scale, 22*scale)
+                moveTo(20*scale, 2*scale); quadraticTo(15*scale, 6*scale, 16*scale, 12*scale); lineTo(20*scale, 12*scale); lineTo(20*scale, 22*scale); lineTo(20*scale, 2*scale)
+            }
+            drawPath(path, tint, style = stroke)
+        } else {
+            drawRoundRect(tint, point(3f, 3f), androidx.compose.ui.geometry.Size(18*scale, 18*scale), androidx.compose.ui.geometry.CornerRadius(4*scale), style = stroke)
+            drawArc(tint, 180f, 180f, false, point(7f, 6f), androidx.compose.ui.geometry.Size(10*scale, 10*scale), style = stroke)
+            drawLine(tint, point(12f, 11f), point(15f, 8f), 1.8f*scale, StrokeCap.Round)
         }
     }
 }

@@ -9,9 +9,8 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import android.util.Base64
 
-class Network {
-    private val client = OkHttpClient.Builder().callTimeout(100, TimeUnit.SECONDS).build()
-    private fun execute(url: String, secret: String, body: JSONObject?, header: String = "Authorization", bearer: Boolean = true): ByteArray {
+class Network(private val client: OkHttpClient = OkHttpClient.Builder().callTimeout(100, TimeUnit.SECONDS).build()) {
+    private fun execute(url: String, secret: String, body: JSONObject?, header: String = "Authorization", bearer: Boolean = true, officialDeepSeek: Boolean = false): ByteArray {
         require(url.startsWith("https://")) { "接口地址需要使用 HTTPS" }
         require(secret.isNotBlank()) { "请先配置密钥" }
         require(secret.all { it.code in 33..126 }) { "密钥不能包含空格、换行或中文，请重新粘贴" }
@@ -21,6 +20,7 @@ class Network {
         return client.newCall(request).execute().use { response ->
             val bytes = response.body?.bytes() ?: error("服务端返回空数据")
             if(!response.isSuccessful) {
+                if(officialDeepSeek) AIAuthentication.deepSeekFailure(response.code)?.let { error(it) }
                 // Error bodies can contain request echoes. Never display credentials.
                 val summary = runCatching { JSONObject(bytes.toString(Charsets.UTF_8)).let { it.optJSONObject("error")?.optString("message") ?: it.optString("error", it.optString("message", "请求被拒绝")) } }.getOrDefault("请求被拒绝")
                 error("HTTP ${response.code}：${summary.replace(secret, "[密钥已隐藏]").take(240)}")
@@ -53,8 +53,9 @@ class Network {
             "DeepSeek", "智谱 GLM" -> body.put("thinking", JSONObject().put("type", "disabled"))
         }
         if(json && images.isEmpty() && config.optString("provider") != "Dots") body.put("response_format", JSONObject().put("type", "json_object"))
-        val auth = config.optString("auth", "Bearer")
-        val bytes = execute(config.getString("endpoint"), key, body, when(auth) { "api-key" -> "api-key"; "自定义" -> config.optString("header", "Authorization"); else -> "Authorization" }, auth == "Bearer")
+        val endpoint = config.getString("endpoint").trim()
+        val credential = AIAuthentication.credential(endpoint, config.optString("auth", "Bearer"), config.optString("header", "Authorization"), key)
+        val bytes = execute(endpoint, credential.key, body, credential.header, credential.bearer, AIAuthentication.officialDeepSeek(endpoint))
         val result = JSONObject(bytes.toString(Charsets.UTF_8)); return result.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.takeIf { it.isNotBlank() } ?: error("没有收到模型最终回复，请检查模型与生成参数")
     }
     companion object { const val BASE = "https://apsonchian.ltd/liferecord-api" }
@@ -63,8 +64,8 @@ val providers = listOf("DeepSeek", "Dots", "智谱 GLM", "自定义")
 fun providerConfig(provider: String) = JSONObject().apply {
     put("provider", provider); put("auth", if(provider == "Dots") "api-key" else "Bearer"); put("header", "Authorization")
     put("endpoint", when(provider) { "DeepSeek" -> "https://api.deepseek.com/chat/completions"; "Dots" -> "https://note3-prev-api.askdiandian.com/v1/chat/completions"; "智谱 GLM" -> "https://open.bigmodel.cn/api/paas/v4/chat/completions"; else -> "https://example.com/v1/chat/completions" })
-    put("model", when(provider) { "DeepSeek" -> "deepseek-v4-flash"; "Dots" -> "dots3-note-prev"; "智谱 GLM" -> "glm-4.6v-flash"; else -> "" })
-    put("vision", provider != "DeepSeek"); put("maxPhotos", 6); put("maxTokens", 4096); put("temperature", 0.2); put("instructions", ""); put("canWrite", false)
+    put("model", when(provider) { "DeepSeek" -> "deepseek-flash"; "Dots" -> "dots3-note-prev"; "智谱 GLM" -> "glm-4.6v-flash"; else -> "" })
+    put("vision", true); put("maxPhotos", 6); put("maxTokens", 4096); put("temperature", 0.2); put("instructions", ""); put("canWrite", false)
 }
 fun parseObject(text: String): JSONObject {
     val trimmed = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
