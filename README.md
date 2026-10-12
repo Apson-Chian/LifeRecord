@@ -9,7 +9,7 @@ LifeRecord/
 ├── Android/                      # Kotlin + Jetpack Compose，Android 8.0+
 │   ├── app/                      # 应用源码、单元测试和设备测试
 │   ├── gradle/                   # Gradle Wrapper
-│   ├── screenshots/              # 安卓界面预览
+│   ├── screenshots/              # 安卓界面与 iOS 对照预览
 │   └── README.md
 ├── iOS/                          # SwiftUI + SwiftData，iOS 17+
 │   ├── LifeRecord/               # 应用源码、资源与隐私声明
@@ -29,7 +29,7 @@ LifeRecord/
 | iOS | Xcode 打开 `iOS/LifeRecord.xcodeproj` | [运行、功能与平台配置](iOS/README.md) |
 | Web / 后端 | 部署 `Web/` 与 `Backend/` | 下方说明与现有服务配置 |
 
-安卓端使用 Compose 实现接近 iOS 的浮动玻璃导航、主题与主要记录流程，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。界面变化、系统效果支持与剩余差异见[安卓与 iOS 对齐记录](Docs/android-ios-parity.md)。
+安卓 1.3.0 使用实际 iOS 页面校准的大标题、圆环、分组设置、教练输入与趋势卡片，并用 Compose 实现浮动玻璃导航，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。界面变化、系统效果支持与剩余差异见[安卓与 iOS 对齐记录](Docs/android-ios-parity.md)。
 
 ## 快速构建
 

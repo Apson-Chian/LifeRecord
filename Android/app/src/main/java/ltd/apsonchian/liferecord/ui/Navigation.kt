@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import ltd.apsonchian.liferecord.AppViewModel
@@ -24,12 +25,12 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 @Composable fun RangePicker(selected:Int, change:(Int)->Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(3.dp).selectableGroup()) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(2.dp).selectableGroup()) {
         listOf(7 to "7 天",30 to "30 天",0 to "全部").forEach { (value,label) ->
             Box(Modifier.weight(1f).clip(RoundedCornerShape(9.dp))
                 .background(if(selected==value) MaterialTheme.colorScheme.surface else Color.Transparent)
-                .selectable(selected==value,role=Role.Tab,onClick={change(value)}).padding(vertical=10.dp),contentAlignment=Alignment.Center) {
-                Text(label,style=MaterialTheme.typography.labelLarge,color=if(selected==value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                .selectable(selected==value,role=Role.Tab,onClick={change(value)}).padding(vertical=5.dp),contentAlignment=Alignment.Center) {
+                Text(label,style=MaterialTheme.typography.bodySmall,color=if(selected==value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -93,10 +94,10 @@ import java.time.YearMonth
 private fun Int?.orZero()=this ?: 0
 
 /** A navigation destination inside its tab; the floating navigation remains available. */
-@Composable fun SubPage(title:String,dismiss:()->Unit,content:@Composable ColumnScope.()->Unit) {
+@Composable fun SubPage(title:String,dismiss:()->Unit,actions:@Composable RowScope.()->Unit={},content:@Composable ColumnScope.()->Unit) {
     BackHandler { dismiss() }
     Column(Modifier.fillMaxSize().imePadding()) {
-        TopAppBar(title={Text(title,style=MaterialTheme.typography.titleLarge)},navigationIcon={IconButton(onClick=dismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"返回") }},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color.Transparent))
+        CenterAlignedTopAppBar(title={Text(title,style=MaterialTheme.typography.titleLarge)},navigationIcon={IconButton(onClick=dismiss) { AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.primary,Modifier.size(20.dp).graphicsLayer {rotationZ=180f},"返回") }},actions=actions,colors=TopAppBarDefaults.topAppBarColors(containerColor=Color.Transparent))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start=16.dp,end=16.dp,top=16.dp,bottom=glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
     }
 }

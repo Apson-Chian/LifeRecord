@@ -16,9 +16,10 @@ val Carbs = Color(0xFFF2A338)
 val Meals = Color(0xFFF04059)
 val Fat = Color(0xFFE059AB)
 private val light = lightColorScheme(primary = Purple, secondary = Protein, tertiary = Meals, background = Color(0xFFF2F2F7), surface = Color.White, surfaceVariant = Color(0xFFEAEAF3), onSurface = Color(0xFF1C1C1E), onSurfaceVariant = Color(0xFF686872))
-private val dark = darkColorScheme(primary = Color(0xFFA69EFF), secondary = Color(0xFF80B9FF), tertiary = Meals, background = Color(0xFF0E0E12), surface = Color(0xFF1C1C1E), surfaceVariant = Color(0xFF2C2C32), onSurface = Color(0xFFF2F2F7), onSurfaceVariant = Color(0xFFB0AFB8))
+private val dark = darkColorScheme(primary = Color(0xFFA69EFF), secondary = Color(0xFF80B9FF), tertiary = Meals, background = Color.Black, surface = Color(0xFF1C1C1E), surfaceVariant = Color(0xFF2C2C32), onSurface = Color(0xFFF2F2F7), onSurfaceVariant = Color(0xFFB0AFB8))
 @Composable fun LifeTheme(content: @Composable () -> Unit) = MaterialTheme(colorScheme = if(isSystemInDarkTheme()) dark else light, typography = Typography(
-    headlineLarge = TextStyle(fontSize = 32.sp, letterSpacing = (-.6).sp, fontWeight = FontWeight.Bold), headlineMedium = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold),
-    titleLarge = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold), titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 25.sp), bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 22.sp), labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    headlineLarge = TextStyle(fontSize = 34.sp, letterSpacing = (-.6).sp, fontWeight = FontWeight.Bold), headlineMedium = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.SemiBold),
+    titleLarge = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold), titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontSize = 17.sp, lineHeight = 24.sp), bodyMedium = TextStyle(fontSize = 15.sp, lineHeight = 21.sp), labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+    bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp), labelMedium = TextStyle(fontSize = 12.sp,lineHeight=16.sp), labelSmall = TextStyle(fontSize = 11.sp,lineHeight=15.sp)
 ), content = { CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) { content() } })

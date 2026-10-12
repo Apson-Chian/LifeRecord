@@ -9,8 +9,8 @@
 1. 使用支持 Android Gradle Plugin 8.9 的 Android Studio 打开本目录，安装 Android SDK 35 和 Build Tools 35.0.0。
 2. 选择 JDK 17，等待 Gradle 同步，运行 `app` 到模拟器或手机。
 3. 首次启动可直接开始，或写入 14 天本机示例餐食/测量。示例不会上传或参与真实趋势，设置中可清除。
-4. 需要现有 iOS/Web 数据时，在「设置 → App 与浏览器同步」填写原同步密钥。服务地址与 iOS 一致。
-5. AI 使用自己的服务商密钥，在「设置 → AI 接口」配置、保存并测试。模型和端点均可修改。
+4. 需要现有 iOS/Web 数据时，在「设置 → 跨设备同步」填写原同步密钥。服务地址与 iOS 一致。
+5. AI 使用自己的服务商密钥，在「设置 → AI 助手」配置、保存并测试。模型和端点均可修改。
 
 ```sh
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
@@ -31,7 +31,7 @@
 - 私有同步：兼容现有 Unix 秒时间戳、UUID、营养/身体/训练字段、个人目标和删除标记。前台每 15 秒同步，返回前台立即同步，离线可用。响应按更新时间与**收到响应时**的最新本机数据合并。
 - 照片：系统照片选择器，无需整个相册权限；按方向解码并压缩 JPEG。本机离线保存、配置同步后排队上传、远程照片按密钥隔离磁盘缓存、重试、完整图片缩放查看、下滑退出和保存到系统相册。
 - 设置：个人档案、营养目标、服务商独立密钥、认证请求头、图片能力、生成参数、自定义指令、常用餐食、动作库、默认关闭的漏记提醒、记录 JSON 导出。
-- 安卓适配：Material 3、深浅色、边到边布局、系统返回、键盘避让、原生日期与时间选择、通知权限和 WorkManager。
+- 安卓适配：Compose 原生渲染、iOS 风格控件、深浅色、边到边布局、系统返回、键盘避让、原生日期与时间选择、通知权限和 WorkManager。
 
 ## 玻璃导航与 iOS 对齐
 
@@ -39,7 +39,7 @@
 
 首页顺序、蓝紫主题、蛋白质/碳水/餐次配色、添加菜单、记录日历、餐次分组、照片入口、训练结束后编辑、默认收起的动作组数，以及「问 AI」先填草稿的操作已对齐 iOS。切换标签保留日期、滚动位置、趋势范围、搜索和未发送文字。详细变化与 GitHub 参考见[对齐记录](../Docs/android-ios-parity.md)。
 
-收到 `LifeRecord-1.2.0-debug.apk` 后，传到安卓手机，在文件管理器中打开，按系统提示允许该来源安装应用，再点安装。新版与本次提供的 1.0.0 / 1.1.0 调试包签名相同，可直接覆盖安装；源码更新后也可以用 Android Studio 运行到手机。iOS 的认证修复需要重新构建并安装 iOS App。
+收到 `LifeRecord-1.3.0-debug.apk` 后，传到安卓手机，在文件管理器中打开，按系统提示允许该来源安装应用，再点安装。新版与本次提供的 1.0.0 / 1.1.0 / 1.2.0 调试包签名相同，可直接覆盖安装；源码更新后也可以用 Android Studio 运行到手机。iOS 的认证修复需要重新构建并安装 iOS App。
 
 DeepSeek 官方接口固定使用 Bearer 认证，保存和发送都会处理常见粘贴格式；401/402 的处理与密钥重新配置方式见[仓库说明](../README.md#deepseek-配置与-401-修复)。
 
@@ -61,6 +61,12 @@ JSON 导出包含真实记录、目标、删除标记、照片服务器编号、
 
 教练使用左侧对话栏及 iOS 头像。未发送文字与照片跨标签保留；已发送附件保存至应用私有目录，重启可查看，删除对话时清理对应文件。请求仅发送角色和消息内容，存储路径不进入 AI 消息字段。照片可完整显示、双击/双指放大、移动，原尺寸时下滑退出；Android 10 / API 29 及以上保存到 `Pictures/LifeRecord`，旧系统使用系统文件保存窗口，不增加相册读取权限。
 
+## 1.3.0：按 iOS 实际画面校准 UI
+
+在专用 iOS 模拟器逐页对照首页、设置和趋势；安卓端重做大标题、周历、带中心餐数与柔和阴影的营养环、热量单位、图标底座、餐食行、分组设置与数字行、教练布局、输入条和趋势坐标。浮动导航缩至 60 dp，采用深色未选图标与灰色选中胶囊；背景、深色控件和反馈统一。设置详情在标签中推入，身体与每日营养目标分开编辑；切换标签清理输入焦点，保留未发送文字。
+
+对照截图来自原生 App，首页使用等值示例，详见 [校准记录](../Docs/android-ios-parity.md#130以实际-ios-页面校准外观)。30 项单元测试、15 项设备测试和 Lint 通过；安装包 versionCode 4，签名与旧版一致，可覆盖安装。
+
 ## 当前平台差异
 
 - 玻璃使用 Android RenderEffect/AGSL 近似苹果原生 Liquid Glass；圆环已有渐变和阴影，光照没有复刻苹果完整渲染。
@@ -81,11 +87,16 @@ JSON 导出包含真实记录、目标、删除标记、照片服务器编号、
 - [深色首页](screenshots/today-dark.png)
 - [浅色教练](screenshots/coach-light.png)
 - [深色教练](screenshots/coach-dark.png)
+- [浅色设置](screenshots/settings-light.png)
 - [深色设置](screenshots/settings-dark.png)
+- [分组身体与目标](screenshots/profile-light.png)
+- [教练键盘避让](screenshots/coach-keyboard.png)
 - [趋势曲线](screenshots/trends-light.png)
 - [时段筛选与平滑详情](screenshots/measurement-detail.png)
 - [质量确认列表](screenshots/quality-review.png)
 - [左侧对话栏](screenshots/coach-drawer.png)
 - [独立周报](screenshots/weekly-report.png)
 
-截图来自 Android 15 模拟器；首页使用明确标注的示例数据，新增趋势/质量/周报截图使用设备测试合成数据，周报文字为保存流程测试夹具，未调用真实 AI。验证记录见 [VALIDATION.md](VALIDATION.md)。
+截图来自 Android 15 模拟器；1.3.0 首页使用明确标注、与 iOS 参照数值相同的测试示例，新增趋势/质量/周报截图使用设备测试合成数据，周报文字为保存流程测试夹具，未调用真实 AI。验证记录见 [VALIDATION.md](VALIDATION.md)。
+
+原生参照：[iOS 首页](screenshots/ios-reference/today-light.png) · [iOS 设置](screenshots/ios-reference/settings-light.png) · [iOS 趋势](screenshots/ios-reference/trends-light.png)。两端系统安全区和字体遵循各自平台。

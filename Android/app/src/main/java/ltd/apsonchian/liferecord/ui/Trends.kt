@@ -2,6 +2,12 @@
 package ltd.apsonchian.liferecord.ui
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -59,27 +65,39 @@ import kotlin.math.abs
         Text("这份报告使用生成时的记录快照；记录变化后可重新生成。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }; return }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,20.dp,16.dp,glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        item { PageTitle("趋势","回顾训练与身体变化") { IconButton(onClick={details=true}) { Icon(Icons.AutoMirrored.Filled.List,"查看全部数据详情") } } }
+        item { PageTitle("趋势","回顾训练与身体变化") { SymbolButton(Glyph.List,"查看全部数据详情",{details=true}) } }
         item { RangePicker(range) { range=it } }
-        item { Panel {
-            Text("训练概览",style=MaterialTheme.typography.titleLarge)
+        item { Panel(tint=Color(0xFF31B8C4)) {
+            val teal=Color(0xFF31B8C4)
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                IconBadge(Glyph.Workout,teal)
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {Text("训练节奏",style=MaterialTheme.typography.titleLarge);Text("每一次投入，都算数",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                IconButton(onClick={details=true},modifier=Modifier.size(32.dp)) {AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp),"查看训练详情")}
+            }
             val complete=workouts.filter { !it.json.isNull("endDate") && it.json.optDouble("endDate") in it.date..at }
-            Text("${complete.size} 次完成 · ${format(complete.sumOf { (it.json.optDouble("endDate")-it.date)/60 })} 分钟",style=MaterialTheme.typography.headlineMedium)
-            if(workouts.isEmpty()) Text("这一时段还没有训练记录",color=MaterialTheme.colorScheme.onSurfaceVariant)
-            workouts.take(5).forEach { RecordRow(it,{detail(it)}) }
-            val byPart=workouts.flatMap { it.json.optJSONArray("bodyParts")?.strings().orEmpty().ifEmpty {
-                it.json.optJSONArray("exercises")?.objects()?.map { ex -> ex.optString("bodyPart","未分类") }?.distinct().orEmpty()
-            } }.groupingBy { it }.eachCount()
-            if(byPart.isNotEmpty()) Text(byPart.entries.sortedByDescending { it.value }.joinToString(" · ") { "${it.key} ${it.value} 次" },style=MaterialTheme.typography.bodyMedium)
-            TextButton(onClick={details=true}) { Text("训练内容与全部明细") }
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.SpaceBetween) {
+                Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(4.dp)) {Text(format(complete.sumOf { (it.json.optDouble("endDate")-it.date)/60 }),style=MaterialTheme.typography.headlineMedium);Text("分钟",Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                Column(horizontalAlignment=Alignment.End) {Text("${complete.size} 次训练",style=MaterialTheme.typography.titleMedium);Text("${workouts.map {it.date.day()}.distinct().size} 天有记录",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+            }
+            if(workouts.isEmpty()) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp)).background(teal.copy(alpha=.055f)).padding(14.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text("从一次训练开始",style=MaterialTheme.typography.titleMedium);Text("在今日页开始训练，结束后这里会留下你的节奏。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            workouts.take(3).forEach {RecordRow(it,{detail(it)})}
+            val byPart=workouts.flatMap {it.json.optJSONArray("bodyParts")?.strings().orEmpty().ifEmpty {it.json.optJSONArray("exercises")?.objects()?.map {ex -> ex.optString("bodyPart","未分类")}?.distinct().orEmpty()}}.groupingBy {it}.eachCount()
+            if(byPart.isNotEmpty()) Text(byPart.entries.sortedByDescending {it.value}.joinToString(" · ") {"${it.key} ${it.value} 次"},style=MaterialTheme.typography.bodySmall)
+            HorizontalDivider(color=MaterialTheme.colorScheme.onSurface.copy(alpha=.08f))
+            Row(Modifier.fillMaxWidth().clickable {details=true}.heightIn(min=30.dp),verticalAlignment=Alignment.CenterVertically) {Text("训练内容与明细",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.SemiBold),color=teal);AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp))}
         } }
         item { Panel {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Text("体重趋势",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f)); TextButton(onClick={measurement="weight"},modifier=Modifier.testTag("weight-detail")) { Text("查看详情") } }
-            if(weights.isEmpty()) Empty("等待第一次测量","记下体重，慢慢看见变化") else TrendChart(weights,"kg",MaterialTheme.colorScheme.primary,goal=s.profile.optDouble("targetWeight"))
+            ChartHeading("体重趋势",Glyph.Weight,MaterialTheme.colorScheme.primary,"weight-detail") {measurement="weight"}
+            if(weights.isEmpty()) Empty("等待第一次测量","记下体重，慢慢看见变化") else {
+                TrendChart(weights,"kg",MaterialTheme.colorScheme.primary,goal=s.profile.optDouble("targetWeight"),inspectionControls=false)
+                ChartFooter {measurement="weight"}
+            }
         } }
-        item { Panel {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Text("体脂趋势",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f)); TextButton(onClick={measurement="bodyFat"},modifier=Modifier.testTag("fat-detail")) { Text("查看详情") } }
-            if(fat.isEmpty()) Empty("暂无体脂记录","测量后即可查看数值和变化") else TrendChart(fat,"%",Fat)
+        item { Panel(tint=Fat) {
+            ChartHeading("体脂趋势",Glyph.Percent,Fat,"fat-detail") {measurement="bodyFat"}
+            if(fat.isEmpty()) Empty("暂无体脂记录","测量后即可查看数值和变化") else {TrendChart(fat,"%",Fat,inspectionControls=false);ChartFooter {measurement="bodyFat"}}
         } }
         item { Panel {
             Text("近 14 天热量",style=MaterialTheme.typography.titleLarge)
@@ -93,10 +111,10 @@ import kotlin.math.abs
             Text(if(report.text.isEmpty()) "一份属于你的 AI 周报，发现变化，找到节奏。" else "本周复盘已就绪，查看趋势解读与行动建议。",color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(report.text.isNotEmpty()) {
                 report.generatedAt?.let { Text("生成于 ${it.localText()}",style=MaterialTheme.typography.bodySmall) }
-                OutlinedButton(onClick={showReport=true},modifier=Modifier.fillMaxWidth()) { Text("阅读本周报告") }
+                SoftButton(onClick={showReport=true},modifier=Modifier.fillMaxWidth()) { Text("阅读本周报告") }
             }
             if(report.error.isNotBlank()) Text(report.error,color=MaterialTheme.colorScheme.error)
-            Button(onClick={vm.generateWeeklyReport()},enabled=!report.generating && real.any { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) },modifier=Modifier.fillMaxWidth()) {
+            AppButton(onClick={vm.generateWeeklyReport()},enabled=!report.generating && real.any { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) },modifier=Modifier.fillMaxWidth()) {
                 if(report.generating) CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp)
                 Spacer(Modifier.width(8.dp)); Text(if(report.generating) "正在整理这一周…" else if(report.text.isEmpty()) "生成本周报告" else "重新生成")
             }
@@ -137,45 +155,75 @@ import kotlin.math.abs
         Text("只统计真实、非未来且数值有效的记录；有记录不代表记全，缺失日期不按零计算。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         Text("下一步",style=MaterialTheme.typography.titleMedium)
         summary.actions.forEachIndexed { i,text -> Text("${i+1}. $text",style=MaterialTheme.typography.bodyMedium) }
-        OutlinedButton(onClick=coach,modifier=Modifier.fillMaxWidth()) { Text("和教练制定下一周计划") }
+        SoftButton(onClick=coach,modifier=Modifier.fillMaxWidth()) { Text("和教练制定下一周计划") }
     }
 }
 @Composable private fun FeedbackRow(title:String,value:String) { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) { Text(title,modifier=Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant); Text(value,style=MaterialTheme.typography.bodySmall) } }
 private fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.util.Locale.ROOT,"%.2f",value)
 
-@Composable fun TrendChart(points:List<BodyTrend.Point>,unit:String,color:Color,smooth:Boolean=false,goal:Double?=null) {
+@Composable private fun ChartHeading(title:String,kind:Glyph,color:Color,tag:String,open:()->Unit) {
+    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+        IconBadge(kind,color,36.dp);Text(title,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
+        IconButton(onClick=open,modifier=Modifier.testTag(tag).size(44.dp)) {AppIcon(Glyph.Chevron,color,Modifier.size(15.dp),"${title}详情")}
+    }
+}
+@Composable private fun ChartFooter(open:()->Unit) {
+    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+        Text("每日中位数",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick=open,contentPadding=PaddingValues(0.dp)) {Text("查看详情",style=MaterialTheme.typography.bodySmall)}
+    }
+}
+@Composable fun TrendChart(points:List<BodyTrend.Point>,unit:String,color:Color,smooth:Boolean=false,goal:Double?=null,inspectionControls:Boolean=true) {
     if(points.isEmpty()) return
-    var selectedDay by rememberSaveable(points.map { it.day }.toString()) { mutableStateOf<String?>(null) }
-    var width by remember { mutableIntStateOf(1) }
-    val selected=points.firstOrNull { it.day.toString()==selectedDay } ?: points.last()
-    val span=(points.last().day.toEpochDay()-points.first().day.toEpochDay()).coerceAtLeast(1)
-    fun select(x:Float) { val day=points.first().day.toEpochDay()+x.coerceIn(0f,width.toFloat())/width*span; selectedDay=points.minBy { abs(it.day.toEpochDay()-day) }.day.toString() }
-    val grid=MaterialTheme.colorScheme.surfaceVariant
-    val values=points.map { if(smooth) it.trend else it.value }
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.Bottom) { Text("${format(if(smooth) selected.trend else selected.value)} $unit",style=MaterialTheme.typography.headlineMedium); Text(if(selectedDay==null) "最新" else "已选中",style=MaterialTheme.typography.labelSmall,color=color) }
-    Canvas(Modifier.fillMaxWidth().height(180.dp).onSizeChanged { width=it.width.coerceAtLeast(1) }
-        .semantics { contentDescription="横轴日期，纵轴$unit。点击或横向拖动查看数据；下方可逐条选择。" }
-        .pointerInput(points) { detectTapGestures { select(it.x) } }
-        .pointerInput(points) { detectHorizontalDragGestures(onDragStart={select(it.x)}) { change,_ -> change.consume();select(change.position.x) } }) {
-        val low=values.min()-.3; val high=values.max()+.3
-        fun x(day:LocalDate)=((day.toEpochDay()-points.first().day.toEpochDay()).toDouble()/span*(size.width-16.dp.toPx())+8.dp.toPx()).toFloat()
-        fun y(v:Double)=(size.height*(1-(v-low)/(high-low))).toFloat()
-        repeat(4) { val yy=size.height*it/3;drawLine(grid,Offset(0f,yy),Offset(size.width,yy),1.dp.toPx()) }
-        if(goal!=null && goal in low..high) drawLine(color.copy(alpha=.4f),Offset(0f,y(goal)),Offset(size.width,y(goal)),1.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(8f,8f)))
-        val path=Path();points.forEachIndexed { i,p -> if(i==0) path.moveTo(x(p.day),y(values[i])) else path.lineTo(x(p.day),y(values[i])) }
-        val area=Path().apply { addPath(path);lineTo(x(points.last().day),size.height);lineTo(x(points.first().day),size.height);close() }
+    var selectedDay by rememberSaveable(points.map {it.day}.toString()) {mutableStateOf<String?>(null)}
+    var width by remember {mutableIntStateOf(1)}
+    val density=LocalDensity.current
+    val labelColor=MaterialTheme.colorScheme.onSurfaceVariant
+    val grid=MaterialTheme.colorScheme.onSurface.copy(alpha=.075f)
+    val labels=remember(labelColor,density) {android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {this.color=labelColor.toArgb();textSize=with(density) {10.sp.toPx()}}}
+    val selected=points.firstOrNull {it.day.toString()==selectedDay} ?: points.last()
+    val first=points.first().day.toEpochDay()-.5
+    val span=(points.last().day.toEpochDay()-points.first().day.toEpochDay()+1).coerceAtLeast(1).toDouble()
+    val axisWidth=with(density) {32.dp.toPx()}
+    fun select(x:Float) {val day=first+((x-axisWidth)/(width-axisWidth-8f).coerceAtLeast(1f)).coerceIn(0f,1f)*span;selectedDay=points.minBy {abs(it.day.toEpochDay()-day)}.day.toString()}
+    val values=points.map {if(smooth) it.trend else it.value}
+    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+        Text(String.format(java.util.Locale.ROOT,"%.1f",if(smooth) selected.trend else selected.value),style=MaterialTheme.typography.headlineMedium)
+        Text(unit,Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.bodyLarge,color=labelColor)
+        Spacer(Modifier.weight(1f));Text(if(selectedDay==null) "最新" else "已选中",style=MaterialTheme.typography.labelSmall,color=color)
+    }
+    Canvas(Modifier.fillMaxWidth().height(210.dp).onSizeChanged {width=it.width.coerceAtLeast(1)}
+        .semantics {contentDescription="横轴日期，纵轴$unit。点击或横向拖动查看数据。"}
+        .pointerInput(points) {detectTapGestures {select(it.x)}}
+        .pointerInput(points) {detectHorizontalDragGestures(onDragStart={select(it.x)}) {change,_ -> change.consume();select(change.position.x)}}) {
+        val pad=maxOf((values.max()-values.min())*.25,.8)
+        val low=values.min()-pad;val high=values.max()+pad
+        val left=32.dp.toPx();val right=size.width-8.dp.toPx();val top=6.dp.toPx();val bottom=size.height-24.dp.toPx()
+        fun x(day:LocalDate)=(left+(day.toEpochDay()-first)/span*(right-left)).toFloat()
+        fun y(v:Double)=(top+(bottom-top)*(1-(v-low)/(high-low))).toFloat()
+        repeat(4) {i ->
+            val yy=top+(bottom-top)*i/3
+            drawLine(grid,Offset(left,yy),Offset(right,yy),.7.dp.toPx())
+            drawIntoCanvas {canvas -> val label=String.format(java.util.Locale.ROOT,"%.1f",high-(high-low)*i/3);canvas.nativeCanvas.drawText(label,left-5.dp.toPx()-labels.measureText(label),yy+labels.textSize*.35f,labels)}
+            val xx=left+(right-left)*i/3
+            drawLine(grid,Offset(xx,top),Offset(xx,bottom),.7.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(),3.dp.toPx())))
+            val date=LocalDate.ofEpochDay((first+span*i/3).toLong()).format(java.time.format.DateTimeFormatter.ofPattern("M/d"))
+            drawIntoCanvas {it.nativeCanvas.drawText(date,xx-labels.measureText(date)/2,size.height-4.dp.toPx(),labels)}
+        }
+        if(goal!=null && goal in low..high) drawLine(color.copy(alpha=.4f),Offset(left,y(goal)),Offset(right,y(goal)),1.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(8f,8f)))
+        val path=Path();points.forEachIndexed {i,p -> if(i==0) path.moveTo(x(p.day),y(values[i])) else path.lineTo(x(p.day),y(values[i]))}
+        val area=Path().apply {addPath(path);lineTo(x(points.last().day),bottom);lineTo(x(points.first().day),bottom);close()}
         drawPath(area,Brush.verticalGradient(listOf(color.copy(alpha=.18f),color.copy(alpha=.01f))))
         drawPath(path,color,style=Stroke(2.5.dp.toPx(),cap=StrokeCap.Round))
-        points.forEachIndexed { i,p -> drawCircle(color,if(p.day==selected.day) 5.dp.toPx() else 2.5.dp.toPx(),Offset(x(p.day),y(values[i]))) }
-        drawLine(color.copy(alpha=.35f),Offset(x(selected.day),0f),Offset(x(selected.day),size.height),1.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(6f,6f)))
+        points.forEachIndexed {i,p -> drawCircle(color,if(p.day==selected.day) 4.dp.toPx() else 2.5.dp.toPx(),Offset(x(p.day),y(values[i])))}
+        if(selectedDay!=null) drawLine(color.copy(alpha=.35f),Offset(x(selected.day),top),Offset(x(selected.day),bottom),1.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(6f,6f)))
     }
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { Text(points.first().day.toString(),style=MaterialTheme.typography.labelSmall); Text(points.last().day.toString(),style=MaterialTheme.typography.labelSmall) }
     if(selectedDay!=null) Text("${selected.day} · 中位数 ${format(selected.value)} $unit · 趋势 ${format(selected.trend)} $unit · ${selected.count} 次测量",style=MaterialTheme.typography.bodySmall)
-    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+    if(inspectionControls) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
         val index=points.indexOf(selected)
-        IconButton(enabled=index>0,onClick={selectedDay=points[index-1].day.toString()}) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft,"上一日测量") }
+        IconButton(enabled=index>0,onClick={selectedDay=points[index-1].day.toString()}) {Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft,"上一日测量")}
         Text(if(smooth) "每日中位数 · 指数平滑" else "每日中位数",modifier=Modifier.weight(1f),style=MaterialTheme.typography.bodySmall)
-        IconButton(enabled=index<points.lastIndex,onClick={selectedDay=points[index+1].day.toString()}) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,"下一日测量") }
+        IconButton(enabled=index<points.lastIndex,onClick={selectedDay=points[index+1].day.toString()}) {Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,"下一日测量")}
     }
 }
 

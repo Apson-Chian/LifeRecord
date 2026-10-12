@@ -33,6 +33,7 @@ class AppFlowTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
     }
     @After fun restore() {
+        if(android.os.Build.VERSION.SDK_INT>=31) (app.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).setApplicationNightMode(android.app.UiModeManager.MODE_NIGHT_AUTO)
         scenario.close(); app.store.commit(before); app.store.set("onboarded", onboarding); app.store.set("conversations", conversations)
         app.store.set("recordQuality.acknowledged",acknowledgements);app.store.set("weeklyReport",report)
     }
@@ -77,11 +78,11 @@ class AppFlowTest {
         compose.onNodeWithText("训练部位").assertExists()
         compose.onNodeWithText("取消").performClick()
         compose.onNodeWithTag("tab-1").performClick()
-        compose.onNodeWithText("回顾训练与身体变化").assertExists()
+        compose.onNodeWithContentDescription("回顾训练与身体变化").assertExists()
         compose.onNodeWithTag("tab-2").performClick()
-        compose.onNodeWithText("你的 AI 教练").assertExists()
+        compose.onNodeWithTag("coach-title").assertExists()
         compose.onNodeWithTag("tab-3").performClick()
-        compose.onNodeWithText("偏好与个人目标").assertExists()
+        compose.onNodeWithContentDescription("偏好与个人目标").assertExists()
     }
     @Test fun tabsRetainRangeSearchAndUnsentCoachDraft() {
         compose.onNodeWithTag("tab-1").performClick()
@@ -116,7 +117,7 @@ class AppFlowTest {
             swipe(androidx.compose.ui.geometry.Offset(width*.10f, height*.5f), androidx.compose.ui.geometry.Offset(width*.91f, height*.5f), 350)
         }
         compose.onNodeWithTag("tab-3").assertIsSelected()
-        compose.onNodeWithText("偏好与个人目标").assertExists()
+        compose.onNodeWithContentDescription("偏好与个人目标").assertExists()
     }
 
     private fun hideKeyboard() {
@@ -216,8 +217,8 @@ class AppFlowTest {
         }
         app.store.commit(Snapshot(records,defaultProfile(),emptyList()))
         scenario=ActivityScenario.launch(MainActivity::class.java)
-        compose.onNodeWithTag("tab-1").performClick();expose("体重趋势")
-        capture("trends-light")
+        compose.onNodeWithTag("tab-1").performClick();capture("trends-light")
+        expose("体重趋势")
         compose.onNodeWithTag("weight-detail").performClick()
         capture("measurement-open")
         compose.onNodeWithText("体重详情").assertExists()
@@ -229,10 +230,66 @@ class AppFlowTest {
         compose.onNode(hasText("次测量",substring=true)).assertExists()
         capture("measurement-detail")
     }
+    @Test fun nativeLayoutDailyGoalsAndScreenshots() {
+        scenario.close()
+        val profile=defaultProfile().put("fitnessGoal","增肌").put("height",181).put("baselineWeight",64).put("targetWeight",72).put("weeklyWeightTarget",.25).put("calorieGoal",2600).put("proteinGoal",130).put("carbsGoal",340).put("fatGoal",70)
+        val meals=listOf(
+            listOf("早餐","燕麦鸡蛋牛奶碗",545,34,64,15,8,7),
+            listOf("午餐","鸡胸肉糙米饭",780,56,88,19,7,12),
+            listOf("晚餐","三文鱼藜麦沙拉",665,47,58,24,10,19),
+            listOf("加餐","蛋白棒与香蕉",285,24,35,8,5,16)
+        ).map {row -> Record.create(RecordType.MEAL,java.time.LocalDate.now().epochAt(java.time.LocalTime.of(row[7] as Int,0))).apply {
+            json.put("kind",row[0]);json.put("name",row[1]);listOf("calories","protein","carbs","fat","fiber").forEachIndexed {i,key -> json.put(key,row[i+2])};json.put("isDemo",true)
+        }}
+        val body=Record.create(RecordType.BODY,java.time.LocalDate.now().epochAt(java.time.LocalTime.of(8,0))).apply {json.put("weight",65);json.put("bodyFat",14.3);json.put("isDemo",true)}
+        app.store.commit(Snapshot(meals+body,profile,emptyList()))
+        scenario=ActivityScenario.launch(MainActivity::class.java)
+        compose.onNodeWithTag("page-title").assertExists()
+        compose.onNodeWithContentDescription("今日营养圆环，用餐 4 次").assertExists()
+        capture("today-light-1.3")
+        compose.onNodeWithTag("tab-3").performClick()
+        compose.onNodeWithText("身体与目标").assertExists()
+        compose.onNodeWithText("每日目标").assertExists()
+        compose.onNodeWithText("智能与连接").assertExists()
+        capture("settings-light-1.3")
+        compose.onNodeWithText("每日目标").performClick()
+        compose.onNodeWithText("热量").assertExists()
+        compose.onNodeWithText("身高").assertDoesNotExist()
+        compose.onAllNodes(hasSetTextAction())[0].performTextReplacement("2500")
+        hideKeyboard()
+        compose.onNodeWithText("保存").performClick()
+        compose.waitForIdle()
+        assertEquals(2500.0,app.store.load().profile.getDouble("calorieGoal"),0.0)
+        assertEquals(181.0,app.store.load().profile.getDouble("height"),0.0)
+        compose.onNodeWithText("身体与目标").performClick()
+        capture("profile-light-1.3")
+        compose.onNodeWithText("身高").assertExists()
+        compose.onNodeWithText("热量").assertDoesNotExist()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithTag("tab-2").performClick()
+        capture("coach-light-1.3")
+        compose.onNode(hasSetTextAction()).performClick().performTextReplacement("键盘和导航测试")
+        compose.waitUntil(5000) {compose.onAllNodesWithTag("glass-navigation").fetchSemanticsNodes().isEmpty()}
+        compose.onNodeWithTag("glass-navigation").assertDoesNotExist()
+        capture("coach-keyboard-1.3")
+        hideKeyboard()
+        // App-only appearance changes keep the emulator's system preference intact.
+        if(android.os.Build.VERSION.SDK_INT>=31) {
+            scenario.onActivity {(it.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).setApplicationNightMode(android.app.UiModeManager.MODE_NIGHT_YES)}
+            compose.waitUntil(5000) {app.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES}
+            compose.waitForIdle();capture("coach-dark-1.3")
+            compose.onNodeWithTag("tab-0").performClick();capture("today-dark-1.3")
+            compose.onNodeWithTag("tab-3").performClick();capture("settings-dark-1.3")
+            scenario.onActivity {(it.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).setApplicationNightMode(android.app.UiModeManager.MODE_NIGHT_AUTO)}
+        }
+    }
     private fun capture(name:String) {
         val instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         if(android.os.Build.VERSION.SDK_INT<29 || androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("captureScreenshots")!="true") return
-        compose.waitForIdle()
+        compose.waitUntil(8000) {compose.onAllNodesWithTag("status-message").fetchSemanticsNodes().isEmpty()}
+        compose.waitForIdle();instrumentation.waitForIdleSync()
+        // SurfaceFlinger presents Compose and RenderEffect layers after the semantics commit.
+        android.os.SystemClock.sleep(400)
         val bitmap=instrumentation.uiAutomation.takeScreenshot() ?: error("Screenshot unavailable")
         val values=android.content.ContentValues().apply {
             put(android.provider.MediaStore.Downloads.DISPLAY_NAME,"$name.png")

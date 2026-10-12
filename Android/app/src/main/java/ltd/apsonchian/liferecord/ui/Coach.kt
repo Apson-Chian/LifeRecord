@@ -5,6 +5,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.*
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
@@ -40,6 +49,8 @@ import ltd.apsonchian.liferecord.data.*
     LaunchedEffect(draft) { if(draft.isNotBlank()) { text=draft; consumeDraft() } }
     val scope=rememberCoroutineScope(); val list=rememberLazyListState()
     val keyboard=LocalSoftwareKeyboardController.current
+    val inputFocus=remember {FocusRequester()}
+    val config by vm.config.collectAsState()
     val drawer=rememberDrawerState(DrawerValue.Closed)
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     val chat=chats.firstOrNull { it.getString("id")==selected }; val messages=chat?.getJSONArray("messages")?.objects().orEmpty()
@@ -74,32 +85,67 @@ import ltd.apsonchian.liferecord.data.*
         }
     }) {
     Column(Modifier.fillMaxSize().imePadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-            IconButton(onClick={keyboard?.hide();scope.launch { drawer.open() }}) { Icon(Icons.Default.Menu,"对话列表") }
-            Column(Modifier.weight(1f)) { Text("你的 AI 教练",style=MaterialTheme.typography.titleLarge); Text(chat?.getString("title") ?: "聊聊饮食、训练和恢复",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis) }
-            IconButton(onClick={favorites=true},modifier=Modifier.semantics { contentDescription="选择常用餐食" }) { Text("餐食",style=MaterialTheme.typography.labelMedium) }
-            IconButton(onClick={vm.newConversation()}) { Icon(Icons.Default.Add,"新对话") }
+        Box(Modifier.fillMaxWidth().height(60.dp).padding(horizontal=16.dp),contentAlignment=Alignment.Center) {
+            Text(chat?.getString("title") ?: "AI 助手",Modifier.padding(horizontal=104.dp).testTag("coach-title"),style=MaterialTheme.typography.titleLarge,maxLines=1,overflow=TextOverflow.Ellipsis)
+            SymbolButton(Glyph.Sidebar,"对话列表",{keyboard?.hide();scope.launch {drawer.open()}},Modifier.align(Alignment.CenterStart))
+            Row(Modifier.align(Alignment.CenterEnd).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surface.copy(alpha=.85f))) {
+                IconButton(onClick={favorites=true}) {AppIcon(Glyph.Meal,MaterialTheme.colorScheme.primary,Modifier.size(21.dp),"选择常用餐食")}
+                IconButton(onClick=vm::newConversation) {AppIcon(Glyph.Compose,MaterialTheme.colorScheme.primary,Modifier.size(21.dp),"新对话")}
+            }
         }
-        LazyColumn(Modifier.weight(1f),state=list,contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-            item { if(messages.isEmpty()) Panel { Text("从一个小问题开始",style=MaterialTheme.typography.titleLarge); Text("教练会参考你的本机记录。照片分析和营养草稿都可以在这里聊。",color=MaterialTheme.colorScheme.onSurfaceVariant)
-                listOf("今天的蛋白质还差多少？","帮我复盘最近七天的训练","如何安排明天的饮食？").forEach { prompt -> OutlinedButton(onClick={text=prompt},Modifier.fillMaxWidth()) { Text(prompt) } }
+        LazyColumn(Modifier.weight(1f),state=list,contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            item { if(messages.isEmpty()) Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    AppIcon(Glyph.Coach,MaterialTheme.colorScheme.primary,Modifier.size(22.dp),filled=true)
+                    Text(if(config.optBoolean("canWrite")) "今天想聊什么？" else "AI 助手",fontSize=22.sp,fontWeight=FontWeight.Bold)
+                }
+                Text(if(config.optBoolean("vision")) "可以发送食物、配料表、营养表或训练截图，也可以让我替你记录数据。" else "当前模型未开启图片输入，请在设置中切换多模态模型。",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                val prompts=listOf("帮我记录今天晨重 64.2kg","分析今天是否适合加餐","看这张配料表是否适合增肌")
+                prompts.chunked(2).forEach { row -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    row.forEach { prompt ->
+                        Box(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha=.6f)).clickable {text=prompt;inputFocus.requestFocus();keyboard?.show()}.defaultMinSize(minHeight=52.dp).padding(horizontal=11.dp,vertical=8.dp),contentAlignment=Alignment.CenterStart) {
+                            Text(prompt,style=MaterialTheme.typography.bodySmall.copy(fontWeight=FontWeight.Medium))
+                        }
+                    }
+                    if(row.size==1) Spacer(Modifier.weight(1f))
+                }}
             } }
             itemsIndexed(messages) { _, m -> ChatMessage(vm,m) }
             if(busy) item { Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp); Text("正在思考，离开页面也会继续…",style=MaterialTheme.typography.bodySmall) } }
             proposal?.takeIf { it.conversation==selected }?.let { p -> item { Panel {
                 Text("待复核的操作",style=MaterialTheme.typography.titleLarge)
                 p.actions.forEach { a -> Text(actionDescription(a,p.original),style=MaterialTheme.typography.bodyMedium) }
-                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { TextButton(onClick={vm.proposal.value=null}) { Text("放弃") }; Button(onClick={runCatching { vm.applyProposal() }.onFailure { notify(it.message.orEmpty()) }}) { Text("确认并保存 ${p.actions.size} 项") } }
+                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { TextButton(onClick={vm.proposal.value=null}) { Text("放弃") }; AppButton(onClick={runCatching { vm.applyProposal() }.onFailure { notify(it.message.orEmpty()) }}) { Text("确认并保存 ${p.actions.size} 项") } }
             } } }
         }
-        Surface(shape=androidx.compose.foundation.shape.RoundedCornerShape(24.dp),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,MaterialTheme.colorScheme.primary.copy(alpha=.13f)),modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp)) { Column(Modifier.padding(horizontal=8.dp,vertical=6.dp)) {
-            if(images.isNotEmpty()) Row(verticalAlignment=Alignment.CenterVertically) { Text("已选 ${images.size} 张照片",modifier=Modifier.weight(1f)); TextButton(onClick={vm.draftPhotos.value=emptyList()}) { Text("清除") } }
-            Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick={picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))},enabled=!busy) { Icon(Icons.Default.Add,"添加照片") }
-                OutlinedTextField(text,{text=it},Modifier.weight(1f),placeholder={Text("和教练聊一聊…")},maxLines=5)
-                IconButton(onClick={runCatching { vm.send(text,images);text="";vm.draftPhotos.value=emptyList() }.onFailure { notify(it.message.orEmpty()) }},enabled=!busy && (text.isNotBlank() || images.isNotEmpty())) { Icon(Icons.AutoMirrored.Filled.Send,"发送",tint=MaterialTheme.colorScheme.primary) }
+        Surface(shape=RoundedCornerShape(25.dp),color=MaterialTheme.colorScheme.surface.copy(alpha=.8f),border=BorderStroke(.7.dp,Color.White.copy(alpha=.2f)),modifier=Modifier.padding(horizontal=16.dp,vertical=8.dp)) {
+            Column(Modifier.padding(7.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                if(images.isNotEmpty()) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        images.forEachIndexed { index,bytes -> Box {
+                            PhotoBytes(bytes,Modifier.size(64.dp))
+                            IconButton(onClick={vm.draftPhotos.value=images.filterIndexed { i,_ -> i!=index }},modifier=Modifier.align(Alignment.TopEnd).size(26.dp).background(Color.Black.copy(alpha=.5f),CircleShape)) {Icon(Icons.Default.Close,"移除照片 ${index+1}",tint=Color.White,modifier=Modifier.size(15.dp))}
+                        } }
+                    }
+                    Text("已选 ${images.size} 张照片",Modifier.padding(horizontal=7.dp),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val send={runCatching {vm.send(text,images);text="";vm.draftPhotos.value=emptyList()}.onFailure {notify(it.message.orEmpty())};Unit}
+                val sendEnabled=!busy && (text.isNotBlank() || images.isNotEmpty())
+                Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.6f)).clickable(enabled=!busy && config.optBoolean("vision")) {picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))},contentAlignment=Alignment.Center) {
+                        AppIcon(Glyph.Plus,MaterialTheme.colorScheme.onSurface,Modifier.size(21.dp),"添加照片")
+                    }
+                    BasicTextField(text,{text=it},Modifier.weight(1f).focusRequester(inputFocus).defaultMinSize(minHeight=44.dp).padding(vertical=10.dp),textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),maxLines=5,
+                        keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={if(sendEnabled) send()}),decorationBox={inner ->
+                            Box {if(text.isEmpty()) Text("问问题，或让我替你记录…",style=MaterialTheme.typography.bodyLarge,color=MaterialTheme.colorScheme.onSurfaceVariant);inner()}
+                        })
+                    Box(Modifier.size(44.dp).clip(CircleShape).background(if(sendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha=.15f)).clickable(enabled=sendEnabled,onClick=send),contentAlignment=Alignment.Center) {
+                        AppIcon(Glyph.Up,Color.White,Modifier.size(24.dp),"发送")
+                    }
+                }
             }
-        } }
+        }
+
     }
     }
     if(favorites) FullForm("常用餐食",{favorites=false}) {
@@ -118,7 +164,7 @@ import ltd.apsonchian.liferecord.data.*
                 Image(painterResource(R.drawable.coach_avatar),null,Modifier.size(32.dp).clip(CircleShape),contentScale=ContentScale.Crop)
                 Spacer(Modifier.width(10.dp))
             }
-            Card(Modifier.widthIn(max=bubbleWidth),shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=if(user) Purple else MaterialTheme.colorScheme.surface)) {
+            Surface(Modifier.widthIn(max=bubbleWidth),shape=RoundedCornerShape(20.dp),color=if(user) Purple else MaterialTheme.colorScheme.surface.copy(alpha=.32f),border=if(user) null else BorderStroke(.5.dp,Color.White.copy(alpha=.14f))) {
                 Column(Modifier.padding(horizontal=14.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     val files=m.optJSONArray("localPhotoFiles")?.strings().orEmpty()
                     if(files.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -133,7 +179,7 @@ import ltd.apsonchian.liferecord.data.*
                         }
                     }
                     androidx.compose.foundation.text.selection.SelectionContainer {
-                        if(user) Text(m.getString("content"),color=Color.White) else MarkdownText(m.getString("content"))
+                        if(user) Text(m.getString("content"),color=Color.White,style=MaterialTheme.typography.bodyLarge) else MarkdownText(m.getString("content"))
                     }
                 }
             }

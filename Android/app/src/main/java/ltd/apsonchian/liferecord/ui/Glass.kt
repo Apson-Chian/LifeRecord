@@ -62,7 +62,7 @@ fun AppBackground(modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     Canvas(modifier.fillMaxSize()) {
         drawRect(colors.background)
-        drawRect(Brush.verticalGradient(listOf(colors.background, colors.primary.copy(alpha = .075f), colors.background)))
+        drawRect(Brush.verticalGradient(listOf(colors.background, lerp(if(colors.background.luminance()<.2f) Color.Black else Color.White,colors.primary,.075f), colors.background)))
     }
 }
 
@@ -84,7 +84,7 @@ fun GlassSurface(backdrop: GlassBackdrop, modifier: Modifier = Modifier, content
     val shape = RoundedCornerShape(50)
     Box(modifier
         .onGloballyPositioned { origin = it.positionInRoot(); dimensions = Size(it.size.width.toFloat(), it.size.height.toFloat()) }
-        .shadow(20.dp, shape, ambientColor = Color.Black.copy(alpha = .12f), spotColor = Color.Black.copy(alpha = .16f))
+        .shadow(12.dp, shape, ambientColor = Color.Black.copy(alpha = .08f), spotColor = Color.Black.copy(alpha = .12f))
         .clip(shape)
         .border(.8.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = if(dark) .30f else .85f), colors.primary.copy(alpha = .08f), Color.White.copy(alpha = .20f))), shape)
     ) {
@@ -138,7 +138,7 @@ private object Refraction {
     }
 }
 
-@Composable fun glassBarHeight(): Dp = if(LocalDensity.current.fontScale > 1.3f) 82.dp else 68.dp
+@Composable fun glassBarHeight(): Dp = if(LocalDensity.current.fontScale > 1.3f) 82.dp else 60.dp
 @Composable fun glassPageBottomPadding(): Dp {
     val density = LocalDensity.current
     return glassBarHeight() + 36.dp + with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
@@ -153,7 +153,8 @@ fun GlassNavigationBar(backdrop: GlassBackdrop, selected: Int, select: (Int) -> 
     BoxWithConstraints(modifier.widthIn(max = 500.dp).fillMaxWidth()) {
         val tabWidth = (maxWidth - 12.dp) / 4
         val widthPx = with(LocalDensity.current) { tabWidth.toPx() }
-        val position by animateDpAsState(tabWidth * (dragPosition ?: selected.toFloat()), spring(dampingRatio = 1f, stiffness = 700f), label = "glass selection")
+        val settledPosition by animateDpAsState(tabWidth * selected.toFloat(), spring(dampingRatio = 1f, stiffness = 700f), label = "glass selection")
+        val position = dragPosition?.let { tabWidth * it } ?: settledPosition
         val choose = rememberUpdatedState(select)
         GlassSurface(backdrop, Modifier.fillMaxWidth().height(height).testTag("glass-navigation")
             .pointerInput(widthPx) {
@@ -165,57 +166,24 @@ fun GlassNavigationBar(backdrop: GlassBackdrop, selected: Int, select: (Int) -> 
                 )
             }) {
             Box(Modifier.padding(6.dp).offset(x = position).width(tabWidth).fillMaxHeight()
-                .clip(RoundedCornerShape(50)).background(colors.primary.copy(alpha = .10f))
-                .border(.6.dp, Color.White.copy(alpha = .34f), RoundedCornerShape(50)))
+                .clip(RoundedCornerShape(50)).background(colors.onSurface.copy(alpha = .055f))
+                .border(.6.dp, Color.White.copy(alpha = if(colors.background.luminance()<.2f) .12f else .34f), RoundedCornerShape(50)))
             Row(Modifier.fillMaxSize().padding(6.dp).selectableGroup()) {
                 labels.forEachIndexed { index, label ->
                     val interactions = remember { MutableInteractionSource() }
                     val pressed by interactions.collectIsPressedAsState()
                     val scale by animateFloatAsState(if(pressed) .94f else 1f, spring(stiffness = 900f), label = "tab press")
-                    val color = if(selected == index) colors.primary else colors.onSurfaceVariant
+                    val color = if(selected == index) colors.primary else colors.onSurface
                     Column(Modifier.weight(1f).fillMaxHeight().testTag("tab-$index").clip(RoundedCornerShape(50))
                         .selectable(selected == index, interactionSource = interactions, indication = null, role = Role.Tab, onClick = { select(index) })
                         .graphicsLayer { scaleX = scale; scaleY = scale },
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
                     ) {
-                        NavigationGlyph(index, color, Modifier.size(24.dp))
+                        AppIcon(listOf(Glyph.Home,Glyph.Trend,Glyph.Coach,Glyph.Settings)[index],color,Modifier.size(24.dp),filled=index!=1)
                         Spacer(Modifier.height(3.dp))
                         Text(label, fontSize = 11.sp, fontWeight = if(selected == index) FontWeight.SemiBold else FontWeight.Medium, color = color, maxLines = 1)
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NavigationGlyph(index: Int, color: Color, modifier: Modifier) {
-    Canvas(modifier) {
-        val s = size.width / 24f
-        fun point(x: Float, y: Float) = Offset(x * s, y * s)
-        val stroke = Stroke(1.7f * s, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        val path = Path()
-        when(index) {
-            0 -> {
-                path.moveTo(3*s, 10*s); path.lineTo(12*s, 3*s); path.lineTo(21*s, 10*s)
-                path.moveTo(5*s, 9*s); path.lineTo(5*s, 21*s); path.lineTo(10*s, 21*s); path.lineTo(10*s, 14*s); path.lineTo(14*s, 14*s); path.lineTo(14*s, 21*s); path.lineTo(19*s, 21*s); path.lineTo(19*s, 9*s)
-                drawPath(path, color, style = stroke)
-            }
-            1 -> {
-                path.moveTo(3*s, 3*s); path.lineTo(3*s, 21*s); path.lineTo(22*s, 21*s)
-                path.moveTo(6*s, 16*s); path.lineTo(11*s, 11*s); path.lineTo(15*s, 14*s); path.lineTo(21*s, 6*s)
-                drawPath(path, color, style = stroke)
-            }
-            2 -> {
-                drawRoundRect(color, point(3f, 4f), Size(15*s, 11*s), androidx.compose.ui.geometry.CornerRadius(4*s), style = stroke)
-                path.moveTo(7*s, 15*s); path.lineTo(5*s, 18*s); path.lineTo(5*s, 13*s)
-                path.moveTo(18*s, 9*s); path.lineTo(21*s, 9*s); path.lineTo(21*s, 20*s); path.lineTo(18*s, 18*s); path.lineTo(12*s, 18*s)
-                drawPath(path, color, style = stroke)
-            }
-            else -> {
-                drawCircle(color, 7*s, point(12f, 12f), style = stroke)
-                drawCircle(color, 3*s, point(12f, 12f), style = stroke)
-                repeat(8) { i -> val a = i*Math.PI/4; val x = kotlin.math.cos(a).toFloat(); val y = kotlin.math.sin(a).toFloat(); drawLine(color, point(12+7*x,12+7*y),point(12+10*x,12+10*y),1.7f*s,StrokeCap.Round) }
             }
         }
     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -43,7 +44,7 @@ import java.time.format.DateTimeFormatter
     ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = MaterialTheme.colorScheme.background) {
         Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.imePadding().widthIn(max = 760.dp)) {
-                TopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, navigationIcon = { TextButton(onClick = dismiss) { Text("取消") } }, actions = actions, colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent))
+                CenterAlignedTopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, navigationIcon = { TextButton(onClick = dismiss) { Text("取消") } }, actions = actions, colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent))
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
                 if(keyboardVisible) TextButton(onClick = { keyboard?.hide() }, modifier = Modifier.align(Alignment.End)) { Text("收起键盘") }
             }
@@ -51,7 +52,20 @@ import java.time.format.DateTimeFormatter
     }
 }
 @Composable fun TextFieldRow(label: String, value: String, change: (String) -> Unit, number: Boolean = false, lines: Int = 1) {
-    OutlinedTextField(value, change, Modifier.fillMaxWidth(), label = { Text(label) }, keyboardOptions = KeyboardOptions(keyboardType = if(number && !label.contains("负数")) KeyboardType.Decimal else KeyboardType.Text), singleLine = lines == 1, minLines = lines, shape = RoundedCornerShape(14.dp))
+    Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+        Text(label,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        BasicTextField(value,change,Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).defaultMinSize(minHeight=44.dp).padding(12.dp),
+            textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions=KeyboardOptions(keyboardType=if(number && !label.contains("负数")) KeyboardType.Decimal else KeyboardType.Text),singleLine=lines==1,minLines=lines)
+    }
+}
+@Composable fun SecretFieldRow(label:String,value:String,change:(String)->Unit) {
+    Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+        Text(label,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        BasicTextField(value,change,Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).defaultMinSize(minHeight=44.dp).padding(12.dp),
+            textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password),visualTransformation=androidx.compose.ui.text.input.PasswordVisualTransformation(),singleLine=true)
+    }
 }
 /** Native date and time pickers avoid format-dependent typing, like the iOS editor. */
 @Composable fun DateTimeField(label: String, value: String, change: (String) -> Unit, optional: Boolean = false) {
@@ -66,7 +80,7 @@ import java.time.format.DateTimeFormatter
         Unit
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedButton(onClick = choose, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(16.dp)) {
+        SoftButton(onClick = choose, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), contentPadding = PaddingValues(16.dp)) {
             Icon(Icons.Default.DateRange, null)
             Column(Modifier.weight(1f).padding(start = 12.dp), horizontalAlignment = Alignment.Start) {
                 Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -114,12 +128,12 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         if(r.demo) Text("这是示例记录，不会参与同步和真实趋势。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if(r.type in listOf(RecordType.MEAL, RecordType.FAVORITE)) {
             Panel {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = { ai = !ai }) { Text("AI 识别 / 修改") }; if(r.type == RecordType.MEAL) TextButton(onClick = { showFavorites = true }) { Text("常用餐食") } }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { SoftButton(onClick = { ai = !ai }) { Text("AI 识别 / 修改") }; if(r.type == RecordType.MEAL) TextButton(onClick = { showFavorites = true }) { Text("常用餐食") } }
                 if(ai) {
                     TextFieldRow("描述食物、份量或修改要求", input, { input = it }, lines = 3)
-                    OutlinedButton(onClick = { picker.launch(ActivityResultContracts.PickVisualMedia.ImageOnly.let { androidx.activity.result.PickVisualMediaRequest(it) }) }) { Text(if(images.isEmpty()) "选择食物 / 营养表照片" else "重新选择 · 已选 ${images.size} 张") }
+                    SoftButton(onClick = { picker.launch(ActivityResultContracts.PickVisualMedia.ImageOnly.let { androidx.activity.result.PickVisualMediaRequest(it) }) }) { Text(if(images.isEmpty()) "选择食物 / 营养表照片" else "重新选择 · 已选 ${images.size} 张") }
                     if(images.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { images.forEach { PhotoBytes(it, Modifier.size(70.dp)) } }
-                    Button(enabled = !aiBusy && (input.isNotBlank() || images.isNotEmpty()), onClick = {
+                    AppButton(enabled = !aiBusy && (input.isNotBlank() || images.isNotEmpty()), onClick = {
                         aiBusy = true; scope.launch {
                             try {
                                 val result = vm.nutrition(input, images, if(s.records.any { it.id == r.id }) build() else null)
@@ -154,7 +168,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
             }
             if(showExercises) Panel {
                 exercises.forEachIndexed { index, ex -> Row(verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = { exEdit = index }, Modifier.weight(1f)) { Text("${ex.optString("name")} · ${ex.optJSONArray("sets")?.length() ?: 0} 组") }; IconButton(onClick = { exercises = exercises.filterIndexed { i,_ -> i != index } }) { Icon(Icons.Default.Delete, "移除动作") } } }
-                OutlinedButton(onClick = { exercises = exercises + JSONObject().put("name", "").put("sets", JSONArray()).put("bodyPart", selectedParts.firstOrNull() ?: "未分类"); exEdit = exercises.lastIndex }) { Text("添加动作") }
+                SoftButton(onClick = { exercises = exercises + JSONObject().put("name", "").put("sets", JSONArray()).put("bodyPart", selectedParts.firstOrNull() ?: "未分类"); exEdit = exercises.lastIndex }) { Text("添加动作") }
                 val templates = s.records.filter { it.type == RecordType.EXERCISE }
                 if(templates.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { templates.forEach { template -> AssistChip(onClick = { exercises = exercises + JSONObject().put("name", template.title).put("bodyPart", template.json.optString("bodyPart", "未分类")).put("sets", JSONArray()) }, label = { Text(template.title) }) } }
             }
@@ -187,7 +201,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
             Row(verticalAlignment=Alignment.CenterVertically) { Text("第 ${i+1} 组",modifier=Modifier.weight(1f)); IconButton(onClick={rows=rows.filterIndexed { idx,_ -> idx != i }}) { Icon(Icons.Default.Delete,"删除组") } }
             listOf("次数","重量 kg","时长 秒").forEachIndexed { col,label -> TextFieldRow("$label（可选）",values[col],{v -> rows=rows.mapIndexed { idx,row -> if(idx==i) row.mapIndexed { j,old -> if(j==col) v else old } else row }},true) }
         } }
-        OutlinedButton(onClick={rows=rows+listOf(listOf("","",""))},enabled=rows.size<100) { Text("添加一组") }
+        SoftButton(onClick={rows=rows+listOf(listOf("","",""))},enabled=rows.size<100) { Text("添加一组") }
     }
 }
 @Composable fun RecordDetail(vm: AppViewModel, r: Record, dismiss: () -> Unit, edit: () -> Unit, notify: (String) -> Unit) {
@@ -207,7 +221,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         }
         if(r.json.optString("note").isNotBlank()) Panel { Text("备注",style=MaterialTheme.typography.titleMedium); Text(r.json.getString("note")) }
         Insights.quality(r).forEach { Text(it,color=MaterialTheme.colorScheme.error) }
-        OutlinedButton(onClick={delete=true},modifier=Modifier.fillMaxWidth()) { Text("删除这条记录",color=MaterialTheme.colorScheme.error) }
+        SoftButton(onClick={delete=true},modifier=Modifier.fillMaxWidth()) { Text("删除这条记录",color=MaterialTheme.colorScheme.error) }
     }
     if(delete) AlertDialog(onDismissRequest={delete=false},title={Text("删除${r.type.label}？")},text={Text("启用同步后，删除会同步到你的其他设备。")},confirmButton={TextButton(onClick={runCatching { vm.delete(r); dismiss(); notify("记录已删除") }.onFailure { notify(it.message.orEmpty()) }}) { Text("删除") }},dismissButton={TextButton(onClick={delete=false}) { Text("保留") }})
 }
