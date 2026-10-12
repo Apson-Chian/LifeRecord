@@ -97,10 +97,10 @@ struct ProgressDashboardView: View {
                 ScrollView {
                     LazyVStack(spacing: 16) {
                         rangeCard
+                        workoutChart
                         weightChart
                         bodyCompositionCard
                         calorieChart
-                        workoutChart
                         aiReportCard
                         GoalFeedbackCard(summary: feedback, goals: .init(settings))
                         qualityCheckCard

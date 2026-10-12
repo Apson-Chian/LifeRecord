@@ -26,20 +26,28 @@ struct GoalFeedbackCard: View {
                     }
                     Text("最近趋势体重 · \(date.formatted(.dateTime.month().day())) · 由真实测量每日中位数平滑计算")
                         .font(.caption).foregroundStyle(.secondary)
-                    if let progress = summary.progress {
-                        ProgressView(value: progress).tint(AppTheme.accent)
-                            .accessibilityLabel("从起始体重到目标的进度")
-                            .accessibilityValue("\(Int(progress * 100))%")
+                    if let week = summary.weeklyProgress {
+                        Text("本周进度 · \(week.start.formatted(.dateTime.month().day())) — \(week.end.formatted(.dateTime.month().day()))")
+                            .font(.subheadline.weight(.medium))
+                        ProgressView(value: week.fraction).tint(AppTheme.accent)
+                            .accessibilityLabel("本周体重变化相对于每周目标的进度")
+                            .accessibilityValue("\(Int(week.fraction * 100))%")
                         HStack {
-                            Text("完成 \(Int(progress * 100))%")
+                            Text("本周 \(Int(week.fraction * 100))%")
                             Spacer()
                             if let distance = summary.distance { Text("距目标 \(distance.formatted(.number.precision(.fractionLength(1)))) kg") }
                         }.font(.caption).foregroundStyle(.secondary)
-                        Text("以设置中的起始体重为基准；更改目标后重新计算，体重进度不等同于增肌或减脂成果。")
+                        Text("趋势变化 \(week.change >= 0 ? "+" : "")\(week.change.formatted(.number.precision(.fractionLength(2)))) kg / 每周目标 \(goals.weeklyWeightChange.formatted(.number.precision(.fractionLength(2)))) kg")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text("每周一重新计算，以本周首次测量（\(week.baselineDate.formatted(.dateTime.month().day()))）的趋势体重为基准；一周结束后再回看，体重进度不等同于增肌或减脂成果。")
                             .font(.caption2).foregroundStyle(.secondary)
                     } else if let distance = summary.distance {
                         Text("与目标相差 \(distance.formatted(.number.precision(.fractionLength(1)))) kg")
                             .font(.subheadline).foregroundStyle(.secondary)
+                        if summary.progress != nil && abs(goals.weeklyWeightChange) > 0 {
+                            Text("本周测量还不足，积累记录后再看每周进度。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     if let change = summary.weeklyChange {
                         Text("区间趋势折算 \(change >= 0 ? "+" : "")\(change.formatted(.number.precision(.fractionLength(2)))) kg/周 · 设定 \(goals.weeklyWeightChange.formatted(.number.precision(.fractionLength(2)))) kg/周")

@@ -63,6 +63,38 @@ struct RecordInsightChecks {
         let weeklyBody: [InsightRecords.Body] = [.init(date: day(-7), weight: 60), .init(date: day(-3), weight: 61), .init(date: day(0), weight: 62)]
         assert(summary([], weeklyBody, days: 7).weeklyChange != nil)
         assert(summary([], weeklyBody, days: 7).measurementDays == 2)
+        // The progress bar follows Monday–Sunday, independently of the chart range and overall goal.
+        let weekStart = RecordWeek.start(containing: now, calendar: calendar)
+        assert(calendar.component(.weekday, from: weekStart) == 2)
+        assert(calendar.component(.day, from: weekStart) == 5)
+        assert(RecordWeek.start(containing: day(2), calendar: calendar) == weekStart) // Sunday stays in this week.
+        let nextMonday = RecordWeek.start(containing: day(3), calendar: calendar)
+        assert(calendar.component(.day, from: nextMonday) == 12)
+        let weekWeights: [InsightRecords.Body] = [.init(date: day(-4), weight: 60), .init(date: day(0), weight: 60.4)]
+        let week = summary([], weekWeights).weeklyProgress!
+        let weekTrend = BodyTrend.series(weekWeights.map { .init(date: $0.date, value: $0.weight) }, calendar: calendar)
+        assert(week.start == weekStart && calendar.component(.day, from: week.end) == 11)
+        assert(abs(week.change - (weekTrend.last!.trend - weekTrend.first!.trend)) < 0.000001)
+        assert(abs(week.fraction - week.change / goals.weeklyWeightChange) < 0.000001)
+        assert(summary([], weekWeights, days: 7).weeklyProgress!.fraction == week.fraction)
+        assert(summary([], weekWeights, days: nil).weeklyProgress!.fraction == week.fraction)
+        assert(summary([], [.init(date: day(-4), weight: 60)]).weeklyProgress == nil)
+        assert(summary([], [.init(date: day(-8), weight: 60), .init(date: day(-5), weight: 61)]).weeklyProgress == nil)
+        assert(summary([], [.init(date: day(-12), weight: 60), .init(date: day(0), weight: 61)]).weeklyProgress == nil)
+        assert(summary([], [.init(date: day(-5), weight: 60), .init(date: day(0), weight: 61)]).weeklyProgress == nil)
+        assert(summary([], [.init(date: day(-2), weight: 60), .init(date: day(0), weight: 60.4)]).weeklyProgress != nil)
+        assert(summary([], [.init(date: day(-4), weight: 60), .init(date: day(0), weight: 59)]).weeklyProgress!.fraction == 0)
+        assert(summary([], [.init(date: day(-4), weight: 60), .init(date: day(0), weight: 62)]).weeklyProgress!.fraction == 1)
+        let lossWeek = summary([], [.init(date: day(-4), weight: 80), .init(date: day(0), weight: 79.5)], goals: lose).weeklyProgress!
+        assert(lossWeek.change < 0 && lossWeek.fraction > 0 && lossWeek.fraction < 1)
+        assert(summary([], weekWeights, goals: maintain).weeklyProgress == nil)
+        assert(summary([], weekWeights, goals: reversedGoals).weeklyProgress == nil)
+        var zeroWeeklyGoal = goals; zeroWeeklyGoal.weeklyWeightChange = 0
+        assert(summary([], weekWeights, goals: zeroWeeklyGoal).weeklyProgress == nil)
+        let excludedWeekRecords = weekWeights + [.init(date: day(1), weight: 100), .init(date: day(-1), weight: 150, isDemo: true), .init(date: day(-2), weight: .nan)]
+        assert(summary([], excludedWeekRecords).weeklyProgress!.fraction == week.fraction)
+        let resetWeek = GoalFeedback.summarize(goals: goals, meals: [], body: weekWeights, workouts: [], days: 30, now: day(3), calendar: calendar)
+        assert(resetWeek.weeklyProgress == nil) // No measurement yet in the new week.
         // Count a completed cross-midnight workout by start date, but not active, future or reversed records.
         let workouts: [InsightRecords.Workout] = [
             .init(date: day(-1, hour: 23), endDate: day(0, hour: 1)),
@@ -114,6 +146,13 @@ struct RecordInsightChecks {
         let dstNow = dstCalendar.date(from: DateComponents(year: 2026, month: 3, day: 10, hour: 12))!
         let dstSummary = GoalFeedback.summarize(goals: goals, meals: [], body: [], workouts: [], days: 7, now: dstNow, calendar: dstCalendar)
         assert(dstSummary.days == 7 && dstCalendar.component(.day, from: dstSummary.start) == 4)
+        let dstSunday = dstCalendar.date(from: DateComponents(year: 2026, month: 3, day: 8, hour: 12))!
+        let dstMonday = RecordWeek.start(containing: dstSunday, calendar: dstCalendar)
+        assert(dstCalendar.component(.day, from: dstMonday) == 2)
+        assert(RecordWeek.start(containing: dstNow, calendar: dstCalendar) == dstCalendar.date(from: DateComponents(year: 2026, month: 3, day: 9))!)
+        let newYear = calendar.date(from: DateComponents(year: 2027, month: 1, day: 1))!
+        let yearWeek = RecordWeek.start(containing: newYear, calendar: calendar)
+        assert(calendar.component(.year, from: yearWeek) == 2026 && calendar.component(.day, from: yearWeek) == 28)
         print("Record insights: all checks passed")
     }
 }

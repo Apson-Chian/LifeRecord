@@ -383,7 +383,7 @@ private struct DateNavigator: View {
     let meals: [MealEntry]
     let proteinGoal: Double
     let carbsGoal: Double
-    private let calendar = Calendar.current
+    private let calendar = RecordWeek.calendar()
     @State private var isShowingCalendar = false
 
     private var weekDates: [Date] {
@@ -607,7 +607,7 @@ private struct RecordCalendarView: View {
     let proteinGoal: Double
     let carbsGoal: Double
 
-    private let calendar = Calendar.current
+    private let calendar = RecordWeek.calendar()
     @State private var visibleMonth: Date
 
     init(
