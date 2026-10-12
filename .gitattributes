@@ -1,0 +1,4 @@
+# Preserve executable shell scripts and Windows wrapper line endings.
+*.sh text eol=lf
+Android/gradlew text eol=lf
+*.bat text eol=crlf

@@ -1,60 +1,60 @@
 # LifeRecord（生活记录）
 
-一个本地优先的自用 iOS 健身记录 App，使用 SwiftUI、SwiftData 和 Swift Charts 构建，最低支持 iOS 17。
+本地优先的健身记录项目。Android 和 iOS 使用独立的原生工程、界面、存储与构建工具，通过同一私有同步后端与 Web 交换餐食、身体数据、训练、每日目标和删除标记。
 
-## 功能
+## 仓库结构
 
-- 目标化首页：无缝相邻的立体三层活动圆环由外到内展示蛋白质、碳水和每日用餐次数（4 次闭环），日期栏同步展示一周每天的小圆环，右侧显示最近一次记录的体重
-- 逐日记录：前后逐日切换或通过日期选择器跳转到任意一天，不限制“最近几天”
-- 记录日历：通过日期选择器快速识别已有餐食或身体测量记录的日期
-- 三餐记录：手动录入，或一次选择多张餐盘、饮料、营养成分表或配料表照片交给多模态 AI 识别营养后复核
-- 常用餐食：在设置中为牛奶、面包等建立固定名称、份量、照片和每份营养；可用照片让 AI 估算后复核，也能在记餐时直接填入。教练中发送准确名称会直接返回保存的热量和营养；常用餐食保存在本机。
-- 餐食修改：保存后的餐食可在详情页编辑名称、时间、餐次、营养和备注，或描述修改要求让 AI 生成结果后复核；聊天助手支持按记录 ID 修改原餐食，保留照片与来源，不重复新增餐食
-- 健身记录：当天开始、结束计时，直接选择一个或多个训练部位，具体动作与逐组数据默认收起并可选填；支持补记、编辑和删除，按开始日期归档并保留跨午夜时长。未选部位但有训练内容时，保存会尝试用 AI 归类。
-- 身体记录：体重、体脂率、腰围与备注
-- 趋势：体重曲线、近 14 天热量、记录连续性、AI 周报
-- AI 健身上下文：聊天可读取本机全部训练的起止时间、时长、进行中状态和内容；AI 周报使用最近 7 天训练记录。
-- AI 助手：支持多个独立对话和侧边栏快速切换，离开页面后仍继续生成；结合体重与近 30 天饮食上下文回答问题，可同时接收多张图片
-- AI 操作：授权后可按自然语言新增、修改或删除餐食、身体测量、训练记录和本机动作库模板（包括历史训练的动作、部位、组数和起止时间），或调整个人档案与每日目标，并回执实际操作
-- AI 服务：DeepSeek、Dots、智谱 GLM 预设，以及任意 OpenAI Chat Completions 兼容接口；端点、模型、认证请求头、图片能力、图片数量和生成参数都可自定义
-- 输入体验：表单支持下滑收起键盘，数字键盘和普通键盘均提供显式“收起键盘”按钮
-- 视觉：遵循原生 iOS 层级、材质和动效，使用蓝紫主题并适配深浅色模式
-- 隐私：健康记录保存在本机 SwiftData，API Key 保存在 iOS Keychain
-- 私有同步：餐食、身体数据、训练、删除记录和每日目标通过配对密钥与浏览器自动双向合并；App 离线时仍可使用
-- 私有照片：餐食照片压缩后保存到自己的服务器，App 记录中保存图片编号，已查看照片使用按同步密钥隔离的本地缓存（内存 24 MB、磁盘 128 MB），缩略图后台解码，详情和相册支持全屏查看、缩放、下滑退出、保存到系统相册与失败重试；Web 历史餐食按需加载照片，删除餐食时服务器图片一并清理
-- LifeTrack 联动：通过 App Group 共享身体档案、今日饮食与运动摘要，并支持两个 App 之间一键跳转
-- 首次启动引导：自动写入 30 天示例数据，并展示真实的首页、趋势、教练和隐私效果，可随时在设置中重看或清除
+```text
+LifeRecord/
+├── Android/                      # Kotlin + Jetpack Compose，Android 8.0+
+│   ├── app/                      # 应用源码、单元测试和设备测试
+│   ├── gradle/                   # Gradle Wrapper
+│   ├── screenshots/              # 安卓界面预览
+│   └── README.md
+├── iOS/                          # SwiftUI + SwiftData，iOS 17+
+│   ├── LifeRecord/               # 应用源码、资源与隐私声明
+│   ├── LifeRecord.xcodeproj/      # Xcode 工程与共享 Scheme
+│   ├── Configuration/            # Info.plist 与 Entitlements
+│   ├── Tests/                    # Swift 回归程序与运行脚本
+│   └── README.md
+├── Backend/                      # Python / SQLite 私有同步与照片服务
+├── Web/                          # 响应式记录管理后台
+├── Tests/                        # 后端、Web 与跨平台协议回归
+└── Docs/                         # 统计口径与历史设计参考
+```
 
-## Dots 配置
+| 平台 | 打开方式 | 说明 |
+| --- | --- | --- |
+| Android | Android Studio 打开 `Android/` | [运行、功能与界面预览](Android/README.md) · [验证记录](Android/VALIDATION.md) |
+| iOS | Xcode 打开 `iOS/LifeRecord.xcodeproj` | [运行、功能与平台配置](iOS/README.md) |
+| Web / 后端 | 部署 `Web/` 与 `Backend/` | 下方说明与现有服务配置 |
 
-Dots 开放平台使用托管模型 `dots3-note-prev`，接口地址为
-`https://note3-prev-api.askdiandian.com/v1/chat/completions`，认证方式选择
-`api-key 请求头`。`dots.llm1.inst` 是开源权重名称，不能作为该托管接口的模型名。
-Dots 的深度思考默认开启；App 会通过 `chat_template_kwargs.enable_thinking = false` 关闭，避免结构化营养回复只产生思考内容。Dots 密钥必须在 Dots API 开放平台创建；HTTP 403 表示当前密钥无模型访问权限。
+安卓端界面已按 Material 3 重绘，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。平台实现差异见安卓说明。
 
-DeepSeek、Dots、GLM 与自定义服务的 API Key 会分别保存在钥匙串中；切换服务商不会把上一家的密钥发送给当前接口。
-GLM 预设使用当前的免费视觉模型 `glm-4.6v-flash`；旧版默认的 `glm-4.5v` 会自动迁移。
+## 快速构建
 
-## 运行
+以下命令在仓库根目录执行。Android 需要 JDK 17、SDK 35；iOS 需要 Xcode，真机运行时在工程中选择自己的签名团队。
 
-1. 使用 Xcode 26 或更新版本打开 `LifeRecord.xcodeproj`。
-2. 在 Signing & Capabilities 中选择自己的 Personal Team。
-3. 选择模拟器或已开启开发者模式的 iPhone，点击运行。
-4. 打开 App 的“设置 → AI 接口”，选择服务商、核对接口/模型/认证方式，打开 API Key 页面执行“保存并测试”。
+```sh
+# 安卓调试 APK 与核心检查
+cd Android
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+cd ..
 
-### iOS 27.0.1 与开发工具
+# iOS 模拟器构建（无需配置真机签名）
+xcodebuild -project iOS/LifeRecord.xcodeproj -scheme LifeRecord \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath /tmp/LifeRecordDerivedData CODE_SIGNING_ALLOWED=NO build
 
-- 最低系统版本继续为 iOS 17；手机升级到 iOS 27.0.1 不需要把 Deployment Target 改成 27。SDK 版本与最低运行版本是不同配置。
-- 在 iOS 27 上开发和进行完整兼容性验证，请使用正式版 Xcode 27 或更新版本及其 iOS SDK；Xcode 26.6 仅包含 iOS 26.5 SDK。工具要求见 [Apple 官方支持表](https://developer.apple.com/xcode/system-requirements)。
-- iOS 18 及更新版本使用原生 `Tab` 导航接口，iOS 17 保留原有标签导航；标签选择恢复和通知跳转保持一致。
-- 自动同步仅在 App 活跃时每 15 秒执行，返回前台立即同步；后台停止轮询，任务取消不会显示为网络失败。本地记录仍保留，下一次同步继续合并。
-- `LifeRecord/PrivacyInfo.xcprivacy` 声明本机偏好、App Group 共享偏好和私有照片缓存文件时间戳的使用原因；照片缓存时间用于容量淘汰。
+# 原有 iOS Swift 回归检查
+./iOS/Tests/run.sh
+```
 
-API Key 不会写入源码或 GitHub。如果测试失败，App 会区分“保存失败”和“密钥已保存但连接失败”，并显示服务端返回的 HTTP 错误，便于检查模型名、额度、接口地址或认证头。
+安卓 APK 生成于 `Android/app/build/outputs/apk/debug/app-debug.apk`。构建缓存、安装包、本机 SDK 路径和签名密钥均被 Git 忽略。API Key 与同步密钥由用户在各端设置中录入，不写入仓库。
 
 ## Web 页面
 
-`Web/` 是采用侧栏导航、指标卡与餐食数据表格的响应式管理后台，可新增、编辑和删除带照片的餐食及身体数据，编辑每日目标，查看三层营养圆环、每日圆环与带绿点的月历，并导出完整 JSON。宽屏端还提供日期快捷切换、手动同步、营养概览、跨全部历史的餐食搜索与筛选，以及 `N` / `W` / `/` 键盘快捷操作。数据由 `Backend/` 中的鉴权 SQLite 服务持久化，与 iOS App 每 15 秒及页面重新聚焦时自动双向同步；浏览器只在 Local Storage 中保存当前选择日期等界面偏好。
+`Web/` 是采用侧栏导航、指标卡与餐食数据表格的响应式管理后台，可新增、编辑和删除带照片的餐食及身体数据，编辑每日目标，查看三层营养圆环、每日圆环与带绿点的月历，并导出完整 JSON。宽屏端还提供日期快捷切换、手动同步、营养概览、跨全部历史的餐食搜索与筛选，以及 `N` / `W` / `/` 键盘快捷操作。数据由 `Backend/` 中的鉴权 SQLite 服务持久化，与 iOS、Android App 每 15 秒及页面重新聚焦时自动双向同步；浏览器只在 Local Storage 中保存当前选择日期等界面偏好。
 
 首次使用时，在 App 的“设置 → App 与浏览器同步”及网页中各粘贴一次相同的同步密钥。网页验证成功后使用 `Secure + HttpOnly + SameSite=Strict` Cookie，不会把密钥写进前端源码或 GitHub。
 
@@ -62,48 +62,17 @@ API Key 不会写入源码或 GitHub。如果测试失败，App 会区分“保�
 
 AI 营养结果会在保存前保持可编辑；它仅用于日常记录参考，不构成医疗建议。
 
-## 回归检查
+## 共享回归检查
 
-- `python3 Tests/sync-edit.py`：使用临时 SQLite 检查原记录更新、照片保留及旧数据合并。
-- `swiftc LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift Tests/favorite-food-storage.swift -o /tmp/favorite-food-test && /tmp/favorite-food-test`：检查常用餐食照片和营养持久化，以及旧餐食数据库升级。
-- 安装 Playwright 并确保 Chrome 可用后，运行 `node Tests/web-smoke.cjs`：使用本地模拟 API 检查网页编辑、搜索及 4 种窗口宽度，不访问真实健康数据。
+```sh
+python3 Tests/sync-edit.py
+python3 Tests/admin-api.py
+# 先运行安卓单元测试，生成真实 Kotlin 协议样本
+python3 Tests/android-sync.py
+# 安装 Playwright 并确保 Chrome 可用后
+node Tests/web-smoke.cjs
+```
 
-## 自定义训练与漏记提醒
+上述检查使用临时数据库或模拟 API，不访问真实健康记录。Swift 测试与安卓设备测试分别位于 `iOS/Tests/` 和 `Android/app/src/androidTest/`；具体命令见各平台文档。
 
-- 今日 → 健身记录 → 补记/训练详情：直接选择训练部位即可记录；具体动作默认收起，展开后可从动作库或自定义添加，逐组次数、重量（kg）和时长（秒）均可选填。训练内容与趋势明细保留逐组数据。
-- 趋势 → 训练内容与明细 → 按部位：按训练记录自身的部位统计，无需精确动作；可进入动作库给任一部位添加动作，并让 AI 参考已分类训练批量归类旧记录。旧版训练的动作部位继续用于统计。同步后端需支持 `bodyParts` 并保留旧客户端未发送的字段。
-- 按部位页面可与 AI 对话调整当前时间范围的训练部位；从某个部位分组打开时，只调整该分组。开启“允许 AI 修改记录”后发送要求，核对日期、原部位和新部位预览，再点“应用修改”保存；记录在生成后被编辑、删除或同步更新时，需要重新生成预览。只修改部位标签，不修改时间、备注或动作。
-- 管理训练部位可预览并修复旧的“手臂”标签，将明确描述中的二头、三头、小臂分别保留。含否定、计划、不确定或过去训练描述的记录不做关键词修复，需要逐条复核；例如“没练二头，只练三头”不会被直接改成二头和三头。AI 归类也会区分已完成训练与否定、计划描述。
-- 设置 → 我的动作库：添加、重命名、删除动作并直接点选默认训练部位。动作模板仅保存在当前设备，添加到训练时会自动带入默认部位，仍可按单次训练修改；修改模板不改变历史记录，训练中的动作、部位与组数随训练同步。需要更新后端以支持无组数动作并校验、保留新字段，旧客户端省略动作字段时不会清空已有动作。
-- 训练详情 → AI 录入：用自然语言描述动作和组数，生成草稿，复核后追加到当前训练，再保存。使用已有 AI 接口配置，不需要另外设置密钥。
-- 教练：AI 可读取逐组训练数据和动作库；打开原有“允许 AI 写入”后，可按明确要求新增、修改或删除训练。新增训练需提供起止时间，未提供的次数和重量保持空白。训练计划不会自动保存为完成记录。
-- 设置 → 漏记提醒：默认关闭，主动开启后申请通知权限；选择提醒类别、每日时间和训练星期。当天有该类真实记录就取消该项提醒，示例数据不算已记录，训练以开始日期计算。
-- 提醒按本机记录安排未来 30 天，每次打开 App、保存记录、同步及时间变化后更新；每天最多一条汇总。App 关闭后已安排通知仍可触发，其他设备的记录需同步到本机才能取消；超过 30 天未打开不会继续安排新通知。点击提醒打开今日页。
-
-新增回归检查：`Tests/workout-details.swift`（逐组数据与 AI JSON）、`Tests/workout-storage.swift`（SwiftData 内存保存读取）、`Tests/reminder-plan.swift`（漏记取消、训练星期、跨天和夏令时）。分别与 `WorkoutDetails.swift`、`WorkoutDetails.swift + HealthModels.swift`、`ReminderPlan.swift` 一起用 `swiftc` 编译运行。
-
-- `swiftc LifeRecord/Services/WorkoutDetails.swift LifeRecord/Services/WorkoutPartReview.swift Tests/workout-part-review.swift -o /tmp/workout-part-review-test && /tmp/workout-part-review-test`：检查部位修改预览的范围、重复或未知 ID、标签与数量校验、清空标签、无实际改动，以及编辑/同步后的过期预览保护。`Tests/workout-details.swift` 同时覆盖手臂细分与否定、计划等描述不自动修复。
-
-## 同步兼容与照片回归
-
-若 iOS 显示 `HTTP 400: invalid deletion type`，而网页仍可同步，请检查线上后端是否支持 `workout` 删除标记；旧后端会拒绝包含训练删除标记的整批请求。需要升级后端训练同步逻辑，不能丢弃手机待同步的删除标记。设置中的同步页面现在显示完整 HTTP 错误、网络失败原因及返回字段格式问题。
-
-- `swiftc LifeRecord/Services/MealPhotoStore.swift Tests/meal-photo-cache.swift -o /tmp/meal-photo-cache-test && /tmp/meal-photo-cache-test`：隔离检查并发下载合并、跨实例离线缓存、密钥隔离、无效数据重试、取消与磁盘容量限制。
-- `swiftc LifeRecord/Services/SyncFailureDescription.swift Tests/sync-failure-description.swift -o /tmp/sync-failure-test && /tmp/sync-failure-test`：检查数据格式错误位置、网络错误文案及响应内容不泄露。
-- `python3 Tests/sync-edit.py`：验证训练记录及删除标记、旧客户端兼容与过期数据不覆盖。
-
-## 目标反馈与记录质量
-
-- 趋势页的“目标反馈”随 7 天、30 天或全部范围更新，使用当前设置中的起始体重、目标体重、每周变化、热量和蛋白质目标。显示趋势体重、距目标与进度、饮食记录覆盖、热量在目标 ±10% 内的记录日、蛋白质达到目标的记录日、测量天数与完成训练次数，以及最多三条下一步行动。
-- 反馈只使用真实、非未来且数值有效的记录；示例数据不参与，缺失日期不按零摄入计算，有记录不保证当天记全，今日结果仍可能变化。体重使用每日中位数后指数平滑；每周节奏需要至少三个测量日且跨度至少七天，7 天范围额外参考一周前的测量作为节奏起点。维持模式显示与目标的距离，不显示增减重进度。过期测量与方向不一致的目标会提示核对，不预测达标日期，也不自动调整目标。
-- 目标反馈遇到待核对身体记录时先提示确认趋势，并把当期检查项纳入下一步行动；已确认无误的版本不再重复提醒。
-- AI 周报接入同一份本机目标反馈和当周待核对问题，按目标距离、执行情况、记录不足及下周行动复盘。“和教练制定下一周计划”只预填对话草稿，由用户发送。
-- “记录质量检查”检查全部真实记录，并提供详情及编辑入口：10 分钟内同名、同餐次、营养相同的疑似重复餐食；非有限、负值或很大的营养数值；热量与宏量换算差异；AI 餐食名称模糊或备注明确表示份量不明；身体数值超出录入范围；三天内相邻有效体重相差至少 3 kg 且达到前次体重的 5%；超过六小时或结束早于开始的训练；未来时间。
-- 这些规则是核对线索，不代表记录错误，不自动修改或删除数据。“确认无误”只在本机隐藏当前记录版本的提示，可在“已确认”中重新核对；记录修改或同步更新后重新检查。身体数据修正更新原 ID，保留腰围等未编辑字段，并在同步更新冲突时阻止覆盖。
-- 回归检查：`swiftc LifeRecord/Services/BodyTrend.swift LifeRecord/Services/RecordWeek.swift LifeRecord/Services/RecordQuality.swift LifeRecord/Services/GoalFeedback.swift Tests/record-insights.swift -o /tmp/record-insights-test && /tmp/record-insights-test`，覆盖缺失日期、示例与未来记录、目标方向、维持模式、过期测量、跨午夜训练、疑似重复、AI 信息不足、数值异常、每周进度、周一边界和夏令时。
-
-- 首页日期栏和记录月历按周一至周日排列。趋势页在时间范围下优先展示健身记录，其余卡片保持原有顺序。
-- 目标反馈的进度条按本周（周一至周日）的趋势体重变化与设定的每周变化目标计算，不随趋势图的 7 天、30 天或全部范围切换。基准使用本周首次趋势测量，需要本周至少两个测量日才显示进度；每周一重新计算，不带入上周进度，缺失记录不会按零进度处理。维持模式和每周目标为零时不显示进度条；距长期目标、区间每周节奏及其他反馈保持原有计算。
-- 目标反馈与记录质量检查位于趋势页底部，先展示健身记录、趋势图和周报。待核对记录可进入完整详情，再选择编辑；餐食详情包含已保存照片（可放大）、营养、备注与原始描述。
-- 新餐食保留录入页的原始描述，或 AI 教练创建记录时的用户消息；与 AI 估算备注分开保存并同步。教练创建的餐食在本机原对话仍存在时可打开原对话。历史记录未保存的描述无法还原，详情明确标注；已保存照片继续使用原有图片服务。
-- 同步后端兼容旧版客户端缺省的原始描述字段，避免旧客户端编辑餐食时丢失；需同时更新后端代码以启用此兼容保护。
+[身体趋势统计口径](Docs/body-trends.md)描述 iOS 的中位数和指数平滑规则；[历史网页设计参考](Docs/DesignReferences/qianwen.html)只作参考，实际 Web 入口为 `Web/index.html`。

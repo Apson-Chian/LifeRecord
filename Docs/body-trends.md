@@ -1,5 +1,7 @@
 # 身体趋势统计口径
 
+本文件描述 iOS 客户端的统计实现；安卓当前差异见 [Android/README.md](../Android/README.md)。
+
 每次测量按原时间完整保存；趋势不会覆盖、合并或删除原始记录。
 
 - 以设备本地日历分日，体重、体脂分别取当日所有有效值的中位数。偶数条取中间两条均值；缺失体脂不补零。中位数是本项目针对日内多次测量的选择，不能消除测量时间、水分或设备误差。
@@ -17,6 +19,6 @@
 
 ## 验证
 
-`swiftc LifeRecord/Services/BodyTrend.swift Tests/body-trend.swift -o /tmp/body-trend-tests && /tmp/body-trend-tests`
+`swiftc iOS/LifeRecord/Services/BodyTrend.swift iOS/Tests/body-trend.swift -o /tmp/body-trend-tests && /tmp/body-trend-tests`
 
 覆盖乱序输入、同日多次测量、异常值中位数、偶数中位数、单点初始化、缺测、跨日间隔和本地时区分组。

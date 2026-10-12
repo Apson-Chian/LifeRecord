@@ -1,0 +1,1 @@
+<resources><style name="Theme.LifeRecord" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:windowLightStatusBar">true</item><item name="android:colorAccent">#6554D9</item></style></resources>

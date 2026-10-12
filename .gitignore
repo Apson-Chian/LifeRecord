@@ -7,3 +7,12 @@ xcuserdata/
 *.xcscmblueprint
 __pycache__/
 *.py[cod]
+
+# Android
+Android/.gradle/
+Android/.kotlin/
+Android/local.properties
+Android/**/build/
+*.jks
+*.keystore
+Android/dist/
