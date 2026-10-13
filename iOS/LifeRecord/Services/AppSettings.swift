@@ -36,6 +36,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
     case glm = "智谱 GLM"
     case custom = "自定义"
 
+    static var allCases: [AIProvider] { [.deepSeek, .glm, .custom] }
     var id: String { rawValue }
 
     var keychainID: String {
@@ -67,6 +68,12 @@ enum AIProvider: String, CaseIterable, Identifiable {
 
     var authStyle: AIAuthStyle { self == .dots ? .apiKey : .bearer }
     var supportsVisionByDefault: Bool { true }
+}
+
+struct SavedAPIProfile: Codable, Identifiable {
+    var id: String
+    var name: String
+    var values: [String: String]
 }
 
 @MainActor
@@ -114,7 +121,7 @@ final class AppSettings {
         didSet {
             save(provider.rawValue, Key.provider)
             guard provider != oldValue else { return }
-            let previous: [String: Any] = ["endpoint":endpoint,"model":model,"auth":authStyle.rawValue,"header":customHeaderName,"vision":supportsVision,"extra":extraBody,"tokens":maxTokens,"parameter":tokenParameter,"json":jsonMode,"temperatureEnabled":sendTemperature]
+            let previous: [String: Any] = ["endpoint":endpoint,"model":model,"auth":authStyle.rawValue,"header":customHeaderName,"vision":supportsVision,"extra":extraBody,"tokens":maxTokens,"parameter":tokenParameter,"json":jsonMode,"temperatureEnabled":sendTemperature,"imageDetail":imageDetail,"temperature":temperature]
             defaults.set(previous, forKey: "ai.profile.\(oldValue.keychainID)")
             let saved = defaults.dictionary(forKey: "ai.profile.\(provider.keychainID)") ?? [:]
             endpoint = saved["endpoint"] as? String ?? provider.endpoint
@@ -127,6 +134,8 @@ final class AppSettings {
             tokenParameter = saved["parameter"] as? String ?? "max_tokens"
             jsonMode = saved["json"] as? Bool ?? true
             sendTemperature = saved["temperatureEnabled"] as? Bool ?? true
+            imageDetail = saved["imageDetail"] as? String ?? ""
+            temperature = saved["temperature"] as? Double ?? 0.2
         }
     }
     var endpoint: String { didSet { save(endpoint, Key.endpoint) } }
@@ -148,9 +157,43 @@ final class AppSettings {
     var jsonMode: Bool { didSet { save(jsonMode, "ai.jsonMode") } }
     var sendTemperature: Bool { didSet { save(sendTemperature, "ai.sendTemperature") } }
     var extraBody: String { didSet { save(extraBody, "ai.extraBody") } }
+    var imageDetail: String { didSet { save(imageDetail, "ai.imageDetail") } }
+    var savedAPIProfiles: [SavedAPIProfile] {
+        didSet { if let data = try? JSONEncoder().encode(savedAPIProfiles) { defaults.set(data, forKey: "ai.savedProfiles") } }
+    }
+
+    func saveAPIProfile(name: String, updating id: String? = nil) throws -> String {
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty && title.count <= 60 else { throw NSError(domain: "APISettings", code: 1, userInfo: [NSLocalizedDescriptionKey: "请填写 1–60 字的配置名称"]) }
+        guard id != nil || savedAPIProfiles.count < 30 else { throw NSError(domain: "APISettings", code: 2, userInfo: [NSLocalizedDescriptionKey: "最多保存 30 个接口配置"]) }
+        let profile = SavedAPIProfile(id: id ?? UUID().uuidString, name: title, values: [
+            "provider": provider.rawValue, "endpoint": endpoint, "model": model, "auth": authStyle.rawValue,
+            "header": customHeaderName, "vision": String(supportsVision), "photos": String(maxPhotos),
+            "tokens": String(maxTokens), "temperature": String(temperature), "parameter": tokenParameter,
+            "json": String(jsonMode), "temperatureEnabled": String(sendTemperature), "extra": extraBody, "imageDetail": imageDetail
+        ])
+        if let id, let index = savedAPIProfiles.firstIndex(where: { $0.id == id }) { savedAPIProfiles[index] = profile }
+        else { savedAPIProfiles.append(profile) }
+        return profile.id
+    }
+
+    func loadAPIProfile(_ id: String) {
+        guard let p = savedAPIProfiles.first(where: { $0.id == id })?.values else { return }
+        provider = AIProvider(rawValue: p["provider"] ?? "") ?? .custom
+        endpoint=p["endpoint"] ?? ""; model=p["model"] ?? ""
+        authStyle=AIAuthStyle(rawValue:p["auth"] ?? "") ?? .bearer; customHeaderName=p["header"] ?? "Authorization"
+        supportsVision=p["vision"] == "true"; maxPhotos=Int(p["photos"] ?? "") ?? 6
+        maxTokens=Int(p["tokens"] ?? "") ?? 4096; temperature=Double(p["temperature"] ?? "") ?? 0.2
+        tokenParameter=p["parameter"] ?? "max_tokens"; jsonMode=p["json"] == "true"
+        sendTemperature=p["temperatureEnabled"] == "true"; extraBody=p["extra"] ?? "{}"; imageDetail=p["imageDetail"] ?? ""
+    }
+
+    func deleteAPIProfile(_ id: String) { savedAPIProfiles.removeAll { $0.id == id } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        savedAPIProfiles = defaults.data(forKey:"ai.savedProfiles").flatMap { try? JSONDecoder().decode([SavedAPIProfile].self, from:$0) } ?? []
+        imageDetail = defaults.string(forKey:"ai.imageDetail") ?? ""
         appearance = defaults.string(forKey: "appearance") ?? "system"
         accentColor = defaults.string(forKey: "accentColor") ?? "purple"
         syncBaseURL = defaults.string(forKey: "sync.base") ?? "https://apsonchian.ltd/liferecord-api"
@@ -176,7 +219,7 @@ final class AppSettings {
         let savedProvider = AIProvider(rawValue: defaults.string(forKey: Key.provider) ?? "") ?? .glm
         let savedModel = defaults.string(forKey: Key.model)
         let savedEndpoint = defaults.string(forKey: Key.endpoint) ?? savedProvider.endpoint
-        provider = savedProvider
+        provider = savedProvider == .dots ? .custom : savedProvider
         endpoint = savedEndpoint
         if savedProvider == .deepSeek && AIAuthentication.isOfficialDeepSeek(savedEndpoint) && savedModel == "deepseek-v4-flash" {
             model = savedProvider.model
@@ -199,6 +242,11 @@ final class AppSettings {
         maxTokens = defaults.object(forKey: Key.maxTokens) as? Int ?? 1600
         customInstructions = defaults.string(forKey: Key.customInstructions) ?? ""
         aiCanWrite = defaults.object(forKey: Key.aiCanWrite) as? Bool ?? false
+        if savedProvider == .dots {
+            defaults.set(AIProvider.custom.rawValue, forKey:Key.provider)
+            jsonMode=false; imageDetail="medium";authStyle = .apiKey
+            if extraBody == "{}" { extraBody="{\"chat_template_kwargs\":{\"enable_thinking\":false}}" }
+        }
         if !shareWithLifeTrack { SharedProfileStore.clear() }
         publishSharedProfile()
     }
@@ -210,6 +258,7 @@ final class AppSettings {
         calorieGoal=2000;proteinGoal=100;carbsGoal=250;fatGoal=60
         provider = .deepSeek;endpoint=provider.endpoint;model=provider.model;authStyle = .bearer;customHeaderName="Authorization"
         customInstructions="";aiCanWrite=false;supportsVision=true;maxPhotos=6;maxTokens=4096;temperature=0.2
+        savedAPIProfiles=[];imageDetail=""
         extraBody="{}";tokenParameter="max_tokens";jsonMode=true;sendTemperature=true
         shareWithLifeTrack=false;appearance="system";accentColor="purple"
         syncBaseURL="https://apsonchian.ltd/liferecord-api"

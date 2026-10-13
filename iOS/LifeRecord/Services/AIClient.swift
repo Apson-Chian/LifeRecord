@@ -323,10 +323,8 @@ struct AIClient {
                 // 这里统一兜底，保证首页加号、教练页和后续新入口发送的都是 JPEG。
                 let data = Self.jpegImageData(forSending: original)
                 var imageObject: [String: Any] = ["url": "data:image/jpeg;base64,\(data.base64EncodedString())"]
-                // Dots 需要 detail 字段；GLM/OpenAI 兼容接口保持最小字段，避免未知参数被拒绝。
-                if settings.provider == .dots {
-                    imageObject["detail"] = "medium"
-                }
+                // Optional detail is selected in custom compatibility settings.
+                if !settings.imageDetail.isEmpty { imageObject["detail"] = settings.imageDetail }
                 parts.append(["type": "image_url", "image_url": imageObject])
             }
             userContent = parts
@@ -344,24 +342,14 @@ struct AIClient {
         if settings.sendTemperature { body["temperature"] = temperatureOverride ?? settings.temperature }
         let extraData = Data((settings.extraBody.isEmpty ? "{}" : settings.extraBody).utf8)
         guard let extras = try JSONSerialization.jsonObject(with: extraData) as? [String: Any],
-              Set(extras.keys).isDisjoint(with: ["messages","model","stream","temperature","max_tokens","max_completion_tokens"]) else { throw AIClientError.server("扩展参数应为 JSON 对象，不能覆盖模型、消息和生成设置") }
+              Set(extras.keys).isDisjoint(with: ["messages","model","stream","temperature","max_tokens","max_completion_tokens","response_format"]) else { throw AIClientError.server("扩展参数应为 JSON 对象，不能覆盖模型、消息和生成设置") }
         for (key,value) in extras { body[key] = value }
         // 客户端一次性解码完整回复，明确关闭流式，避免兼容接口修改默认值。
         body["stream"] = false
-        if settings.provider == .dots {
-            // Dots 的 Chat Completions 接口使用专有参数控制深度思考，默认为开启。
-            // 营养 JSON 和 App 操作需要稳定的最终 content，不能让 reasoning 耗尽输出上限。
-            body["chat_template_kwargs"] = ["enable_thinking": false]
-        } else if settings.provider == .deepSeek || settings.provider == .glm {
-            // 结构化营养数据和 App 操作需要稳定的最终答案；深度思考会占用输出预算，
-            // 在较短 max_tokens 下可能只返回 reasoning_content 而没有 content。
+        if settings.provider == .deepSeek || settings.provider == .glm, body["thinking"] == nil {
             body["thinking"] = ["type": "disabled"]
         }
-        // Dots 的托管接口当前没有在公开文档中声明 response_format；
-        // 依靠提示词返回 JSON，避免连接正常却因未知参数被 400 拒绝。
-        // Some multimodal endpoints accept image content but reject JSON response_format.
-        // For image requests, rely on the prompt's JSON schema instead.
-        if settings.jsonMode && !compatibilityProbe && wantsJSON && images.isEmpty && settings.provider != .dots {
+        if settings.jsonMode && !compatibilityProbe && wantsJSON && images.isEmpty {
             body["response_format"] = ["type": "json_object"]
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -383,12 +371,6 @@ struct AIClient {
                 ?? "未知错误"
             let message = rawMessage.replacingOccurrences(of: storedKey, with: "[密钥已隐藏]")
                 .replacingOccurrences(of: try AIAuthentication.normalizedKey(storedKey, bearer: settings.authStyle == .bearer || AIAuthentication.isOfficialDeepSeek(endpoint)), with: "[密钥已隐藏]")
-            if settings.provider == .dots && http.statusCode == 401 {
-                throw AIClientError.server("Dots API Key 缺失或无效。请粘贴 Dots API 开放平台生成的完整密钥。")
-            }
-            if settings.provider == .dots && http.statusCode == 403 {
-                throw AIClientError.server("Dots 拒绝了当前 API Key：该密钥无权访问 dots3-note-prev。请在 Dots API 开放平台的 API Keys 页面重新创建平台密钥。服务端：\(message.prefix(180))")
-            }
             throw AIClientError.server("接口错误 \(http.statusCode)：\(message.prefix(360))")
         }
         guard let content = Self.responseText(from: data), !content.isEmpty else {

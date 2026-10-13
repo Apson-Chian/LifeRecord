@@ -153,10 +153,19 @@ import android.net.Uri
 @Composable fun AISettings(vm:AppViewModel,dismiss:()->Unit,notify:(String)->Unit) {
     val current by vm.config.collectAsState()
     var provider by remember { mutableStateOf(current.getString("provider")) }
-    val fields=remember { mutableStateMapOf<String,String>().apply { listOf("endpoint","model","auth","header","maxPhotos","temperature","maxTokens","instructions","tokenParameter","extraBody").forEach { put(it,current.opt(it)?.toString() ?: if(it=="tokenParameter") "max_tokens" else if(it=="extraBody") "{}" else "") } } }
+    val fields=remember { mutableStateMapOf<String,String>().apply { listOf("endpoint","model","auth","header","maxPhotos","temperature","maxTokens","instructions","tokenParameter","extraBody","imageDetail").forEach { put(it,current.opt(it)?.toString() ?: if(it=="tokenParameter") "max_tokens" else if(it=="extraBody") "{}" else "") } } }
     var vision by remember { mutableStateOf(current.optBoolean("vision")) }; var canWrite by remember { mutableStateOf(current.optBoolean("canWrite")) }
     var sendTemperature by remember { mutableStateOf(current.optBoolean("sendTemperature",true)) }; var jsonMode by remember { mutableStateOf(current.optBoolean("jsonMode",true)) }
     var key by remember { mutableStateOf("") }; var keyTouched by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
+    val savedProfiles by vm.apiProfiles.collectAsState()
+    var profileName by remember { mutableStateOf("") }
+    var selectedProfile by remember { mutableStateOf("") }
+    fun loadProfile(c:JSONObject) {
+        provider=c.optString("provider", "自定义")
+        sendTemperature=c.optBoolean("sendTemperature",true);jsonMode=c.optBoolean("jsonMode",true)
+        fields.keys.toList().forEach { fields[it]=c.opt(it)?.toString().orEmpty() }
+        vision=c.optBoolean("vision");canWrite=c.optBoolean("canWrite");key="";keyTouched=false
+    }
     val scope=rememberCoroutineScope()
     val context=LocalContext.current
     val officialDeepSeek=AIAuthentication.officialDeepSeek(fields["endpoint"].orEmpty())
@@ -170,6 +179,18 @@ import android.net.Uri
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) { providers.forEach { p -> FilterChip(provider==p,onClick={
             if(provider!=p) { provider=p; val c=org.json.JSONObject(vm.app.store.get("ai.profile.$p",providerConfig(p).toString())); sendTemperature=c.optBoolean("sendTemperature",true);jsonMode=c.optBoolean("jsonMode",true); fields.keys.toList().forEach { fields[it]=c.opt(it)?.toString().orEmpty() }; vision=c.optBoolean("vision"); key="";keyTouched=false }
         },label={Text(p)}) } }
+        Text("已保存的接口",style=MaterialTheme.typography.titleSmall)
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) { savedProfiles.forEach { p ->
+            FilterChip(selectedProfile==p.getString("id"), onClick={selectedProfile=p.getString("id");profileName=p.getString("name");loadProfile(p.getJSONObject("config"))}, label={Text(p.getString("name"))})
+        } }
+        TextFieldRow("配置名称",profileName,{profileName=it})
+        FlowRow {
+            TextButton(onClick={runCatching { save();selectedProfile=vm.saveAPIProfile(profileName);notify("接口配置已保存") }.onFailure { error=it.message.orEmpty() }}) {Text("另存为新配置")}
+            if(selectedProfile.isNotEmpty()) {
+                TextButton(onClick={runCatching { save();vm.saveAPIProfile(profileName,selectedProfile);notify("接口配置已更新") }.onFailure { error=it.message.orEmpty() }}) {Text("更新所选配置")}
+                TextButton(onClick={vm.deleteAPIProfile(selectedProfile);selectedProfile="";profileName=""}) {Text("删除所选配置")}
+            }
+        }
         TextFieldRow("接口地址（HTTPS）",fields["endpoint"].orEmpty(),{fields["endpoint"]=it});TextFieldRow("模型名",fields["model"].orEmpty(),{fields["model"]=it})
         if(officialDeepSeek) {
             Text("DeepSeek 官方接口使用 Authorization: Bearer；更新会自动纠正旧认证配置。请使用开放平台创建的完整 API Key。deepseek-flash 支持图片；已有配置可开启下方的“支持图片”。",style=MaterialTheme.typography.bodySmall)
@@ -184,6 +205,7 @@ import android.net.Uri
         FlowRow { listOf("max_tokens","max_completion_tokens").forEach { name -> FilterChip(fields["tokenParameter"]==name,{fields["tokenParameter"]=name},label={Text(name)}) } }
         Toggle("发送 Temperature","部分推理模型不接受此参数",sendTemperature,{sendTemperature=it})
         Toggle("发送 JSON 格式参数","不兼容时关闭；仍通过提示词请求结构化回复",jsonMode,{jsonMode=it})
+        TextFieldRow("图片 detail 参数（留空不发送）",fields["imageDetail"].orEmpty(),{fields["imageDetail"]=it})
         TextFieldRow("额外请求参数 JSON",fields["extraBody"].orEmpty(),{fields["extraBody"]=it},lines=4)
         Text("只支持 OpenAI Chat Completions 兼容接口；改接口地址后需为新地址重新保存密钥。扩展参数用于 top_p 等，不要填写密钥。",style=MaterialTheme.typography.bodySmall)
         TextFieldRow("自定义指令",fields["instructions"].orEmpty(),{fields["instructions"]=it},lines=3)

@@ -179,9 +179,29 @@ private struct AISettingsView: View {
     @State private var connectionMessage: String?
     @FocusState private var focused: Bool
 
+    @State private var profileName = ""
+    @State private var selectedProfile = ""
+
     var body: some View {
         @Bindable var settings = settings
         Form {
+            Section("保存的接口") {
+                Picker("选择配置", selection:$selectedProfile) {
+                    Text("当前配置").tag("")
+                    ForEach(settings.savedAPIProfiles) { Text($0.name).tag($0.id) }
+                }
+                .onChange(of:selectedProfile) { _, id in
+                    if let p=settings.savedAPIProfiles.first(where:{$0.id == id}) { settings.loadAPIProfile(id);profileName=p.name;refreshKeyState() }
+                }
+                TextField("配置名称", text:$profileName)
+                Button("另存为新配置") { saveProfile(updating:false) }
+                if !selectedProfile.isEmpty {
+                    Button("更新所选配置") { saveProfile(updating:true) }
+                    Button("删除所选配置",role:.destructive) { settings.deleteAPIProfile(selectedProfile);selectedProfile="";profileName="" }
+                }
+                Text("接口配置保存在本机，密钥单独保存在钥匙串。删除配置不会删除健康记录或密钥。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("服务") {
                 Picker("服务商", selection: $settings.provider) {
                     ForEach(AIProvider.allCases) { Text($0.rawValue).tag($0) }
@@ -251,6 +271,9 @@ private struct AISettingsView: View {
                     Text("max_tokens").tag("max_tokens")
                     Text("max_completion_tokens").tag("max_completion_tokens")
                 }
+                Picker("图片 detail 参数", selection:$settings.imageDetail) {
+                    Text("不发送").tag("");Text("low").tag("low");Text("medium").tag("medium");Text("high").tag("high");Text("auto").tag("auto")
+                }
                 Toggle("发送 Temperature",isOn:$settings.sendTemperature)
                 Toggle("发送 JSON 格式参数",isOn:$settings.jsonMode)
                 TextField("额外请求参数 JSON（例如 top_p）",text:$settings.extraBody,axis:.vertical)
@@ -287,6 +310,11 @@ private struct AISettingsView: View {
             refreshKeyState()
             connectionMessage = nil
         }
+    }
+
+    private func saveProfile(updating: Bool) {
+        do { selectedProfile = try settings.saveAPIProfile(name:profileName, updating:updating ? selectedProfile : nil);connectionMessage="配置已保存" }
+        catch { connectionMessage=error.localizedDescription }
     }
 
     private func refreshKeyState() {

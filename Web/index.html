@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f7f9">
   <meta name="description" content="LifeRecord 与 Android、iOS 双向同步的饮食、营养与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
-  <link rel="stylesheet" href="styles.css?v=20261013-web2">
+  <link rel="stylesheet" href="styles.css?v=20261013-api3">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
@@ -118,7 +118,9 @@
     <div class="modal-sheet">
       <div class="modal-top"><h2 id="settingsTitle">设置与账号</h2><button type="button" class="icon-button" data-close="settingsDialog" aria-label="关闭设置">×</button></div>
       <section class="settings-section"><h3>API 设置</h3><p class="upload-hint">兼容 Chat Completions。配置保存在本浏览器，密钥仅在当前页面内存中使用。</p>
-        <div class="form-grid"><label>服务商<select id="aiProvider"><option value="deepseek">DeepSeek</option><option value="glm">智谱 GLM</option><option value="dots">Dots</option><option value="custom">自定义兼容接口</option></select></label><label>模型<input id="aiModel" placeholder="填写模型名称" maxlength="200"></label></div>
+        <div class="form-grid"><label>服务商<select id="aiProvider"><option value="deepseek">DeepSeek</option><option value="glm">智谱 GLM</option><option value="custom">自定义兼容接口</option></select></label><label>模型<input id="aiModel" placeholder="填写模型名称" maxlength="200"></label></div>
+        <div class="form-grid"><label>已保存的接口<select id="aiSavedProfile"><option value="">选择配置</option></select></label><label>配置名称<input id="aiProfileName" maxlength="60" placeholder="例如：我的视觉接口"></label></div>
+        <div class="actions"><button type="button" id="aiSaveProfile">另存为新配置</button><button type="button" id="aiUpdateProfile">更新所选配置</button><button type="button" id="aiDeleteProfile">删除所选配置</button></div>
         <label id="aiEndpointLabel">完整 API 地址<input id="aiEndpoint" type="url" placeholder="https://api.example.com/v1/chat/completions" autocomplete="off"></label>
         <div class="form-grid"><label>认证方式<select id="aiAuthMode"><option value="bearer">Bearer</option><option value="api-key">api-key</option><option value="custom">自定义认证头</option></select></label><label id="aiHeaderLabel">认证头名称<input id="aiAuthHeader" placeholder="例如 X-API-Key" autocomplete="off"></label></div>
         <label>API Key<input id="aiKey" type="password" autocomplete="off" placeholder="测试者填写自己的密钥"></label>
@@ -219,9 +221,9 @@
     </div>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20261013-web2"></script>
-  <script src="admin.js?v=20261013-web2"></script>
-  <script src="settings.js?v=20261013-web2"></script>
-  <script src="workouts.js?v=20261013-web2"></script>
+  <script src="app.js?v=20261013-api3"></script>
+  <script src="admin.js?v=20261013-api3"></script>
+  <script src="settings.js?v=20261013-api3"></script>
+  <script src="workouts.js?v=20261013-api3"></script>
 </body>
 </html>

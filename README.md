@@ -1,5 +1,7 @@
 # LifeRecord（生活记录）
 
+API 设置更新：预设仅保留 DeepSeek 和 GLM，三端支持新增、保存与切换多个自定义配置。[配置说明与本机 Dots 设置步骤](Docs/api-settings.md)。
+
 1.4 公开邀请测试版本：独立用户、结构化 SQLite 迁移、更自由的 API 兼容参数与外观设置。新安装从空白记录开始。[测试分发与安全说明](Docs/public-beta.md)。
 
 截至 2026 年 10 月 13 日，网页与后端已更新到[现有网站](https://apsonchian.ltd/liferecord/)，Android 1.4.0-beta 安装包已提供测试下载，iOS 1.4（build 5）工程已交付并通过模拟器构建，尚未发布到 TestFlight。网页已补齐设置面板、自定义 API、训练编辑、删除确认、历史分页和 ETag 条件刷新；AI 数据范围保持原样。

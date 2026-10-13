@@ -11,6 +11,15 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 
 class AuthenticationTest {
+    @Test fun hiddenPresetMigratesToEditableCustomConfiguration() {
+        assertFalse(ltd.apsonchian.liferecord.service.providers.contains("Dots"))
+        val old=providerConfig("Dots")
+        val migrated=ltd.apsonchian.liferecord.service.migrateAIConfig(old)
+        assertEquals("自定义",migrated.getString("provider"));assertEquals(old.getString("endpoint"),migrated.getString("endpoint"))
+        assertEquals("api-key",migrated.getString("auth"));assertEquals("medium",migrated.getString("imageDetail"));assertFalse(migrated.getBoolean("jsonMode"))
+        assertFalse(JSONObject(migrated.getString("extraBody")).getJSONObject("chat_template_kwargs").getBoolean("enable_thinking"))
+    }
+
     @Test fun customCompatibilityOptionsAreSentWithoutHardCodedTokenLimit() {
         var body=JSONObject()
         val client=OkHttpClient.Builder().addInterceptor { chain ->

@@ -18,7 +18,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val app = application as LifeRecordApplication
     private val _snapshot = MutableStateFlow(app.store.load())
     val snapshot = _snapshot.asStateFlow()
-    var config = MutableStateFlow(JSONObject(app.store.get("aiConfig", providerConfig("DeepSeek").toString())))
+    var config = MutableStateFlow(initialAIConfig())
+    val apiProfiles = MutableStateFlow(JSONArray(app.store.get("ai.savedProfiles", "[]")).objects())
+    private fun initialAIConfig(): JSONObject {
+        val old=JSONObject(app.store.get("aiConfig", providerConfig("DeepSeek").toString()))
+        val migrated=migrateAIConfig(old)
+        if(old.optString("provider") == "Dots") {
+            val key=app.secrets.get(apiScope(old)).ifBlank { app.secrets.get("ai.Dots") }
+            if(key.isNotBlank()) app.secrets.save(apiScope(migrated), key)
+            app.store.set("aiConfig", migrated.toString())
+        }
+        return migrated
+    }
+    fun saveAPIProfile(name: String, id: String? = null): String {
+        require(name.trim().length in 1..60) { "请填写 1–60 字的配置名称" }
+        require(id != null || apiProfiles.value.size < 30) { "最多保存 30 个接口配置" }
+        val identifier=id ?: UUID.randomUUID().toString()
+        val profile=JSONObject().put("id",identifier).put("name",name.trim()).put("config",config.value.copy())
+        apiProfiles.value=apiProfiles.value.filterNot { it.optString("id") == identifier } + profile
+        app.store.set("ai.savedProfiles",JSONArray(apiProfiles.value).toString())
+        return identifier
+    }
+    fun deleteAPIProfile(id: String) {
+        apiProfiles.value=apiProfiles.value.filterNot { it.optString("id") == id }
+        app.store.set("ai.savedProfiles",JSONArray(apiProfiles.value).toString())
+    }
     val status = MutableStateFlow("记录保存在本机")
     val aiBusy = MutableStateFlow(false)
     val draftPhotos = MutableStateFlow<List<ByteArray>>(emptyList())
@@ -100,7 +124,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if(AIAuthentication.officialDeepSeek(c.getString("endpoint"))) c.put("auth", "Bearer")
         require(c.optString("tokenParameter", "max_tokens") in listOf("max_tokens", "max_completion_tokens")) { "输出参数无效" }
         val extra = JSONObject(c.optString("extraBody", "{}").ifBlank { "{}" })
-        require(extra.keys().asSequence().none { it in listOf("messages", "model", "stream", "temperature", "max_tokens", "max_completion_tokens") }) { "扩展参数不能覆盖模型、消息和生成设置" }
+        require(extra.keys().asSequence().none { it in listOf("messages", "model", "stream", "temperature", "max_tokens", "max_completion_tokens", "response_format") }) { "扩展参数不能覆盖模型、消息和生成设置" }
         if(apiKey != null) app.secrets.save(apiScope(c), AIAuthentication.normalizedKey(apiKey, c.optString("auth") == "Bearer"))
         app.store.set("ai.profile.${c.getString("provider")}", c.toString()); app.store.set("aiConfig", c.toString()); config.value = c.copy()
     }
@@ -133,6 +157,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun resetLocalData() {
         require(!syncing.value && !aiBusy.value && !weeklyReport.value.generating) { "请等待同步和 AI 任务结束" }
         app.secrets.clear(); app.store.clearAll()
+        apiProfiles.value=emptyList()
         config.value=providerConfig("DeepSeek"); appearance.value="system";accent.value="purple"
         draftPhotos.value=emptyList();dataGeneration.value++
         persist(Snapshot(emptyList(), defaultProfile(), emptyList()))

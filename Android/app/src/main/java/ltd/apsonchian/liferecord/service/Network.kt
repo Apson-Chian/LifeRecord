@@ -42,7 +42,7 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
             val m = JSONObject().put("role", original.getString("role")).put("content", original.getString("content"))
             if(index == messages.takeLast(14).lastIndex && images.isNotEmpty()) {
                 val content = JSONArray().put(JSONObject().put("type", "text").put("text", m.getString("content")))
-                images.forEach { bytes -> content.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)).apply { if(config.optString("provider") == "Dots") put("detail", "medium") })) }
+                images.forEach { bytes -> content.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)).apply { if(config.optString("imageDetail").isNotBlank()) put("detail", config.optString("imageDetail")) })) }
                 m.put("content", content)
             }; list.put(m)
         }
@@ -50,13 +50,12 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
             .put(config.optString("tokenParameter", "max_tokens"), config.optInt("maxTokens", 4096).coerceIn(256, 65536)).put("temperature", config.optDouble("temperature", 0.2))
         if(!config.optBoolean("sendTemperature", true)) body.remove("temperature")
         val extras = JSONObject(config.optString("extraBody", "{}").ifBlank { "{}" })
-        require(extras.keys().asSequence().none { it in listOf("model", "messages", "stream", "max_tokens", "max_completion_tokens", "temperature") }) { "扩展参数不能覆盖模型、消息和生成设置" }
+        require(extras.keys().asSequence().none { it in listOf("model", "messages", "stream", "max_tokens", "max_completion_tokens", "temperature", "response_format") }) { "扩展参数不能覆盖模型、消息和生成设置" }
         extras.keys().forEach { body.put(it, extras.get(it)) }
         when(config.optString("provider")) {
-            "Dots" -> body.put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
             "DeepSeek", "智谱 GLM" -> body.put("thinking", JSONObject().put("type", "disabled"))
         }
-        if(json && config.optBoolean("jsonMode", true) && images.isEmpty() && config.optString("provider") != "Dots") body.put("response_format", JSONObject().put("type", "json_object"))
+        if(json && config.optBoolean("jsonMode", true) && images.isEmpty()) body.put("response_format", JSONObject().put("type", "json_object"))
         val endpoint = config.getString("endpoint").trim()
         val credential = AIAuthentication.credential(endpoint, config.optString("auth", "Bearer"), config.optString("header", "Authorization"), key)
         val bytes = execute(endpoint, credential.key, body, credential.header, credential.bearer, AIAuthentication.officialDeepSeek(endpoint))
@@ -64,12 +63,20 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
     }
     companion object { const val BASE = "https://apsonchian.ltd/liferecord-api" }
 }
-val providers = listOf("DeepSeek", "Dots", "智谱 GLM", "自定义")
+val providers = listOf("DeepSeek", "智谱 GLM", "自定义")
 fun providerConfig(provider: String) = JSONObject().apply {
     put("provider", provider); put("auth", if(provider == "Dots") "api-key" else "Bearer"); put("header", "Authorization")
     put("endpoint", when(provider) { "DeepSeek" -> "https://api.deepseek.com/chat/completions"; "Dots" -> "https://note3-prev-api.askdiandian.com/v1/chat/completions"; "智谱 GLM" -> "https://open.bigmodel.cn/api/paas/v4/chat/completions"; else -> "https://example.com/v1/chat/completions" })
     put("model", when(provider) { "DeepSeek" -> "deepseek-flash"; "Dots" -> "dots3-note-prev"; "智谱 GLM" -> "glm-4.6v-flash"; else -> "" })
     put("vision", true); put("maxPhotos", 6); put("maxTokens", 4096); put("temperature", 0.2); put("instructions", ""); put("canWrite", false); put("sendTemperature", true); put("jsonMode", true); put("tokenParameter", "max_tokens"); put("extraBody", "{}")
+}
+fun migrateAIConfig(config: JSONObject): JSONObject = config.copy().apply {
+    if(optString("provider") == "Dots") {
+        put("provider", "自定义");put("jsonMode", false);put("imageDetail", "medium")
+        val extra = JSONObject(optString("extraBody", "{}").ifBlank { "{}" })
+        if(!extra.has("chat_template_kwargs")) extra.put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+        put("extraBody", extra.toString())
+    }
 }
 fun parseObject(text: String): JSONObject {
     val trimmed = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
