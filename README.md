@@ -1,5 +1,7 @@
 # LifeRecord（生活记录）
 
+当前分支 `codex/default-ai-service` 提供服务端默认 AI，用户连接独立账号后无需填写 AI Key，也可选择并保存自己的接口。[默认版测试网页](https://apsonchian.ltd/liferecord-default/) · [部署、额度与验证说明](Docs/default-ai-service.md)。主网站继续使用 main 的 API 设置版本。
+
 API 设置更新：预设仅保留 DeepSeek 和 GLM，三端支持新增、保存与切换多个自定义配置。[配置说明与本机 Dots 设置步骤](Docs/api-settings.md)。
 
 1.4 公开邀请测试版本：独立用户、结构化 SQLite 迁移、更自由的 API 兼容参数与外观设置。新安装从空白记录开始。[测试分发与安全说明](Docs/public-beta.md)。

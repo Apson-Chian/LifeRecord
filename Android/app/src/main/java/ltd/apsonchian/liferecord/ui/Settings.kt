@@ -191,6 +191,9 @@ import android.net.Uri
                 TextButton(onClick={vm.deleteAPIProfile(selectedProfile);selectedProfile="";profileName=""}) {Text("删除所选配置")}
             }
         }
+        if(provider == "默认 AI 服务") {
+            Text("无需 API Key。先在同步设置中连接你的独立账号；相关文字、记录和所选照片会发送至云端处理。也可切换到自己的接口。",style=MaterialTheme.typography.bodySmall)
+        } else {
         TextFieldRow("接口地址（HTTPS）",fields["endpoint"].orEmpty(),{fields["endpoint"]=it});TextFieldRow("模型名",fields["model"].orEmpty(),{fields["model"]=it})
         if(officialDeepSeek) {
             Text("DeepSeek 官方接口使用 Authorization: Bearer；更新会自动纠正旧认证配置。请使用开放平台创建的完整 API Key。deepseek-flash 支持图片；已有配置可开启下方的“支持图片”。",style=MaterialTheme.typography.bodySmall)
@@ -199,8 +202,10 @@ import android.net.Uri
         if(!officialDeepSeek && fields["auth"]=="自定义") TextFieldRow("认证请求头",fields["header"].orEmpty(),{fields["header"]=it})
         SecretFieldRow("API Key（留空保留已有密钥）",key,{key=it;keyTouched=true})
         Text("每个服务商的密钥分别保存。切换不会把其他服务商的密钥发到当前接口。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Toggle("支持图片","需要模型本身支持视觉输入",vision,{vision=it})
-        listOf("maxPhotos" to "最多照片数（1–12）","temperature" to "Temperature（0–2）","maxTokens" to "最大输出 Token（256–65536）").forEach { (name,label) -> TextFieldRow(label,fields[name].orEmpty(),{fields[name]=it},true) }
+        listOf("maxPhotos" to "最多照片数（1–12）","temperature" to "Temperature（0–2）","maxTokens" to "最大输出 Token（256–65536）").filter { (name,_) -> provider != "默认 AI 服务" || name != "temperature" }.forEach { (name,label) -> TextFieldRow(label,fields[name].orEmpty(),{fields[name]=it},true) }
+        if(provider != "默认 AI 服务") {
         Text("输出 Token 参数")
         FlowRow { listOf("max_tokens","max_completion_tokens").forEach { name -> FilterChip(fields["tokenParameter"]==name,{fields["tokenParameter"]=name},label={Text(name)}) } }
         Toggle("发送 Temperature","部分推理模型不接受此参数",sendTemperature,{sendTemperature=it})
@@ -208,6 +213,7 @@ import android.net.Uri
         TextFieldRow("图片 detail 参数（留空不发送）",fields["imageDetail"].orEmpty(),{fields["imageDetail"]=it})
         TextFieldRow("额外请求参数 JSON",fields["extraBody"].orEmpty(),{fields["extraBody"]=it},lines=4)
         Text("只支持 OpenAI Chat Completions 兼容接口；改接口地址后需为新地址重新保存密钥。扩展参数用于 top_p 等，不要填写密钥。",style=MaterialTheme.typography.bodySmall)
+        }
         TextFieldRow("自定义指令",fields["instructions"].orEmpty(),{fields["instructions"]=it},lines=3)
         Toggle("允许 AI 提出写入操作","每次操作均需在教练中复核保存",canWrite,{canWrite=it})
         AppButton(enabled=!busy,onClick={runCatching { save() }.onSuccess {

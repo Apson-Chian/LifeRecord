@@ -26,6 +26,7 @@ struct SyncedProfile: Codable {
         let defaults=UserDefaults(suiteName:suite)!
         defer {defaults.removePersistentDomain(forName:suite)}
         let settings=AppSettings(defaults:defaults)
+        precondition(settings.provider == .builtin)
         precondition(settings.height==170 && settings.baselineWeight==70 && settings.targetWeight==70)
         precondition(settings.fitnessGoal == .maintain && !settings.aiCanWrite && !settings.shareWithLifeTrack)
         precondition(settings.profileUpdatedAt.timeIntervalSince1970==1)
@@ -45,13 +46,15 @@ struct SyncedProfile: Codable {
         reopened.loadAPIProfile(second);precondition(reopened.imageDetail=="medium" && reopened.model=="second-model")
         settings.deleteAPIProfile(second);precondition(settings.savedAPIProfiles.count==1)
         settings.displayName="private name";settings.customInstructions="private preference";settings.height=188
+        defaults.set("https://legacy.test/v1/chat/completions",forKey:"ai.migratedLegacyEndpoint")
         precondition(defaults.string(forKey:"displayName")=="private name")
         settings.resetAfterLocalDeletion()
         precondition(settings.displayName.isEmpty && settings.customInstructions.isEmpty && settings.height==170)
         precondition(settings.profileUpdatedAt.timeIntervalSince1970==1 && !settings.aiCanWrite && !settings.shareWithLifeTrack)
         precondition(!defaults.dictionaryRepresentation().keys.contains(where:{$0.hasPrefix("ai.profile.")}))
         precondition(settings.savedAPIProfiles.isEmpty)
-        defaults.set("Dots",forKey:"provider");defaults.set(AIProvider.dots.endpoint,forKey:"endpoint");defaults.set("dots3-note-prev",forKey:"model")
+        precondition(defaults.string(forKey:"ai.migratedLegacyEndpoint")==nil)
+        defaults.set("Dots",forKey:"provider");defaults.set("https://legacy.test/v1/chat/completions",forKey:"endpoint");defaults.set("dots3-note-prev",forKey:"model")
         let migrated=AppSettings(defaults:defaults);precondition(migrated.provider == .custom && migrated.authStyle == .apiKey && !migrated.jsonMode && migrated.imageDetail=="medium")
         print("PASS: neutral defaults, opt-in sharing/writes, provider settings restore, isolated preferences, private settings reset")
     }

@@ -206,6 +206,10 @@ private struct AISettingsView: View {
                 Picker("服务商", selection: $settings.provider) {
                     ForEach(AIProvider.allCases) { Text($0.rawValue).tag($0) }
                 }
+                if settings.provider == .builtin {
+                    Text("无需填写 API Key。先在同步设置中连接你的独立账号；相关文字、记录与所选照片会由云端处理，也可切换自己的接口。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                } else {
                 TextField("接口地址", text: $settings.endpoint, axis: .vertical)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -236,6 +240,7 @@ private struct AISettingsView: View {
                     }
                 }
                 .foregroundStyle(.primary)
+                }
                 Button {
                     Task { await testConnection() }
                 } label: {
@@ -245,7 +250,7 @@ private struct AISettingsView: View {
                         if isTesting { ProgressView().controlSize(.small) }
                     }
                 }
-                .disabled(isTesting || !hasAPIKey)
+                .disabled(isTesting || (settings.provider == .builtin ? !KeychainStore.hasSyncKey : !hasAPIKey))
                 if let connectionMessage {
                     Text(connectionMessage)
                         .font(.caption)
@@ -266,6 +271,7 @@ private struct AISettingsView: View {
                      : "AI 只能读取摘要并回答，不会修改任何记录。")
             }
 
+            if settings.provider != .builtin {
             Section("接口兼容性") {
                 Picker("输出 Token 参数",selection:$settings.tokenParameter) {
                     Text("max_tokens").tag("max_tokens")
@@ -281,7 +287,9 @@ private struct AISettingsView: View {
                 Text("兼容 OpenAI Chat Completions。改地址后需重新保存密钥；扩展参数不要填写密钥，也不能覆盖模型与消息。")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            }
             Section("回答偏好") {
+                if settings.provider != .builtin {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("创造性")
@@ -292,7 +300,8 @@ private struct AISettingsView: View {
                     }
                     Slider(value: $settings.temperature, in: 0...2, step: 0.1)
                 }
-                Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 256...65536, step: 256)
+                }
+                Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 256...(settings.provider == .builtin ? 4096 : 65536), step: 256)
                 TextField("长期偏好，例如训练安排、忌口", text: $settings.customInstructions, axis: .vertical)
                     .lineLimit(3...7)
                     .focused($focused)

@@ -36,7 +36,7 @@ enum KeychainStore {
         if let key = load(account: account(for: provider, endpoint: endpoint)) { return key }
         // 旧版本只有一个密钥槽，默认服务商是 GLM；仅在 GLM 下兼容读取，
         // 防止切换到 Dots/DeepSeek 时误发其他服务商的密钥。
-        if provider == .custom, endpoint?.trimmingCharacters(in:.whitespacesAndNewlines) == AIProvider.dots.endpoint {
+        if provider == .custom, endpoint?.trimmingCharacters(in:.whitespacesAndNewlines) == UserDefaults.standard.string(forKey:"ai.migratedLegacyEndpoint") {
             return load(account:account(for:.dots, endpoint:endpoint)) ?? load(account:"ai-api-key.dots") ?? ""
         }
         guard (endpoint ?? provider.endpoint).trimmingCharacters(in: .whitespacesAndNewlines) == provider.endpoint, provider != .custom else { return "" }

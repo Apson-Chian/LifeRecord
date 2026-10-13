@@ -2,6 +2,8 @@
 
 以下命令在仓库根目录执行，使用临时数据库或模拟 API。
 
+- `python3 Tests/default-ai.py`（默认服务分支）：鉴权、默认配置不下发、客户端覆盖拒绝、额度持久化、并发限制与自定义回退；不调用计费接口。
+
 - `python3 Tests/public-beta.py`：私人数据库迁移、用户和照片隔离、会话到期/退出、跨站请求防护和账号删除。
 - `python3 Tests/sync-edit.py`：餐食、训练、照片编号、删除标记、旧客户端字段保留与更新冲突。
 - `python3 Tests/admin-api.py`：后台编辑与 AI 操作协议。

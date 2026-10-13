@@ -21,7 +21,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var config = MutableStateFlow(initialAIConfig())
     val apiProfiles = MutableStateFlow(JSONArray(app.store.get("ai.savedProfiles", "[]")).objects())
     private fun initialAIConfig(): JSONObject {
-        val old=JSONObject(app.store.get("aiConfig", providerConfig("DeepSeek").toString()))
+        val old=JSONObject(app.store.get("aiConfig", providerConfig("默认 AI 服务").toString()))
         val migrated=migrateAIConfig(old)
         if(old.optString("provider") == "Dots") {
             val key=app.secrets.get(apiScope(old)).ifBlank { app.secrets.get("ai.Dots") }
@@ -118,8 +118,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun saveProfile(p: JSONObject) { require(p.optDouble("updatedAt") == snapshot.value.profile.optDouble("updatedAt")) { "档案已被同步更新，请重新打开编辑" }; Validation.profile(p); persist(snapshot.value.copy(profile = p.copy().put("updatedAt", now()))); sync() }
     fun saveConfig(c: JSONObject, apiKey: String?) {
-        validateHTTPS(c.optString("endpoint"))
-        require(c.optString("model").isNotBlank()) { "请填写模型名" }
+        if(c.optString("provider") != "默认 AI 服务") validateHTTPS(c.optString("endpoint"))
+        require(c.optString("provider") == "默认 AI 服务" || c.optString("model").isNotBlank()) { "请填写模型名" }
         require(c.optInt("maxPhotos") in 1..12 && c.optInt("maxTokens") in 256..65536 && c.optDouble("temperature") in 0.0..2.0) { "请核对生成参数" }
         if(AIAuthentication.officialDeepSeek(c.getString("endpoint"))) c.put("auth", "Bearer")
         require(c.optString("tokenParameter", "max_tokens") in listOf("max_tokens", "max_completion_tokens")) { "输出参数无效" }
@@ -129,6 +129,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         app.store.set("ai.profile.${c.getString("provider")}", c.toString()); app.store.set("aiConfig", c.toString()); config.value = c.copy()
     }
     private fun aiKey(c: JSONObject): String {
+        if(c.optString("provider") == "默认 AI 服务") {
+            val base=app.store.get("sync.base",Network.BASE);val key=app.secrets.get("sync")
+            require(key.isNotBlank()) { "请先连接你的独立账号，再使用默认 AI 服务" }
+            require(app.store.get("sync.identity")==syncScope(base,key)) { "账号与本机数据不匹配，请先在同步设置中连接" }
+            return key
+        }
         val scoped = app.secrets.get(apiScope(c))
         if(scoped.isNotBlank()) return scoped
         // Only a preset's exact URL may read its old provider credential.
@@ -158,7 +164,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         require(!syncing.value && !aiBusy.value && !weeklyReport.value.generating) { "请等待同步和 AI 任务结束" }
         app.secrets.clear(); app.store.clearAll()
         apiProfiles.value=emptyList()
-        config.value=providerConfig("DeepSeek"); appearance.value="system";accent.value="purple"
+        config.value=providerConfig("默认 AI 服务"); appearance.value="system";accent.value="purple"
         draftPhotos.value=emptyList();dataGeneration.value++
         persist(Snapshot(emptyList(), defaultProfile(), emptyList()))
         saveChats(emptyList()); selectedConversation.value=""; proposal.value=null

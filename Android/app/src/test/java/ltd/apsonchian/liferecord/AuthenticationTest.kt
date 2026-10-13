@@ -11,6 +11,19 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 
 class AuthenticationTest {
+    @Test fun defaultServiceUsesAccountCredentialAndSendsNoUpstreamConfiguration() {
+        var requested:Request?=null
+        val client=OkHttpClient.Builder().addInterceptor { chain ->
+            requested=chain.request()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body("{\"choices\":[{\"message\":{\"content\":\"OK\"}}]}".toResponseBody("application/json".toMediaType())).build()
+        }.build()
+        val config=providerConfig("默认 AI 服务")
+        assertEquals("OK",Network(client).complete(config,"fixture-account-key","test",listOf(JSONObject().put("role","user").put("content","hello"))))
+        assertEquals("https://apsonchian.ltd/liferecord-api/ai/chat",requested!!.url.toString())
+        assertEquals("Bearer fixture-account-key",requested!!.header("Authorization"))
+        val buffer=okio.Buffer();requested!!.body!!.writeTo(buffer);val body=JSONObject(buffer.readUtf8())
+        assertFalse(body.has("model"));assertFalse(body.has("apiKey"));assertFalse(body.has("endpoint"));assertTrue(body.has("messages"))
+    }
     @Test fun hiddenPresetMigratesToEditableCustomConfiguration() {
         assertFalse(ltd.apsonchian.liferecord.service.providers.contains("Dots"))
         val old=providerConfig("Dots")
