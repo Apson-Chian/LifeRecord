@@ -18,6 +18,7 @@ class Photos(private val context: Context) {
     private val local = File(context.filesDir, "meal-photos").apply { mkdirs() }
     private val chat = File(context.filesDir, "chat-photos").apply { mkdirs() }
     private val cache = File(context.cacheDir, "private-photos").apply { mkdirs() }
+    fun clearAll() { listOf(local, chat, cache).forEach { folder -> folder.listFiles()?.forEach { it.delete() } } }
     fun read(uri: Uri): ByteArray {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, options) }

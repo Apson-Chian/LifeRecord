@@ -70,7 +70,6 @@ struct OnboardingView: View {
         .background(AppBackground())
         .interactiveDismissDisabled()
         .task {
-            DemoDataService.installIfNeeded(context: modelContext)
         }
     }
 
@@ -104,7 +103,7 @@ private enum OnboardingTopic: String, CaseIterable, Identifiable {
         case .trends:
             "趋势页顶部横向展示体重、体脂与营养摘要，下方展示对应图表与记录连续性。示例数据覆盖最近 30 天。"
         case .coach:
-            "教练页支持多个独立对话，可围绕增肌、饮食、训练或配料表连续追问。示例对话已经写入，用于展示上下文和 Markdown 排版。"
+            "教练页支持多个独立对话，可围绕增肌、饮食、训练或配料表连续追问。默认从空白记录开始；可手动载入示例体验。"
         case .privacy:
             "健康数据默认保存在本机 SwiftData；仅在发起 AI 请求时发送所选文字和图片。与 LifeTrack 通过 App Group 共享摘要，不上传服务器。"
         }

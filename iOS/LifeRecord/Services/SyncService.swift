@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import Observation
 import SwiftData
 
@@ -91,8 +92,19 @@ enum SyncServiceError: LocalizedError {
 @MainActor
 @Observable
 final class SyncCoordinator {
-    private static let endpoint = URL(string: "https://apsonchian.ltd/liferecord-api/sync")!
-    private static let imageEndpoint = URL(string: "https://apsonchian.ltd/liferecord-api/images")!
+    static var baseURL: String { UserDefaults.standard.string(forKey:"sync.base") ?? "https://apsonchian.ltd/liferecord-api" }
+    static func endpoint(_ path: String) throws -> URL {
+        let base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string:base), url.scheme == "https", url.host != nil, url.user == nil, url.fragment == nil, url.query == nil else { throw SyncServiceError.server("同步服务器需要完整 HTTPS 地址") }
+        return url.appendingPathComponent(path)
+    }
+    static func bindIdentity(base: String, key: String) throws {
+        guard let url=URL(string:base), url.scheme == "https", url.host != nil, url.user == nil, url.fragment == nil, url.query == nil else { throw SyncServiceError.server("同步服务器需要完整 HTTPS 地址") }
+        let hash = SHA256.hash(data:Data((base.trimmingCharacters(in: CharacterSet(charactersIn:"/")) + "\n" + key).utf8)).map { String(format:"%02x",$0) }.joined()
+        let previous = UserDefaults.standard.string(forKey:"sync.identity") ?? ""
+        guard previous.isEmpty || previous == hash else { throw SyncServiceError.server("此设备已有其他账号数据。请先导出并清除本机数据，再连接新账号。") }
+        UserDefaults.standard.set(hash,forKey:"sync.identity")
+    }
     private var needsAnotherSync = false
     private let photoStore = MealPhotoStore()
 
@@ -123,6 +135,9 @@ final class SyncCoordinator {
             needsAnotherSync = true
             return
         }
+        do { try Self.bindIdentity(base:Self.baseURL,key:key) }
+        catch { lastError=error.localizedDescription; statusMessage="账号与本机数据不匹配"; return }
+        let baseAtStart = Self.baseURL
         isConfigured = true
         isSyncing = true
         lastError = nil
@@ -136,6 +151,7 @@ final class SyncCoordinator {
                 let outbound = try makeSnapshot(context: context, settings: settings)
                 let inbound = try await exchange(outbound, key: key)
                 try Task.checkCancellation()
+                guard KeychainStore.loadSyncKey() == key, Self.baseURL == baseAtStart else { throw CancellationError() }
                 try apply(inbound, context: context, settings: settings)
                 lastSyncedAt = .now
                 statusMessage = "所有设备已同步"
@@ -157,7 +173,7 @@ final class SyncCoordinator {
         guard !key.isEmpty else { throw SyncServiceError.notConfigured }
         var imageIDs: [String] = []
         for image in images {
-            var request = URLRequest(url: Self.imageEndpoint)
+            var request = URLRequest(url: try Self.endpoint("images"))
             request.httpMethod = "POST"
             request.timeoutInterval = 45
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -166,7 +182,7 @@ final class SyncCoordinator {
                 "mealId": mealID.uuidString.lowercased(),
                 "base64": image.base64EncodedString()
             ])
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await PrivateHTTPSession.session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SyncServiceError.invalidResponse }
             guard (200..<300).contains(http.statusCode) else {
                 let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -188,18 +204,24 @@ final class SyncCoordinator {
         }
         let key = KeychainStore.loadSyncKey().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw SyncServiceError.notConfigured }
-        let endpoint = Self.imageEndpoint.appendingPathComponent(normalizedID)
+        let endpoint = try Self.endpoint("images").appendingPathComponent(normalizedID)
         return try await photoStore.data(imageID: normalizedID, credential: key) {
             var request = URLRequest(url: endpoint)
             request.timeoutInterval = 30
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await PrivateHTTPSession.session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SyncServiceError.invalidResponse }
             guard (200..<300).contains(http.statusCode) else {
                 throw MealPhotoStore.PhotoError.unavailable(http.statusCode)
             }
             return data
         }
+    }
+
+    func clearPhotoCache() async { await photoStore.clear() }
+
+    func exportData(context: ModelContext, settings: AppSettings) throws -> Data {
+        try JSONEncoder().encode(makeSnapshot(context:context,settings:settings))
     }
 
     private func makeSnapshot(context: ModelContext, settings: AppSettings) throws -> SyncSnapshot {
@@ -276,13 +298,13 @@ final class SyncCoordinator {
     }
 
     private func exchange(_ snapshot: SyncSnapshot, key: String) async throws -> SyncSnapshot {
-        var request = URLRequest(url: Self.endpoint)
+        var request = URLRequest(url: try Self.endpoint("sync"))
         request.httpMethod = "POST"
         request.timeoutInterval = 25
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(snapshot)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PrivateHTTPSession.session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw SyncServiceError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]

@@ -60,7 +60,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 每日营养：${nutrition.joinToString("；")}。
 训练起止、部位、备注和逐组数据：${JSONArray(workouts.map { it.json.copy().apply { remove("localPhotoFiles"); remove("uploadedPhotoFiles") } })}。
 每日中位数后按实际间隔指数平滑；无记录不代表零，今日记录尚未结束。"""
-        val c = config.value.copy(); val key = app.secrets.get("ai.${c.getString("provider")}")
+        val c = config.value.copy(); val key = aiKey(c)
         weeklyReport.value = weeklyReport.value.copy(generating = true, error = "")
         viewModelScope.launch {
             try {
@@ -94,14 +94,53 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun saveProfile(p: JSONObject) { require(p.optDouble("updatedAt") == snapshot.value.profile.optDouble("updatedAt")) { "档案已被同步更新，请重新打开编辑" }; Validation.profile(p); persist(snapshot.value.copy(profile = p.copy().put("updatedAt", now()))); sync() }
     fun saveConfig(c: JSONObject, apiKey: String?) {
-        require(c.optString("endpoint").startsWith("https://")) { "请使用 HTTPS 接口" }
+        validateHTTPS(c.optString("endpoint"))
         require(c.optString("model").isNotBlank()) { "请填写模型名" }
-        require(c.optInt("maxPhotos") in 1..12 && c.optInt("maxTokens") in 256..4096 && c.optDouble("temperature") in 0.0..2.0) { "请核对生成参数" }
+        require(c.optInt("maxPhotos") in 1..12 && c.optInt("maxTokens") in 256..65536 && c.optDouble("temperature") in 0.0..2.0) { "请核对生成参数" }
         if(AIAuthentication.officialDeepSeek(c.getString("endpoint"))) c.put("auth", "Bearer")
-        if(apiKey != null) app.secrets.save("ai.${c.getString("provider")}", AIAuthentication.normalizedKey(apiKey, c.optString("auth") == "Bearer"))
-        app.store.set("aiConfig", c.toString()); config.value = c.copy()
+        require(c.optString("tokenParameter", "max_tokens") in listOf("max_tokens", "max_completion_tokens")) { "输出参数无效" }
+        val extra = JSONObject(c.optString("extraBody", "{}").ifBlank { "{}" })
+        require(extra.keys().asSequence().none { it in listOf("messages", "model", "stream", "temperature", "max_tokens", "max_completion_tokens") }) { "扩展参数不能覆盖模型、消息和生成设置" }
+        if(apiKey != null) app.secrets.save(apiScope(c), AIAuthentication.normalizedKey(apiKey, c.optString("auth") == "Bearer"))
+        app.store.set("ai.profile.${c.getString("provider")}", c.toString()); app.store.set("aiConfig", c.toString()); config.value = c.copy()
     }
-    fun saveSyncKey(key: String) { app.secrets.save("sync", key.trim()); status.value = if(key.isBlank()) "同步已关闭" else "同步密钥已保存"; sync() }
+    private fun aiKey(c: JSONObject): String {
+        val scoped = app.secrets.get(apiScope(c))
+        if(scoped.isNotBlank()) return scoped
+        // Only a preset's exact URL may read its old provider credential.
+        return if(c.optString("endpoint") == providerConfig(c.optString("provider")).optString("endpoint") && c.optString("provider") != "自定义") app.secrets.get("ai.${c.optString("provider")}") else ""
+    }
+    val dataGeneration = MutableStateFlow(0)
+    val appearance = MutableStateFlow(app.store.get("appearance", "system"))
+    val accent = MutableStateFlow(app.store.get("accent", "purple"))
+    fun personalize(mode: String, color: String) {
+        app.store.set("appearance", mode); app.store.set("accent", color)
+        appearance.value=mode; accent.value=color
+    }
+    fun saveSyncKey(key: String, base: String = app.store.get("sync.base", Network.BASE)) {
+        require(!syncing.value) { "请等待当前同步结束" }
+        validateHTTPS(base)
+        val token = key.trim()
+        if(token.isNotBlank()) {
+            val scope = syncScope(base,token)
+            val previous=app.store.get("sync.identity")
+            require(previous.isBlank() || previous == scope) { "此设备已有其他账号的数据；请先导出并清除本机数据，再连接新账号" }
+            app.store.set("sync.identity",scope)
+        }
+        app.store.set("sync.base",base.trimEnd('/'))
+        app.secrets.save("sync", token); status.value = if(key.isBlank()) "同步已关闭" else "同步密钥已保存"; sync()
+    }
+    fun resetLocalData() {
+        require(!syncing.value && !aiBusy.value && !weeklyReport.value.generating) { "请等待同步和 AI 任务结束" }
+        app.secrets.clear(); app.store.clearAll()
+        config.value=providerConfig("DeepSeek"); appearance.value="system";accent.value="purple"
+        draftPhotos.value=emptyList();dataGeneration.value++
+        persist(Snapshot(emptyList(), defaultProfile(), emptyList()))
+        saveChats(emptyList()); selectedConversation.value=""; proposal.value=null
+        weeklyReport.value=WeeklyReport(); app.store.set("weeklyReport", "")
+        acknowledgedQuality.value=emptySet(); app.store.set("recordQuality.acknowledged", "[]")
+        app.store.set("sync.identity", ""); app.photos.clearAll(); status.value="本机数据已清除，云端数据保留"
+    }
     fun foreground(active: Boolean) {
         syncJob?.cancel(); syncJob = null
         if(active) syncJob = viewModelScope.launch { while(isActive) { sync(); delay(15000) } }
@@ -112,6 +151,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             syncing.value = true
             try {
                 val key = app.secrets.get("sync"); if(key.isBlank()) return@launch
+                val scope = syncScope(app.store.get("sync.base", Network.BASE),key)
+                val previous=app.store.get("sync.identity")
+                require(previous.isBlank() || previous == scope) { "账号与本机数据不匹配，请清除本机数据后再连接" }
+                app.store.set("sync.identity",scope)
                 status.value = "正在同步…"
                 var photoError = ""
                 // Finish queued photo uploads. Preserve local copies for offline viewing.
@@ -146,13 +189,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun photo(r: Record, id: String, local: Boolean) = withContext(Dispatchers.IO) { if(local) app.photos.local(id) else app.photos.remote(id, app.secrets.get("sync"), app.network) }
     suspend fun nutrition(input: String, images: List<ByteArray>, old: Record?): JSONObject = withContext(Dispatchers.IO) {
         val c = config.value.copy()
-        val result = app.network.complete(c, app.secrets.get("ai.${c.getString("provider")}"),
-            "识别或按要求修改整餐营养。只输出 JSON {name,calories,protein,carbs,fat,fiber,note}，单位 kcal/g，未知份量在 note 中说明。不得凭空给精确数值。", listOf(JSONObject().put("role", "user").put("content", input + (old?.let { "\n当前餐食：${it.json}" } ?: ""))), images, true)
+        val result = app.network.complete(c, aiKey(c),
+            "识别或按要求修改整餐营养。只输出 JSON {name,calories,protein,carbs,fat,fiber,note}，单位 kcal/g，未知份量在 note 中说明。不得凭空给精确数值。", listOf(JSONObject().put("role", "user").put("content", input + (old?.let { "\n当前餐食：${it.json.copy().apply { remove("localPhotoFiles"); remove("uploadedPhotoFiles") }}" } ?: ""))), images, true)
         parseObject(result)
     }
     suspend fun testConnection(): String = withContext(Dispatchers.IO) {
         val c = config.value
-        app.network.complete(c, app.secrets.get("ai.${c.getString("provider")}"), "只回复：连接成功", listOf(JSONObject().put("role", "user").put("content", "测试连接")))
+        app.network.complete(c, aiKey(c), "只回复：连接成功", listOf(JSONObject().put("role", "user").put("content", "测试连接")))
     }
     private fun saveChats(values: List<JSONObject>) { app.store.set("conversations", JSONArray(values).toString()); conversations.value = values }
     fun newConversation(): String {
@@ -185,7 +228,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val context = Merge.wire(original).put("favorites", JSONArray(original.records.filter { it.type == RecordType.FAVORITE }.map { it.json.copy().apply { remove("localPhotoFiles");remove("uploadedPhotoFiles") } })).put("exerciseTemplates", JSONArray(original.records.filter { it.type == RecordType.EXERCISE }.map { it.json }))
                 val c = config.value.copy()
                 val history = conversations.value.first { it.getString("id") == id }.getJSONArray("messages").objects()
-                val reply = withContext(Dispatchers.IO) { parseObject(app.network.complete(c, app.secrets.get("ai.${c.getString("provider")}"), AgentActions.PROMPT + "\n本地时间：${OffsetDateTime.now()}\n当前数据：$context", history, images, true)) }
+                val reply = withContext(Dispatchers.IO) { parseObject(app.network.complete(c, aiKey(c), AgentActions.PROMPT + "\n本地时间：${OffsetDateTime.now()}\n当前数据：$context", history, images, true)) }
                 append(id, "assistant", reply.getString("answer"))
                 val actions = reply.optJSONArray("actions")?.objects().orEmpty()
                 if(actions.isNotEmpty()) {

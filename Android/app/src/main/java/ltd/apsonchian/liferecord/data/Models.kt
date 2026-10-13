@@ -43,8 +43,8 @@ data class Record(val type: RecordType, val json: JSONObject) {
 fun format(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else String.format(java.util.Locale.ROOT, "%.1f", value)
 fun defaultProfile() = JSONObject().apply {
     put("id", "profile"); put("updatedAt", 1.0); put("displayName", ""); put("fitnessGoal", "维持")
-    put("height", 170.0); put("baselineWeight", 65.0); put("targetWeight", 65.0); put("weeklyWeightTarget", 0.0)
-    put("calorieGoal", 2300.0); put("proteinGoal", 125.0); put("carbsGoal", 285.0); put("fatGoal", 70.0)
+    put("height", 170.0); put("baselineWeight", 70.0); put("targetWeight", 70.0); put("weeklyWeightTarget", 0.0)
+    put("calorieGoal", 2000.0); put("proteinGoal", 100.0); put("carbsGoal", 250.0); put("fatGoal", 60.0)
 }
 object Validation {
     fun number(json: JSONObject, key: String, low: Double, high: Double, optional: Boolean = false) {

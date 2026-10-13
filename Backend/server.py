@@ -22,6 +22,12 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+import sys
+import secrets
+from contextvars import ContextVar
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import database
+import ai_transport
 
 
 HOST = os.environ.get("LIFERECORD_HOST", "127.0.0.1")
@@ -36,8 +42,12 @@ COOKIE_NAME = "liferecord_session"
 AUTH_WINDOW_SECONDS = 60
 MAX_AUTH_FAILURES = 10
 
-if len(SYNC_TOKEN) < 6:
+if SYNC_TOKEN and len(SYNC_TOKEN) < 6:
     raise SystemExit("LIFERECORD_SYNC_TOKEN must contain at least 6 characters")
+
+_user = ContextVar("user", default=database.LEGACY_USER)
+PUBLIC_ORIGIN = os.environ.get("LIFERECORD_PUBLIC_ORIGIN", "https://apsonchian.ltd").rstrip("/")
+SESSION_SECONDS = 7 * 86400
 
 TOKEN_HASH = hashlib.sha256(SYNC_TOKEN.encode()).hexdigest()
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -50,6 +60,8 @@ _failed_auth: dict[str, deque[float]] = defaultdict(deque)
 def auth_blocked(client: str) -> bool:
     now = time.time()
     with _auth_lock:
+        if client not in _failed_auth and len(_failed_auth) >= 8192:
+            _failed_auth.pop(next(iter(_failed_auth)))
         attempts = _failed_auth[client]
         while attempts and attempts[0] < now - AUTH_WINDOW_SECONDS:
             attempts.popleft()
@@ -75,37 +87,9 @@ def connect() -> sqlite3.Connection:
 
 
 def initialize() -> None:
-    with connect() as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS records (
-                record_type TEXT NOT NULL,
-                record_id TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                updated_at REAL NOT NULL,
-                deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
-                PRIMARY KEY (record_type, record_id)
-            )
-            """
-        )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_records_type_updated ON records(record_type, updated_at)"
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS meal_images (
-                image_id TEXT PRIMARY KEY,
-                meal_id TEXT NOT NULL,
-                filename TEXT NOT NULL UNIQUE,
-                content_type TEXT NOT NULL,
-                created_at REAL NOT NULL
-            )
-            """
-        )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_meal_images_meal_id ON meal_images(meal_id)"
-        )
-        connection.execute("PRAGMA optimize")
+    with _db_lock, connect() as connection:
+        database.initialize(connection, SYNC_TOKEN)
+    os.chmod(DB_PATH, 0o600)
 
 
 def valid_number(value: object, minimum: float = 0, maximum: float = 1e9) -> bool:
@@ -123,6 +107,8 @@ def validate_record(record_type: str, item: dict) -> None:
         raise ValueError("record must be an object")
     if not isinstance(item.get("id"), str) or not (1 <= len(item["id"]) <= 80):
         raise ValueError("invalid record id")
+    if any(not (character.isascii() and (character.isalnum() or character in "_-")) for character in item["id"]):
+        raise ValueError("invalid record id characters")
     if not valid_number(item.get("updatedAt"), 1, 4_102_444_800):
         raise ValueError("invalid updatedAt")
     if record_type == "meal":
@@ -193,7 +179,7 @@ def merge_snapshot(snapshot: dict) -> None:
         if not isinstance(settings, dict):
             raise ValueError("invalid settings")
         settings = {**settings, "id": "profile"}
-        validate_record("settings", settings)
+        validate_admin_record("settings", settings)
         operations.append(("settings", "profile", json.dumps(settings, ensure_ascii=False, separators=(",", ":")), float(settings["updatedAt"]), 0))
 
     deletions = snapshot.get("deletions", [])
@@ -204,54 +190,36 @@ def merge_snapshot(snapshot: dict) -> None:
             raise ValueError("invalid deletion type")
         if not isinstance(item.get("id"), str) or not valid_number(item.get("deletedAt"), 1, 4_102_444_800):
             raise ValueError("invalid deletion")
+        if not 1 <= len(item["id"]) <= 80 or any(not (c.isascii() and (c.isalnum() or c in "_-")) for c in item["id"]):
+            raise ValueError("invalid deletion id")
         operations.append((item["recordType"], item["id"], "{}", float(item["deletedAt"]), 1))
 
-    statement = """
-        INSERT INTO records(record_type, record_id, payload, updated_at, deleted)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(record_type, record_id) DO UPDATE SET
-            payload = excluded.payload,
-            updated_at = excluded.updated_at,
-            deleted = excluded.deleted
-        WHERE excluded.updated_at >= records.updated_at
-    """
-    deleted_image_files: list[str] = []
-    deleted_meal_ids = [record_id for record_type, record_id, _, _, deleted in operations if record_type == "meal" and deleted]
+    deleted_image_files = []
+    user = _user.get()
     with _db_lock, connect() as connection:
-        # Older clients omit newer fields. Preserve them on an edit;
-        # explicitly empty values intentionally clear them.
-        preserved = []
         for kind, record_id, payload, stamp, deleted in operations:
+            incoming = json.loads(payload)
+            previous = database.read_record(connection, user, kind, record_id)
             fields = {"workout": ("exercises", "bodyParts"), "meal": ("inputText", "sourceConversationID")}.get(kind, ())
-            if fields and not deleted:
-                incoming = json.loads(payload)
-                if any(field not in incoming for field in fields):
-                    row = connection.execute("SELECT payload FROM records WHERE record_type = ? AND record_id = ? AND deleted = 0", (kind, record_id)).fetchone()
-                    if row:
-                        previous = json.loads(row["payload"])
-                        for field in fields:
-                            if field not in incoming and field in previous:
-                                incoming[field] = previous[field]
-                        payload = json.dumps(incoming, ensure_ascii=False, separators=(",", ":"))
-            preserved.append((kind, record_id, payload, stamp, deleted))
-        connection.executemany(statement, preserved)
-        for meal_id in deleted_meal_ids:
-            record = connection.execute(
-                "SELECT deleted FROM records WHERE record_type = 'meal' AND record_id = ?",
-                (meal_id,),
-            ).fetchone()
-            if record and record["deleted"]:
-                deleted_image_files.extend(
-                    row["filename"] for row in connection.execute(
-                        "SELECT filename FROM meal_images WHERE meal_id = ?", (meal_id,)
-                    ).fetchall()
-                )
-                connection.execute("DELETE FROM meal_images WHERE meal_id = ?", (meal_id,))
+            if not deleted:
+                for field in fields:
+                    if field not in incoming and field in previous: incoming[field] = previous[field]
+                # Validate photo ownership when real stored images are referenced.
+                for image_id in incoming.get("photoIDs", []):
+                    row = connection.execute("SELECT user_id, meal_id FROM user_images WHERE image_id=?", (image_id,)).fetchone()
+                    if row and (row["user_id"] != user or row["meal_id"] != record_id.lower()):
+                        raise ValueError("photo does not belong to this record")
+            accepted = database.put_record(connection, user, kind, record_id, incoming, stamp, deleted)
+            if accepted and deleted and kind == "meal":
+                deleted_image_files.extend(row["filename"] for row in connection.execute("SELECT filename FROM user_images WHERE user_id=? AND meal_id=?", (user,record_id)))
+                connection.execute("DELETE FROM user_images WHERE user_id=? AND meal_id=?", (user,record_id))
+        count = connection.execute("SELECT count(*) FROM user_records WHERE user_id=?", (user,)).fetchone()[0]
+        if count > 30000: raise ValueError("user record limit reached")
+        size = connection.execute("SELECT coalesce(sum(coalesce(length(text_value),0)+length(name)),0),count(*) FROM record_fields WHERE user_id=?",(user,)).fetchone()
+        if size[0] > 16 * 1024 * 1024 or size[1] > 600000: raise ValueError("user database quota reached")
     for filename in deleted_image_files:
-        try:
-            (IMAGE_DIR / filename).unlink(missing_ok=True)
-        except OSError:
-            pass
+        try: (IMAGE_DIR / filename).unlink(missing_ok=True)
+        except OSError: pass
 
 
 def store_meal_image(payload: dict) -> dict:
@@ -277,15 +245,18 @@ def store_meal_image(payload: dict) -> dict:
     else:
         raise ValueError("only JPEG, PNG and WebP images are supported")
 
-    image_id = hashlib.sha256(meal_id.lower().encode() + image).hexdigest()[:32]
+    with connect() as connection:
+        count = connection.execute("SELECT count(*) FROM user_images WHERE user_id=?",(_user.get(),)).fetchone()[0]
+        if count >= 250: raise ValueError("user photo limit reached")
+    image_id = hashlib.sha256(_user.get().encode() + meal_id.lower().encode() + image).hexdigest()[:32]
     filename = f"{image_id}{suffix}"
     destination = IMAGE_DIR / filename
     destination.write_bytes(image)
     try:
         with _db_lock, connect() as connection:
             connection.execute(
-                "INSERT OR REPLACE INTO meal_images(image_id, meal_id, filename, content_type, created_at) VALUES (?, ?, ?, ?, ?)",
-                (image_id, meal_id.lower(), filename, content_type, time.time()),
+                "INSERT OR REPLACE INTO user_images(user_id, image_id, meal_id, filename, content_type, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (_user.get(), image_id, meal_id.lower(), filename, content_type, time.time()),
             )
     except Exception:
         destination.unlink(missing_ok=True)
@@ -298,7 +269,7 @@ def image_record(image_id: str) -> sqlite3.Row | None:
         return None
     with _db_lock, connect() as connection:
         return connection.execute(
-            "SELECT filename, content_type FROM meal_images WHERE image_id = ?", (image_id,)
+            "SELECT filename, content_type FROM user_images WHERE user_id = ? AND image_id = ?", (_user.get(),image_id)
         ).fetchone()
 
 
@@ -307,28 +278,30 @@ def current_snapshot() -> dict:
     output_keys = {"meal": "meals", "body": "bodyMetrics", "workout": "workoutEntries"}
     with _db_lock, connect() as connection:
         rows = connection.execute(
-            "SELECT record_type, record_id, payload, updated_at, deleted FROM records ORDER BY updated_at"
+            "SELECT record_type, record_id, updated_at, deleted FROM user_records WHERE user_id=? ORDER BY updated_at", (_user.get(),)
         ).fetchall()
     for row in rows:
+        with connect() as connection:
+            payload = database.read_record(connection, _user.get(), row["record_type"], row["record_id"])
         # Ignore retained legacy drinking records when serving snapshots.
         if row["record_type"] == "water":
             continue
         if row["deleted"]:
             result["deletions"].append({"id": row["record_id"], "recordType": row["record_type"], "deletedAt": row["updated_at"]})
         elif row["record_type"] == "settings":
-            profile = json.loads(row["payload"])
+            profile = payload
             profile.pop("waterGoal", None)
             result["settings"] = profile
         elif row["record_type"] in output_keys:
-            result[output_keys[row["record_type"]]].append(json.loads(row["payload"]))
+            result[output_keys[row["record_type"]]].append(payload)
     return result
 
 
 # Web administrators can edit every synchronized field. Both manual and AI edits
 # use the same validated, atomic operation format and optimistic version check.
-PROFILE_DEFAULTS = dict(displayName="", fitnessGoal="增肌", height=181, baselineWeight=64,
-    targetWeight=72, weeklyWeightTarget=.25, calorieGoal=2600, proteinGoal=130,
-    carbsGoal=340, fatGoal=70)
+PROFILE_DEFAULTS = dict(displayName="", fitnessGoal="维持", height=170, baselineWeight=70,
+    targetWeight=70, weeklyWeightTarget=0, calorieGoal=2000, proteinGoal=100,
+    carbsGoal=250, fatGoal=60)
 FIELDS = {
     "meal": {"date", "kind", "name", "calories", "protein", "carbs", "fat", "fiber", "note", "source", "photoIDs"},
     "body": {"date", "weight", "bodyFat", "waist", "note"},
@@ -425,10 +398,10 @@ def apply_admin_actions(actions: list) -> dict:
                     continue
                 removed = set(item["before"].get("photoIDs", [])) - set(item["after"].get("photoIDs", []))
                 for image_id in removed:
-                    row = connection.execute("SELECT filename FROM meal_images WHERE image_id = ? AND meal_id = ?", (image_id, item["recordID"])).fetchone()
+                    row = connection.execute("SELECT filename FROM user_images WHERE user_id=? AND image_id = ? AND meal_id = ?", (_user.get(),image_id, item["recordID"])).fetchone()
                     if row:
                         removed_files.append(row["filename"])
-                        connection.execute("DELETE FROM meal_images WHERE image_id = ?", (image_id,))
+                        connection.execute("DELETE FROM user_images WHERE user_id=? AND image_id = ?", (_user.get(),image_id))
         for filename in removed_files:
             try:
                 (IMAGE_DIR / filename).unlink(missing_ok=True)
@@ -444,19 +417,26 @@ AI_PROVIDERS = {
 }
 
 
+def ai_configuration(payload: dict):
+    provider = payload.get("provider", "deepseek")
+    if provider not in (*AI_PROVIDERS, "custom"):
+        raise ValueError("请选择支持的 AI 服务")
+    endpoint = payload.get("endpoint", "") if provider == "custom" else AI_PROVIDERS[provider]
+    key = payload.get("apiKey") or (os.environ.get("LIFERECORD_AI_KEY", "") if _user.get() == database.LEGACY_USER and provider == os.environ.get("LIFERECORD_AI_PROVIDER", "deepseek") else "")
+    model = payload.get("model") or (os.environ.get("LIFERECORD_AI_MODEL", "") if provider != "custom" else "")
+    if not isinstance(model, str) or not model.strip() or len(model) > 200:
+        raise ValueError("请在 API 设置中填写模型名称")
+    mode = payload.get("authMode", "api-key" if provider == "dots" else "bearer")
+    headers = ai_transport.auth_headers(mode, payload.get("authHeader", ""), key)
+    ai_transport.generation_body(payload, model, [])
+    return endpoint, model, headers
+
+
 def ai_plan(payload: dict) -> dict:
     instruction = payload.get("instruction", "")
     if not isinstance(instruction, str) or not 1 <= len(instruction.strip()) <= 8000:
         raise ValueError("请输入修改要求（最多 8000 字）")
-    provider = payload.get("provider", "deepseek")
-    if provider not in AI_PROVIDERS:
-        raise ValueError("请选择支持的 AI 服务")
-    # Server credentials are never returned to the browser. A supplied key is used
-    # only for this request and is never persisted or included in a prompt/log.
-    key = payload.get("apiKey") or (os.environ.get("LIFERECORD_AI_KEY", "") if provider == os.environ.get("LIFERECORD_AI_PROVIDER", "deepseek") else "")
-    model = payload.get("model") or os.environ.get("LIFERECORD_AI_MODEL", "")
-    if not isinstance(key, str) or not key.strip() or not isinstance(model, str) or not model.strip():
-        raise ValueError("请在 AI 配置中填写模型和 API Key，或由服务器配置默认值")
+    endpoint, model, headers = ai_configuration(payload)
     snapshot = current_snapshot()
     context = {k: v for k, v in snapshot.items() if k not in ("deletions", "serverTime")}
     # Explicitly reject oversized context instead of silently hiding older records.
@@ -473,14 +453,10 @@ meal: date,kind(早餐/午餐/晚餐/加餐),name,calories(kcal),protein,carbs,f
 workout: date 为开始时间，endDate 为结束时间或 null，note 为备注，bodyParts 为本次训练部位数组，可使用已有记录中的自定义部位名称；无需填写具体动作。exercises 为可选的完整动作数组。每个动作包含 name、bodyPart(训练部位名称或未分类/null)、sets；每组可填 reps、weight、durationSeconds。修改 exercises 时必须保留未要求修改的动作、部位与组数据。
 settings 只能 update，字段为 displayName,fitnessGoal(增肌/减脂/维持),height,baselineWeight,targetWeight,weeklyWeightTarget,calorieGoal,proteinGoal,carbsGoal,fatGoal。
 一次最多100项。合理估算必须说明依据。不要擅自改用户未要求的数据。"""
-    request = urllib.request.Request(AI_PROVIDERS[provider], data=json.dumps({
-        "model": model.strip(), "messages": [{"role": "system", "content": system},
-        {"role": "user", "content": json.dumps({"currentTime": time.time(), "timezone": payload.get("timezone", "Asia/Shanghai"), "records": context, "instruction": instruction}, ensure_ascii=False)}],
-        "temperature": .1, "max_tokens": 6000,
-    }).encode(), headers={"Content-Type": "application/json", "api-key" if provider == "dots" else "Authorization": key.strip() if provider == "dots" else "Bearer " + key.strip()}, method="POST")
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": json.dumps({"currentTime": time.time(), "timezone": payload.get("timezone", "Asia/Shanghai"), "records": context, "instruction": instruction}, ensure_ascii=False)}]
+    body = ai_transport.generation_body(payload, model, messages)
     try:
-        with urllib.request.urlopen(request, timeout=75) as response:
-            raw = json.loads(response.read(1024 * 1024))
+        raw = ai_transport.request_json(endpoint, body, headers)
         text = raw["choices"][0]["message"]["content"].strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
@@ -492,19 +468,20 @@ settings 只能 update，字段为 displayName,fitnessGoal(增肌/减脂/维持)
             return {"answer": result["answer"], "actions": []}
         _, preview = prepare_admin_actions(actions, snapshot, check_versions=False)
         return {"answer": result["answer"], "actions": preview}
-    except urllib.error.HTTPError as error:
-        raise ValueError(f"AI 服务返回 HTTP {error.code}，请检查模型、密钥和额度") from error
-    except (urllib.error.URLError, TimeoutError) as error:
-        raise ValueError("AI 服务连接失败或超时，请稍后重试") from error
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
         raise ValueError("AI 返回格式无效，请重试或换用其他模型") from error
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LifeRecordSync/1.0"
+    server_version = "LifeRecordSync/2.0"
+
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(30)
 
     def log_message(self, fmt: str, *args: object) -> None:
-        print(f"{self.address_string()} - {fmt % args}", flush=True)
+        # Do not log request paths, payloads or credentials.
+        print(f"{self.client_address[0]} - {self.command} {args[1] if len(args)>1 else ''}", flush=True)
 
     def do_OPTIONS(self) -> None:
         self.send_response(HTTPStatus.NO_CONTENT)
@@ -521,7 +498,17 @@ class Handler(BaseHTTPRequestHandler):
             if not self._authorized():
                 self._json(HTTPStatus.UNAUTHORIZED, {"error": "需要先配对同步密钥"})
                 return
-            self._json(HTTPStatus.OK, current_snapshot())
+            with _db_lock:
+                snapshot = current_snapshot()
+                content = {key: value for key, value in snapshot.items() if key != "serverTime"}
+                etag = '"' + hashlib.sha256(json.dumps(content, sort_keys=True, separators=(",", ":")).encode()).hexdigest() + '"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_response(HTTPStatus.NOT_MODIFIED)
+                    self._security_headers()
+                    self.send_header("ETag", etag)
+                    self.end_headers()
+                else:
+                    self._json(HTTPStatus.OK, snapshot, etag)
             return
         if path.startswith("/liferecord-api/images/"):
             if not self._authorized():
@@ -547,11 +534,22 @@ class Handler(BaseHTTPRequestHandler):
         self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def do_POST(self) -> None:
+        origin = self.headers.get("Origin")
+        if origin and origin != PUBLIC_ORIGIN:
+            self._json(HTTPStatus.FORBIDDEN, {"error": "cross-origin requests are forbidden"})
+            return
+        if self.headers.get("Sec-Fetch-Site") == "cross-site":
+            self._json(HTTPStatus.FORBIDDEN, {"error": "cross-site requests are forbidden"})
+            return
+        if "application/json" not in self.headers.get("Content-Type", "").lower():
+            self._json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"error": "application/json required"})
+            return
         path = urlparse(self.path).path.rstrip("/")
         if path == "/liferecord-api/auth":
             self._authenticate_browser()
             return
         if path == "/liferecord-api/logout":
+            self._revoke_session()
             self.send_response(HTTPStatus.NO_CONTENT)
             self._security_headers()
             self.send_header("Set-Cookie", f"{COOKIE_NAME}=; Path=/liferecord-api/; Max-Age=0; HttpOnly; Secure; SameSite=Strict")
@@ -568,13 +566,18 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, json.JSONDecodeError) as error:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
-        if path in ("/liferecord-api/admin", "/liferecord-api/ai/plan"):
+        if path in ("/liferecord-api/admin", "/liferecord-api/ai/plan", "/liferecord-api/ai/config/check"):
             if not self._authorized():
                 self._json(HTTPStatus.UNAUTHORIZED, {"error": "同步密钥无效"})
                 return
             try:
                 payload = self._read_json()
-                result = ai_plan(payload) if path.endswith("/ai/plan") else apply_admin_actions(payload.get("actions"))
+                if path.endswith("/ai/config/check"):
+                    endpoint, _, _ = ai_configuration(payload)
+                    ai_transport.endpoint_details(endpoint)
+                    result = {"ok": True, "message": "地址与参数检查通过；未调用计费 AI 接口，密钥与模型可用性需实际生成验证"}
+                else:
+                    result = ai_plan(payload) if path.endswith("/ai/plan") else apply_admin_actions(payload.get("actions"))
                 self._json(HTTPStatus.OK, result)
             except (ValueError, json.JSONDecodeError) as error:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -589,6 +592,22 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, json.JSONDecodeError) as error:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
+        if path == "/liferecord-api/account/delete":
+            if not self._authorized():
+                self._json(HTTPStatus.UNAUTHORIZED, {"error":"需要登录"}); return
+            try:
+                if self._read_json().get("confirmation") != "DELETE MY ACCOUNT": raise ValueError("需要确认注销")
+                user=_user.get()
+                with _db_lock, connect() as connection:
+                    files=[r["filename"] for r in connection.execute("SELECT filename FROM user_images WHERE user_id=?",(user,))]
+                    connection.execute("DELETE FROM user_records WHERE user_id=?",(user,))
+                    connection.execute("DELETE FROM user_images WHERE user_id=?",(user,))
+                    connection.execute("DELETE FROM sessions WHERE user_id=?",(user,))
+                    connection.execute("UPDATE users SET disabled=1 WHERE id=?",(user,))
+                for filename in files: (IMAGE_DIR/filename).unlink(missing_ok=True)
+                self._json(HTTPStatus.OK,{"deleted":True})
+            except (ValueError,json.JSONDecodeError) as error: self._json(HTTPStatus.BAD_REQUEST,{"error":str(error)})
+            return
         self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def _authenticate_browser(self) -> None:
@@ -600,34 +619,53 @@ class Handler(BaseHTTPRequestHandler):
             token = self._read_json().get("token", "")
         except (ValueError, json.JSONDecodeError):
             token = ""
-        if not isinstance(token, str) or not hmac.compare_digest(token, SYNC_TOKEN):
+        with connect() as connection:
+            user = database.user_for_token(connection, token)
+        if not user:
             note_auth_failure(client)
             self._json(HTTPStatus.UNAUTHORIZED, {"error": "同步密钥不正确"})
             return
         clear_auth_failures(client)
+        session = secrets.token_urlsafe(32)
+        with connect() as connection:
+            connection.execute("DELETE FROM sessions WHERE expires_at<?", (time.time(),))
+            connection.execute("INSERT INTO sessions VALUES(?,?,?)", (database.token_hash(session),user,time.time()+SESSION_SECONDS))
         self.send_response(HTTPStatus.NO_CONTENT)
         self._security_headers()
-        self.send_header("Set-Cookie", f"{COOKIE_NAME}={TOKEN_HASH}; Path=/liferecord-api/; Max-Age=31536000; HttpOnly; Secure; SameSite=Strict")
+        self.send_header("Set-Cookie", f"{COOKIE_NAME}={session}; Path=/liferecord-api/; Max-Age={SESSION_SECONDS}; HttpOnly; Secure; SameSite=Strict")
         self.end_headers()
+
+    def _cookie_token(self):
+        try:
+            value = SimpleCookie(self.headers.get("Cookie", "")).get(COOKIE_NAME)
+            return value.value if value else ""
+        except Exception:
+            return ""
+
+    def _revoke_session(self):
+        with connect() as connection:
+            connection.execute("DELETE FROM sessions WHERE token_hash=?", (database.token_hash(self._cookie_token()),))
 
     def _authorized(self) -> bool:
         client = self._client_identity()
-        if auth_blocked(client):
-            return False
+        if auth_blocked(client): return False
         authorization = self.headers.get("Authorization", "")
-        if authorization.startswith("Bearer ") and hmac.compare_digest(authorization[7:], SYNC_TOKEN):
-            clear_auth_failures(client)
-            return True
-        cookie = SimpleCookie(self.headers.get("Cookie", ""))
-        value = cookie.get(COOKIE_NAME)
-        if value and hmac.compare_digest(value.value, TOKEN_HASH):
+        user = None
+        with connect() as connection:
+            if authorization.startswith("Bearer "):
+                user = database.user_for_token(connection, authorization[7:])
+            elif self._cookie_token():
+                row = connection.execute("SELECT s.user_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.disabled=0", (database.token_hash(self._cookie_token()),time.time())).fetchone()
+                user = row["user_id"] if row else None
+        if user:
+            _user.set(user)
             clear_auth_failures(client)
             return True
         note_auth_failure(client)
         return False
 
     def _client_identity(self) -> str:
-        forwarded = self.headers.get("X-Real-IP", "").strip()
+        forwarded = self.headers.get("X-Real-IP", "").strip() if self.client_address[0] in ("127.0.0.1", "::1") else ""
         try:
             return str(ipaddress.ip_address(forwarded))
         except ValueError:
@@ -640,7 +678,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("invalid content length") from error
         if length <= 0 or length > MAX_BODY:
             raise ValueError("invalid request size")
-        payload = json.loads(self.rfile.read(length))
+        payload = json.loads(self.rfile.read(length), parse_constant=lambda value: (_ for _ in ()).throw(ValueError("non-finite number")))
         if not isinstance(payload, dict):
             raise ValueError("request must be an object")
         return payload
@@ -649,11 +687,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
 
-    def _json(self, status: HTTPStatus, payload: dict) -> None:
+    def _json(self, status: HTTPStatus, payload: dict, etag=None) -> None:
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
         self.send_response(status)
         self._security_headers()
+        if etag:
+            self.send_header("ETag", etag)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()

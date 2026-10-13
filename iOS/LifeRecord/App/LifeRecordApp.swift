@@ -14,7 +14,8 @@ struct LifeRecordApp: App {
                 .environment(settings)
                 .environment(syncCoordinator)
                 .environmentObject(router)
-                .tint(AppTheme.accent)
+                .tint(settings.accentColor == "blue" ? .blue : settings.accentColor == "green" ? .green : settings.accentColor == "orange" ? .orange : AppTheme.accent)
+                .preferredColorScheme(settings.appearance == "light" ? .light : settings.appearance == "dark" ? .dark : nil)
         }
         // WaterEntry remains only as a legacy schema entity for store migration.
         .modelContainer(for: [MealEntry.self, FavoriteFood.self, BodyMetric.self, WaterEntry.self, WorkoutEntry.self, SyncTombstone.self, CoachConversation.self, CoachMessage.self])

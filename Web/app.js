@@ -3,9 +3,9 @@ const LEGACY_STORAGE_KEY = "liferecord.web.v1";
 const UI_DATE_KEY = "liferecord.selected-date";
 const symbols = { 早餐: "☀", 午餐: "◐", 晚餐: "☾", 加餐: "◇" };
 const defaultSettings = {
-  id: "profile", displayName: "", fitnessGoal: "增肌", height: 181, baselineWeight: 64,
-  targetWeight: 72, weeklyWeightTarget: .25, calorieGoal: 2600, proteinGoal: 130,
-  carbsGoal: 340, fatGoal: 70
+  id: "profile", displayName: "", fitnessGoal: "维持", height: 170, baselineWeight: 70,
+  targetWeight: 70, weeklyWeightTarget: 0, calorieGoal: 2000, proteinGoal: 100,
+  carbsGoal: 250, fatGoal: 60
 };
 
 const $ = selector => document.querySelector(selector);
@@ -22,17 +22,24 @@ const fmtMealDate = seconds => new Intl.DateTimeFormat("zh-CN", { year: "numeric
 const fmtSyncTime = () => new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date());
 const progress = (value, goal) => Math.min(Math.max(value / Math.max(goal, 1), 0), 1);
 
-let state = { meals: [], bodyMetrics: [], settings: null, deletions: [], serverTime: null };
+let state = { meals: [], bodyMetrics: [], workoutEntries: [], settings: null, deletions: [], serverTime: null };
 let selectedDate = localStorage.getItem(UI_DATE_KEY) || dateKey(new Date());
 let visibleMonth = parseDate(selectedDate);
 let connected = false;
 let localRevision = 0;
 let syncInFlight = false;
 let syncAgain = false;
+let identityGeneration=0;
+let snapshotETag = "";
+let syncFailures = 0;
+let nextSyncAt = 0;
+let mealPage = 1;
+const PAGE_SIZE = 20;
 
 function touchLocalState() { localRevision += 1; }
 
 function cleanSnapshot(snapshot) {
+  snapshot.workoutEntries ||= [];
   delete snapshot.waterEntries;
   if (snapshot.settings) delete snapshot.settings.waterGoal;
   return snapshot;
@@ -47,27 +54,37 @@ function totals() {
 function setSyncStatus(text, kind = "") {
   const node = $("#syncStatus");
   node.className = `sync-pill ${kind}`.trim();
-  node.innerHTML = `<i></i>${text}`;
+  node.replaceChildren(document.createElement("i"), document.createTextNode(text));
   node.title = kind === "synced" ? `最近同步：${new Date().toLocaleString("zh-CN")}` : text;
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options
-  });
+  const generation=identityGeneration;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), path.startsWith('/ai/') ? 90000 : 20000);
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {...options, credentials: 'same-origin', signal: controller.signal, headers: {'Content-Type': 'application/json', ...(options.headers || {})}});
+  } catch (error) {
+    throw new Error(error.name === 'AbortError' ? '请求超时，请重试；尚未确认保存结果' : '网络连接失败，请检查连接后重试');
+  } finally { clearTimeout(timeout); }
+
+  if(generation !== identityGeneration) throw new Error("账号已更换，请重试");
   if (response.status === 401 && path !== "/auth") {
-    connected = false;
+    clearPrivateState();
     showAuth();
     throw new Error("需要同步密钥");
   }
+  if (response.status === 304) return null;
   if (!response.ok) {
     let message = `服务器错误 ${response.status}`;
     try { message = (await response.json()).error || message; } catch (_) {}
     throw new Error(message);
   }
-  return response.status === 204 ? null : response.json();
+  const result = response.status === 204 ? null : await response.json();
+  if(generation !== identityGeneration) throw new Error('账号已更换，请重试');
+  if(path === '/snapshot') snapshotETag = response.headers.get('ETag') || '';
+  return result;
 }
 
 async function boot() {
@@ -75,7 +92,8 @@ async function boot() {
   try {
     state = cleanSnapshot(await api("/snapshot"));
     connected = true;
-    await migrateLegacyIfNeeded();
+    // Unscoped legacy browser records require deliberate manual migration.
+
     render();
     setSyncStatus(`已同步 · ${fmtSyncTime()}`, "synced");
   } catch (error) {
@@ -95,44 +113,30 @@ async function syncNow(message = "已同步", silent = false) {
   const revisionAtStart = localRevision;
   setSyncStatus("正在同步");
   try {
-    const inbound = cleanSnapshot(await api("/sync", { method: "POST", body: JSON.stringify(state) }));
+    const response = await api("/snapshot", {headers: snapshotETag ? {"If-None-Match": snapshotETag} : {}});
+    const inbound = response ? cleanSnapshot(response) : null;
     if (revisionAtStart === localRevision) {
-      state = inbound;
-      render();
+      if (inbound) { state = inbound; render(); }
     } else {
       syncAgain = true;
     }
+    syncFailures = 0; nextSyncAt = Date.now() + 15000;
     setSyncStatus(`${message} · ${fmtSyncTime()}`, "synced");
     return true;
   } catch (error) {
-    setSyncStatus("同步失败", "error");
+    syncFailures += 1; nextSyncAt = Date.now() + Math.min(120000, 15000 * 2 ** Math.min(syncFailures, 3));
+    setSyncStatus("连接失败 · 将重试", "error");
     if (!silent) showToast(error.message);
     return false;
   } finally {
     syncInFlight = false;
     if (syncAgain) {
       syncAgain = false;
-      setTimeout(() => syncNow("已自动同步", true), 0);
+      if (!syncFailures) setTimeout(() => syncNow("已自动同步", true), 0);
     }
   }
 }
 
-async function migrateLegacyIfNeeded() {
-  const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
-  if (!raw || state.meals.length || state.bodyMetrics.length) return;
-  try {
-    const legacy = JSON.parse(raw);
-    const timestamp = nowSeconds();
-    state.meals = (legacy.meals || []).map((item, index) => ({
-      id: String(item.id || newID()).toLowerCase(), date: epochForDateKey(item.date), kind: item.kind || "加餐",
-      name: item.name || "迁移餐食", calories: Number(item.calories || 0), protein: Number(item.protein || 0),
-      carbs: Number(item.carbs || 0), fat: Number(item.fat || 0), fiber: 0, note: "从旧版网页迁移",
-      source: "手动", createdAt: timestamp - index, updatedAt: timestamp - index
-    }));
-    touchLocalState();
-    if (await syncNow("旧版数据已迁移")) localStorage.removeItem(LEGACY_STORAGE_KEY);
-  } catch (_) {}
-}
 
 function render() {
   const date = parseDate(selectedDate);
@@ -229,7 +233,12 @@ function renderMealPreview() {
   const meals = ($("#mealScope").value === "all" ? state.meals : selectedMeals())
     .filter(item => (!kind || item.kind === kind) && `${item.name} ${item.note || ""}`.toLowerCase().includes(query))
     .sort((a, b) => b.date - a.date);
-  $("#mealPreview").innerHTML = meals.length ? meals.map(item => `<tr>
+  mealPage = Math.min(Math.max(1, mealPage), Math.max(1, Math.ceil(meals.length / PAGE_SIZE)));
+  const pageMeals = meals.slice((mealPage - 1) * PAGE_SIZE, mealPage * PAGE_SIZE);
+  $("#mealPrev").disabled = mealPage === 1;
+  $("#mealNext").disabled = mealPage * PAGE_SIZE >= meals.length;
+  $("#mealPageLabel").textContent = `${mealPage} / ${Math.max(1, Math.ceil(meals.length / PAGE_SIZE))} 页`;
+  $("#mealPreview").innerHTML = meals.length ? pageMeals.map(item => `<tr>
     <td><button class="record-name" data-show-meal="${item.id}">${escapeHtml(item.name)}</button><small>${fmtShortDate(item.date)} · ${escapeHtml(recordSource(item, "meal"))}</small></td>
     <td><span class="kind-badge">${escapeHtml(item.kind)}</span></td><td>${Math.round(item.calories)} <small>kcal</small></td><td>${Number(item.protein).toFixed(1)} g</td><td>${Number(item.carbs).toFixed(1)} g</td>
     <td><button class="text-button" data-edit-meal="${item.id}">编辑</button></td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">没有匹配的餐食记录</div></td></tr>`;
@@ -237,6 +246,7 @@ function renderMealPreview() {
 }
 
 function escapeHtml(value) { const node = document.createElement("span"); node.textContent = String(value); return node.innerHTML; }
+function escapeAttribute(value) { return escapeHtml(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function showToast(message) { const toast = $("#toast"); toast.textContent = message; toast.classList.add("show"); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("show"), 1700); }
 
 function blobBase64(blob) {
@@ -409,13 +419,14 @@ boot();
 
 $("#authForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const token = new FormData(event.currentTarget).get("token").trim();
+  const form = event.currentTarget;
+  const token = new FormData(form).get("token").trim();
   $("#authError").textContent = "";
   try {
     await api("/auth", { method: "POST", body: JSON.stringify({ token }) });
     connected = true;
     $("#authDialog").close();
-    event.currentTarget.reset();
+    form.reset();
     await boot();
   } catch (error) {
     $("#authError").textContent = error.message;
@@ -539,7 +550,7 @@ $("#exportButton").addEventListener("click", () => {
 
 $("#changeKeyButton").addEventListener("click", async () => {
   try { await api("/logout", { method: "POST", body: JSON.stringify({ action: "logout" }) }); } catch (_) {}
-  connected = false;
+  clearPrivateState();
   setSyncStatus("等待连接");
   showAuth();
 });
@@ -564,14 +575,42 @@ document.addEventListener("keydown", event => {
   }
 });
 
-setInterval(() => { if (connected && document.visibilityState === "visible") syncNow("已自动同步", true); }, 15000);
-document.addEventListener("visibilitychange", () => { if (connected && document.visibilityState === "visible") syncNow("已自动同步", true); });
-window.addEventListener("focus", () => { if (connected) syncNow("已自动同步", true); });
+setInterval(() => { if (connected && !adminBusy && document.visibilityState === "visible" && Date.now() >= nextSyncAt) syncNow("已自动同步", true); }, 5000);
+document.addEventListener("visibilitychange", () => { if (connected && !adminBusy && document.visibilityState === "visible" && Date.now() >= nextSyncAt) syncNow("已自动同步", true); });
+window.addEventListener("focus", () => { if (connected && !adminBusy && Date.now() >= nextSyncAt) syncNow("已自动同步", true); });
 
-for (const id of ["mealSearch", "mealScope", "mealKindFilter"]) $("#" + id).addEventListener("input", renderMealPreview);
+for (const id of ["mealSearch", "mealScope", "mealKindFilter"]) $("#" + id).addEventListener("input", () => {mealPage=1;renderMealPreview();});
 $("#sidebarGoals").addEventListener("click", () => $("#editGoalsButton").click());
 
 function renderEditablePhotos() {
   $("#editablePhotos").innerHTML = retainedPhotoIDs.length ? `<p class="upload-hint">已有照片（保存后移除选中的照片）</p><div class="editable-photos">${retainedPhotoIDs.map(id=>`<div><img src="${API_BASE}/images/${id}" alt="已有餐食照片"><button type="button" class="text-button" data-remove-photo="${id}">移除</button></div>`).join("")}</div>` : "";
 }
 $("#editablePhotos").addEventListener("click",event=>{const button=event.target.closest("[data-remove-photo]"); if(button){retainedPhotoIDs=retainedPhotoIDs.filter(id=>id!==button.dataset.removePhoto);renderEditablePhotos();}});
+
+function clearPrivateState() {
+  identityGeneration++; connected=false; syncAgain=false; localRevision++;
+  state={meals:[],bodyMetrics:[],workoutEntries:[],settings:null,deletions:[],serverTime:null};
+  pendingAIPlan=[]; retainedPhotoIDs=[]; snapshotETag="";syncFailures=0;nextSyncAt=0;mealPage=1;adminPage=1;
+  if (typeof clearAPISecrets === "function") clearAPISecrets();
+  if (typeof resetWorkoutDraft === "function") resetWorkoutDraft();
+  bodyEdit=null; profileVersion=null; editingMealID=null; editingMealVersion=null;
+  for(const id of ['mealForm','weightForm','goalsForm']) $('#'+id).reset();
+  $('#editablePhotos').replaceChildren(); $('#mealEditError').textContent='';
+  $('#aiKey').value=''; $('#aiInstruction').value=''; $('#aiPlan').replaceChildren(); $('#aiApply').hidden=true;
+  document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
+  $('#detailContent').replaceChildren(); render();
+}
+$('#deleteAccountButton').addEventListener('click',async()=>{
+  if(!connected || !confirm('注销当前账号并永久删除云端记录及照片？请先导出需要保留的数据。App 本机记录需要另行清除。')) return;
+  try { await api('/account/delete',{method:'POST',body:JSON.stringify({confirmation:'DELETE MY ACCOUNT'})}); clearPrivateState();showAuth();showToast('云端账号与数据已删除'); }
+  catch(error) {showToast(error.message);}
+});
+const themeSelector=$('#webTheme');
+themeSelector.value=localStorage.getItem('liferecord.theme')||'system';
+const systemTheme=matchMedia('(prefers-color-scheme:dark)');
+function applyTheme() {document.documentElement.dataset.mode=themeSelector.value==='dark'||(themeSelector.value==='system'&&systemTheme.matches)?'dark':'light';localStorage.setItem('liferecord.theme',themeSelector.value);}
+systemTheme.addEventListener('change',applyTheme);
+themeSelector.addEventListener('change',applyTheme);applyTheme();
+
+$('#mealPrev').addEventListener('click',()=>{mealPage--;renderMealPreview();});
+$('#mealNext').addEventListener('click',()=>{mealPage++;renderMealPreview();});

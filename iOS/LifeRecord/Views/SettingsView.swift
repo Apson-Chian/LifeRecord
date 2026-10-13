@@ -44,7 +44,7 @@ private struct LegacySettingsView: View {
                 } header: {
                     Text("身体与目标")
                 } footer: {
-                    Text("模板仅作为 181 cm、64 kg 的增肌起点。热量和体重变化请根据连续 2–3 周趋势调整。")
+                    Text("默认数字是通用占位值，请填写自己的身体资料与目标。热量和体重变化请根据连续 2–3 周趋势调整。")
                 }
 
                 Section {
@@ -142,9 +142,9 @@ private struct LegacySettingsView: View {
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
-                        Slider(value: $settings.temperature, in: 0...1, step: 0.1)
+                        Slider(value: $settings.temperature, in: 0...2, step: 0.1)
                     }
-                    Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 400...8000, step: 200)
+                    Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 256...65536, step: 256)
                     TextField("给 AI 的长期偏好，例如训练安排、忌口", text: $settings.customInstructions, axis: .vertical)
                         .lineLimit(3...7)
                         .focused($focusedField, equals: .instructions)
@@ -256,7 +256,7 @@ private struct LegacySettingsView: View {
             .keyboardDismissControl()
             .navigationTitle("设置")
             .sheet(isPresented: $showsAPIKeyEditor, onDismiss: {
-                hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider)
+                hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider, endpoint: settings.endpoint)
             }) {
                 APIKeyEditorView(settings: settings)
             }
@@ -266,7 +266,7 @@ private struct LegacySettingsView: View {
                 SyncKeyEditorView()
             }
             .onAppear {
-                hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider)
+                hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider, endpoint: settings.endpoint)
                 syncCoordinator.refreshConfiguration()
             }
             .onChange(of: settings.provider) { _, provider in
@@ -328,6 +328,7 @@ struct SyncKeyEditorView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
 
+    @State private var syncBase = SyncCoordinator.baseURL
     @State private var syncKey = KeychainStore.loadSyncKey()
     @State private var revealsKey = false
     @State private var isSaving = false
@@ -355,6 +356,8 @@ struct SyncKeyEditorView: View {
                     .autocorrectionDisabled()
                     .focused($isFocused)
 
+                    TextField("同步服务器（HTTPS）",text:$syncBase,axis:.vertical)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     Toggle("显示内容", isOn: $revealsKey)
                     Button("从剪贴板粘贴", systemImage: "doc.on.clipboard") {
                         if let value = UIPasteboard.general.string {
@@ -362,9 +365,9 @@ struct SyncKeyEditorView: View {
                         }
                     }
                 } header: {
-                    Text("私有同步密钥")
+                    Text("独立用户同步密钥")
                 } footer: {
-                    Text("网页版首次打开时也填写同一密钥。验证成功后，浏览器会使用安全 Cookie，不会把密钥保存在网页脚本中。")
+                    Text("每位测试者使用自己的独立密钥，不能分享你的私人密钥。网页版首次打开时也填写同一密钥。验证成功后，浏览器会使用安全 Cookie，不会把密钥保存在网页脚本中。")
                 }
 
                 if let statusMessage {
@@ -416,7 +419,11 @@ struct SyncKeyEditorView: View {
         statusMessage = nil
         defer { isSaving = false }
         do {
+            guard !syncCoordinator.isSyncing else { throw SyncServiceError.server("请等待当前同步结束") }
+            let base = syncBase.trimmingCharacters(in:.whitespacesAndNewlines).trimmingCharacters(in:CharacterSet(charactersIn:"/"))
+            try SyncCoordinator.bindIdentity(base:base,key:trimmedKey)
             try KeychainStore.saveSyncKey(trimmedKey)
+            settings.syncBaseURL = base
             syncCoordinator.refreshConfiguration()
             await syncCoordinator.sync(context: modelContext, settings: settings)
             if let error = syncCoordinator.lastError {
@@ -460,7 +467,7 @@ struct APIKeyEditorView: View {
 
     init(settings: AppSettings) {
         self.settings = settings
-        _apiKey = State(initialValue: KeychainStore.loadAPIKey(for: settings.provider))
+        _apiKey = State(initialValue: KeychainStore.loadAPIKey(for: settings.provider, endpoint: settings.endpoint))
     }
 
     var body: some View {
@@ -511,7 +518,7 @@ struct APIKeyEditorView: View {
                     }
                 }
 
-                if KeychainStore.hasAPIKey(for: settings.provider) {
+                if KeychainStore.hasAPIKey(for: settings.provider, endpoint: settings.endpoint) {
                     Section {
                         Button("删除本机密钥", systemImage: "trash", role: .destructive) {
                             showsDeleteConfirmation = true
@@ -552,7 +559,7 @@ struct APIKeyEditorView: View {
         statusMessage = nil
         defer { isSaving = false }
         do {
-            try KeychainStore.saveAPIKey(trimmedKey, for: settings.provider)
+            try KeychainStore.saveAPIKey(trimmedKey, for: settings.provider, endpoint: settings.endpoint)
         } catch {
             statusMessage = "保存失败：\(error.localizedDescription)"
             UINotificationFeedbackGenerator().notificationOccurred(.error)
@@ -571,7 +578,7 @@ struct APIKeyEditorView: View {
 
     private func deleteKey() {
         do {
-            try KeychainStore.deleteAPIKey(for: settings.provider)
+            try KeychainStore.deleteAPIKey(for: settings.provider, endpoint: settings.endpoint)
             apiKey = ""
             statusMessage = "API Key 已从本机删除。"
         } catch {

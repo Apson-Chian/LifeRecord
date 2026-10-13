@@ -34,8 +34,16 @@ actor MealPhotoStore {
             .map { String(format: "%02x", $0) }.joined()
     }
 
+    private var generation = 0
+    func clear() {
+        generation += 1
+        pending.values.forEach { $0.cancel() }; pending.removeAll(); memory.removeAllObjects()
+        try? FileManager.default.removeItem(at:directory)
+    }
+
     func data(imageID: String, credential: String,
               download: @escaping @Sendable () async throws -> Data) async throws -> Data {
+        let generationAtStart = generation
         let id = identity(imageID: imageID, credential: credential)
         if let cached = memory.object(forKey: id as NSString) { return cached as Data }
         if let task = pending[id] { return try await task.value }
@@ -54,6 +62,7 @@ actor MealPhotoStore {
         pending[id] = task
         defer { pending[id] = nil }
         let data = try await task.value
+        guard generationAtStart == generation else { throw CancellationError() }
         save(data, id: id)
         return data
     }

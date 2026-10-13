@@ -1,11 +1,16 @@
 import Foundation
 import Security
+import CryptoKit
 
 enum KeychainStore {
     private static let service = "com.aotelei.LifeRecord"
     private static let legacyAccount = "ai-api-key"
     private static let syncAccount = "liferecord-sync-key"
 
+    static func clearAllSecrets() throws {
+        let status=SecItemDelete([kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service] as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError.status(status) }
+    }
     static func saveSyncKey(_ key: String) throws {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw KeychainError.emptySyncKey }
@@ -22,30 +27,37 @@ enum KeychainStore {
         try delete(account: syncAccount)
     }
 
-    static func saveAPIKey(_ key: String, for provider: AIProvider) throws {
+    static func saveAPIKey(_ key: String, for provider: AIProvider, endpoint: String? = nil) throws {
         let trimmed = try AIAuthentication.normalizedKey(key, bearer: provider == .deepSeek)
-        try upsert(Data(trimmed.utf8), account: account(for: provider))
+        try upsert(Data(trimmed.utf8), account: account(for: provider, endpoint: endpoint))
     }
 
-    static func loadAPIKey(for provider: AIProvider) -> String {
-        if let key = load(account: account(for: provider)) { return key }
+    static func loadAPIKey(for provider: AIProvider, endpoint: String? = nil) -> String {
+        if let key = load(account: account(for: provider, endpoint: endpoint)) { return key }
         // 旧版本只有一个密钥槽，默认服务商是 GLM；仅在 GLM 下兼容读取，
         // 防止切换到 Dots/DeepSeek 时误发其他服务商的密钥。
+        guard (endpoint ?? provider.endpoint).trimmingCharacters(in: .whitespacesAndNewlines) == provider.endpoint, provider != .custom else { return "" }
+        if let old = load(account: "ai-api-key.\(provider.keychainID)") { return old }
         if provider == .glm, let legacy = load(account: legacyAccount) { return legacy }
         return ""
     }
 
-    static func hasAPIKey(for provider: AIProvider) -> Bool {
-        !loadAPIKey(for: provider).isEmpty
+    static func hasAPIKey(for provider: AIProvider, endpoint: String? = nil) -> Bool {
+        !loadAPIKey(for: provider, endpoint: endpoint).isEmpty
     }
 
-    static func deleteAPIKey(for provider: AIProvider) throws {
-        try delete(account: account(for: provider))
-        if provider == .glm { try delete(account: legacyAccount) }
+    static func deleteAPIKey(for provider: AIProvider, endpoint: String? = nil) throws {
+        try delete(account: account(for: provider, endpoint: endpoint))
+        if (endpoint ?? provider.endpoint) == provider.endpoint {
+            try delete(account: "ai-api-key.\(provider.keychainID)")
+            if provider == .glm { try delete(account: legacyAccount) }
+        }
     }
 
-    private static func account(for provider: AIProvider) -> String {
-        "ai-api-key.\(provider.keychainID)"
+    private static func account(for provider: AIProvider, endpoint: String? = nil) -> String {
+        let url = (endpoint ?? provider.endpoint).trimmingCharacters(in: .whitespacesAndNewlines)
+        let hash = SHA256.hash(data:Data(url.utf8)).map { String(format:"%02x",$0) }.joined()
+        return "ai-api-key.\(provider.keychainID).\(hash)"
     }
 
     private static func upsert(_ data: Data, account: String) throws {

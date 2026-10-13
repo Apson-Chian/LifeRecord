@@ -69,6 +69,7 @@ struct SettingsView: View {
                 }
 
                 Section("应用") {
+                    NavigationLink("外观与个性化") { PersonalizationSettingsView() }
                     NavigationLink {
                         PrivacyAndDataSettingsView()
                     } label: {
@@ -245,6 +246,18 @@ private struct AISettingsView: View {
                      : "AI 只能读取摘要并回答，不会修改任何记录。")
             }
 
+            Section("接口兼容性") {
+                Picker("输出 Token 参数",selection:$settings.tokenParameter) {
+                    Text("max_tokens").tag("max_tokens")
+                    Text("max_completion_tokens").tag("max_completion_tokens")
+                }
+                Toggle("发送 Temperature",isOn:$settings.sendTemperature)
+                Toggle("发送 JSON 格式参数",isOn:$settings.jsonMode)
+                TextField("额外请求参数 JSON（例如 top_p）",text:$settings.extraBody,axis:.vertical)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().lineLimit(3...8)
+                Text("兼容 OpenAI Chat Completions。改地址后需重新保存密钥；扩展参数不要填写密钥，也不能覆盖模型与消息。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("回答偏好") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -254,9 +267,9 @@ private struct AISettingsView: View {
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
-                    Slider(value: $settings.temperature, in: 0...1, step: 0.1)
+                    Slider(value: $settings.temperature, in: 0...2, step: 0.1)
                 }
-                Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 400...8000, step: 200)
+                Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 256...65536, step: 256)
                 TextField("长期偏好，例如训练安排、忌口", text: $settings.customInstructions, axis: .vertical)
                     .lineLimit(3...7)
                     .focused($focused)
@@ -269,6 +282,7 @@ private struct AISettingsView: View {
             APIKeyEditorView(settings: settings)
         }
         .onAppear(perform: refreshKeyState)
+        .onChange(of: settings.endpoint) { _, _ in refreshKeyState(); connectionMessage = nil }
         .onChange(of: settings.provider) { _, _ in
             refreshKeyState()
             connectionMessage = nil
@@ -276,7 +290,7 @@ private struct AISettingsView: View {
     }
 
     private func refreshKeyState() {
-        hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider)
+        hasAPIKey = KeychainStore.hasAPIKey(for: settings.provider, endpoint: settings.endpoint)
     }
 
     @MainActor
@@ -304,6 +318,7 @@ private struct SyncAndIntegrationSettingsView: View {
     @State private var showsLifeTrackUnavailable = false
 
     var body: some View {
+        @Bindable var settings = settings
         Form {
             Section {
                 Button {
@@ -352,6 +367,7 @@ private struct SyncAndIntegrationSettingsView: View {
             }
 
             Section {
+                Toggle("与 LifeTrack 共享身体与每日摘要",isOn: $settings.shareWithLifeTrack)
                 if let lastSync = SharedProfileStore.lastPublishedAt {
                     Label("身体档案已同步", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(AppTheme.success)
@@ -388,6 +404,11 @@ private struct SyncAndIntegrationSettingsView: View {
 }
 
 private struct PrivacyAndDataSettingsView: View {
+    @Environment(AppSettings.self) private var settings
+    @EnvironmentObject private var coachTasks: CoachTaskCenter
+    @State private var showsReset = false
+    @State private var dataError: String?
+    @State private var exportURL: URL?
     @Environment(SyncCoordinator.self) private var syncCoordinator
     @Environment(\.modelContext) private var modelContext
     @State private var showsOnboarding = false
@@ -399,6 +420,21 @@ private struct PrivacyAndDataSettingsView: View {
                 Label("仅在使用 AI 时发送相关文字与所选图片", systemImage: "arrow.up.forward.app")
                 Label("API Key 与同步密钥保存在 iOS 钥匙串", systemImage: "key.fill")
             }
+            Section("数据") {
+                Button("导出同步记录",systemImage:"square.and.arrow.up") {
+                    do {
+                        let data=try syncCoordinator.exportData(context:modelContext,settings:settings)
+                        let url=URL.temporaryDirectory.appendingPathComponent("LifeRecord-export.json")
+                        try data.write(to:url,options:.atomic); exportURL=url
+                    } catch { dataError=error.localizedDescription }
+                }
+                if let exportURL { ShareLink("分享导出文件",item:exportURL) }
+                Button("清除全部本机数据",systemImage:"trash",role:.destructive) { showsReset=true }
+                    .disabled(syncCoordinator.isSyncing || coachTasks.isGenerating)
+                if let dataError { Text(dataError).font(.caption).foregroundStyle(.red) }
+                Text("导出包含餐食、身体、训练、目标和删除标记；不含密钥、照片字节、常用餐食和对话。清除本机数据同时移除密钥与接口偏好；云端记录仍保留。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("帮助") {
                 Button("重新查看使用引导", systemImage: "book") { showsOnboarding = true }
                 Button("重新写入完整示例数据", systemImage: "arrow.counterclockwise") {
@@ -409,6 +445,32 @@ private struct PrivacyAndDataSettingsView: View {
                 }
                 .foregroundStyle(.red)
             }
+        }
+        .confirmationDialog("清除全部本机数据？请先导出需要保留的记录。",isPresented:$showsReset,titleVisibility:.visible) {
+            Button("清除",role:.destructive) {
+                do {
+                    guard !syncCoordinator.isSyncing && !coachTasks.isGenerating else { throw SyncServiceError.server("请等待同步与 AI 任务结束") }
+                    try KeychainStore.clearAllSecrets()
+                    try modelContext.delete(model:MealEntry.self)
+                    try modelContext.delete(model:BodyMetric.self)
+                    try modelContext.delete(model:WorkoutEntry.self)
+                    try modelContext.delete(model:WaterEntry.self)
+                    try modelContext.delete(model:FavoriteFood.self)
+                    try modelContext.delete(model:CoachMessage.self)
+                    try modelContext.delete(model:CoachConversation.self)
+                    try modelContext.delete(model:SyncTombstone.self)
+                    try modelContext.save()
+                    Task { await syncCoordinator.clearPhotoCache() }
+                    UserDefaults.standard.removeObject(forKey:"recordQuality.acknowledged")
+                    UserDefaults.standard.removeObject(forKey:"sync.identity")
+                    SharedProfileStore.clear()
+                    if let bundleID=Bundle.main.bundleIdentifier { UserDefaults.standard.removePersistentDomain(forName:bundleID) }
+                    settings.resetAfterLocalDeletion()
+                    if let exportURL { try? FileManager.default.removeItem(at:exportURL) };exportURL=nil
+                    syncCoordinator.refreshConfiguration()
+                } catch { dataError=error.localizedDescription }
+            }
+            Button("取消",role:.cancel) {}
         }
         .navigationTitle("隐私、数据与帮助")
         .navigationBarTitleDisplayMode(.inline)
@@ -436,5 +498,22 @@ private struct SettingsNumberRow: View {
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 28, alignment: .leading)
         }
+    }
+}
+
+private struct PersonalizationSettingsView: View {
+    @Environment(AppSettings.self) private var settings
+    var body: some View {
+        @Bindable var settings = settings
+        Form {
+            Picker("主题模式",selection:$settings.appearance) {
+                Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark")
+            }
+            Picker("强调色",selection:$settings.accentColor) {
+                Text("紫色").tag("purple"); Text("蓝色").tag("blue"); Text("绿色").tag("green"); Text("橙色").tag("orange")
+            }
+            Text("称呼、目标、提醒、常用餐食、动作库和 AI 长期偏好可在对应设置中自定义。")
+                .font(.caption).foregroundStyle(.secondary)
+        }.navigationTitle("外观与个性化").navigationBarTitleDisplayMode(.inline)
     }
 }

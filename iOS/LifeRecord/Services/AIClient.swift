@@ -297,12 +297,12 @@ struct AIClient {
         compatibilityProbe: Bool = false
     ) async throws -> String {
         let override = apiKeyOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let storedKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider) : override
+        let storedKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider, endpoint: settings.endpoint) : override
         guard !storedKey.isEmpty else { throw AIClientError.missingKey }
         let endpoint = settings.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !model.isEmpty else { throw AIClientError.missingModel }
-        guard let url = URL(string: endpoint), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+        guard let url = URL(string: endpoint), url.scheme?.lowercased() == "https", url.host != nil, url.user == nil, url.fragment == nil else {
             throw AIClientError.invalidEndpoint
         }
         guard images.count <= settings.maxPhotos else { throw AIClientError.tooManyImages(settings.maxPhotos) }
@@ -338,9 +338,14 @@ struct AIClient {
                 ["role": "system", "content": system + (settings.customInstructions.isEmpty ? "" : "\n用户自定义指令：\(settings.customInstructions)")],
                 ["role": "user", "content": userContent]
             ],
-            "max_tokens": min(max(compatibilityProbe ? 1_024 : (maxTokensOverride ?? settings.maxTokens), 256), 4_096),
+            settings.tokenParameter: min(max(compatibilityProbe ? 1_024 : (maxTokensOverride ?? settings.maxTokens), 256), 65_536),
         ]
-        body["temperature"] = temperatureOverride ?? settings.temperature
+        guard ["max_tokens", "max_completion_tokens"].contains(settings.tokenParameter) else { throw AIClientError.server("输出参数无效") }
+        if settings.sendTemperature { body["temperature"] = temperatureOverride ?? settings.temperature }
+        let extraData = Data((settings.extraBody.isEmpty ? "{}" : settings.extraBody).utf8)
+        guard let extras = try JSONSerialization.jsonObject(with: extraData) as? [String: Any],
+              Set(extras.keys).isDisjoint(with: ["messages","model","stream","temperature","max_tokens","max_completion_tokens"]) else { throw AIClientError.server("扩展参数应为 JSON 对象，不能覆盖模型、消息和生成设置") }
+        for (key,value) in extras { body[key] = value }
         // 客户端一次性解码完整回复，明确关闭流式，避免兼容接口修改默认值。
         body["stream"] = false
         if settings.provider == .dots {
@@ -356,12 +361,12 @@ struct AIClient {
         // 依靠提示词返回 JSON，避免连接正常却因未知参数被 400 拒绝。
         // Some multimodal endpoints accept image content but reject JSON response_format.
         // For image requests, rely on the prompt's JSON schema instead.
-        if !compatibilityProbe && wantsJSON && images.isEmpty && settings.provider != .dots {
+        if settings.jsonMode && !compatibilityProbe && wantsJSON && images.isEmpty && settings.provider != .dots {
             body["response_format"] = ["type": "json_object"]
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await PrivateHTTPSession.session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AIClientError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             if AIAuthentication.isOfficialDeepSeek(endpoint), let failure = AIAuthentication.deepSeekFailure(status: http.statusCode) {
@@ -508,4 +513,16 @@ struct AIClient {
            marker == "WEBP" { return "image/webp" }
         return "image/jpeg"
     }
+}
+
+/// Never follow redirects with a user credential or health-record request body.
+private final class CredentialRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
+}
+enum PrivateHTTPSession {
+    static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        return URLSession(configuration:config, delegate:CredentialRedirectGuard(), delegateQueue:nil)
+    }()
 }

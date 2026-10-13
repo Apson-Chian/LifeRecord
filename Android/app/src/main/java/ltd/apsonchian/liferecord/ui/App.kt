@@ -41,7 +41,10 @@ import ltd.apsonchian.liferecord.data.*
 import java.time.*
 import java.time.format.DateTimeFormatter
 
-@Composable fun LifeRecordApp(vm: AppViewModel) = LifeTheme {
+@Composable fun LifeRecordApp(vm: AppViewModel) {
+    val mode by vm.appearance.collectAsState(); val color by vm.accent.collectAsState()
+    LifeTheme(mode,color) {
+    val generation by vm.dataGeneration.collectAsState()
     val snapshot by vm.snapshot.collectAsState()
     val first by vm.onboarding.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -53,7 +56,8 @@ import java.time.format.DateTimeFormatter
     var detail by remember { mutableStateOf<Record?>(null) }
     var coachDraft by rememberSaveable { mutableStateOf("") }
     var mealHistory by remember { mutableStateOf<Boolean?>(null) }
-    val pages = rememberSaveableStateHolder()
+    LaunchedEffect(generation) { editor=null;detail=null;coachDraft="";mealHistory=null }
+    val pages = key(generation) { rememberSaveableStateHolder() }
     val sourceLayer = rememberGraphicsLayer()
     val backdrop = remember(sourceLayer) { GlassBackdrop(sourceLayer) }
     val focus = LocalFocusManager.current
@@ -97,6 +101,8 @@ import java.time.format.DateTimeFormatter
     }
     editor?.let { RecordEditor(vm, it, { editor = null }, notify) }
 }
+}
+
 @Composable fun PageTitle(title: String, subtitle: String, trailing: @Composable (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().semantics { contentDescription=subtitle }) {
         Row(Modifier.fillMaxWidth().height(44.dp),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically) { trailing?.invoke() }

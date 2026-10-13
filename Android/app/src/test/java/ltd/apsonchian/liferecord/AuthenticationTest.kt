@@ -11,6 +11,19 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 
 class AuthenticationTest {
+    @Test fun customCompatibilityOptionsAreSentWithoutHardCodedTokenLimit() {
+        var body=JSONObject()
+        val client=OkHttpClient.Builder().addInterceptor { chain ->
+            val buffer=okio.Buffer();chain.request().body!!.writeTo(buffer);body=JSONObject(buffer.readUtf8())
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body("{\"choices\":[{\"message\":{\"content\":\"OK\"}}]}".toResponseBody("application/json".toMediaType())).build()
+        }.build()
+        val config=providerConfig("自定义").put("model","custom-model").put("maxTokens",16000).put("tokenParameter","max_completion_tokens").put("sendTemperature",false).put("jsonMode",false).put("extraBody","{\"top_p\":0.9}")
+        Network(client).complete(config,"test-key","test",emptyList(),json=true)
+        assertEquals(16000,body.getInt("max_completion_tokens")); assertFalse(body.has("max_tokens"));assertFalse(body.has("temperature"));assertFalse(body.has("response_format"));assertEquals(.9,body.getDouble("top_p"),.001)
+        assertNotEquals(ltd.apsonchian.liferecord.service.apiScope(config),ltd.apsonchian.liferecord.service.apiScope(JSONObject(config.toString()).put("endpoint","https://different.test/chat/completions")))
+        config.put("extraBody","{\"messages\":[]}")
+        assertThrows(IllegalArgumentException::class.java) {Network(client).complete(config,"test-key","test",emptyList())}
+    }
     @Test fun officialDeepSeekAlwaysReceivesOneBearerHeader() {
         val url="https://api.deepseek.com/chat/completions"
         listOf("sk-local-test-only", " sk-local-test-only\n", "Bearer sk-local-test-only", "Authorization: Bearer sk-local-test-only", "Bearer \"sk-local-test-only\"").forEach { raw ->

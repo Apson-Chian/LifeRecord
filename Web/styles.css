@@ -560,3 +560,62 @@ button:disabled { cursor: default; opacity: .6; }
 .admin-section .table-scroll { max-height: 480px; overflow: auto; }
 .admin-section thead { position: sticky; top: 0; z-index: 1; }
 #aiStatus.success { color: #267348; }
+
+.page-footer label {display:flex;align-items:center;gap:8px;}
+
+/* Settings, pagination and mobile navigation share the existing theme. */
+[hidden] { display: none !important; }
+.settings-modal { width: min(700px, calc(100% - 28px)); }
+.settings-modal .modal-sheet { max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain; }
+.settings-modal .modal-top { position: sticky; top: -26px; z-index: 2; background: var(--card); padding-block: 12px; }
+.settings-section { padding: 20px 0; border-top: 1px solid var(--line); }
+.settings-section h3 { margin: 0 0 10px; font-size: 16px; }
+.settings-section .upload-hint { line-height: 1.7; }
+.settings-actions { display: grid; gap: 10px; }
+.settings-actions button, .danger-section button { min-height: 44px; text-align: left; }
+.settings-section .checkbox-label { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.settings-section .checkbox-label input { width: 20px; height: 20px; }
+.danger-section h3 { color: #bb344b; }
+.pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.pagination button { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; background: transparent; color: var(--text); }
+button:disabled { opacity: .5; cursor: default; }
+:is(button,a,input,select,textarea):focus-visible { outline: 3px solid #7489ed; outline-offset: 3px; }
+.mobile-nav { display: none; }
+.exercise-editor { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 20px 0; }
+.exercise-editor h3 { font-size: 16px; margin: 0; }
+.set-editor { border-top: 1px solid var(--line); margin: 14px 0; padding: 14px 0; }
+.set-editor .form-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.page-footer { gap: 24px; flex-wrap: wrap; }
+.page-footer :is(a,button) { min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; }
+.privacy-document { max-width: 780px; margin: 0 auto; padding: 32px 20px; line-height: 1.85; }
+.privacy-document h2 { margin-top: 28px; }
+.privacy-document p { margin: 12px 0; }
+@media(max-width:780px) {
+  .app-shell { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .mobile-nav { display: flex; position: fixed; z-index: 15; bottom: 0; left: 0; right: 0; justify-content: space-around; gap: 4px; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
+  .mobile-nav :is(a,button) { min-height: 44px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--text); font-size: 12px; text-decoration: none; padding: 6px; white-space: nowrap; }
+  .topbar .top-actions { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .top-actions > .secondary-button { min-height: 44px; }
+  .page-footer { justify-content: center; }
+  .meal-table :is(button,a) { min-height: 44px; }
+  .settings-modal .modal-sheet { max-height: 88dvh; padding: 20px; }
+  .settings-modal .modal-top { top: -20px; }
+  .settings-modal textarea { font-size: 16px; }
+  .toast { bottom: calc(82px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); width: max-content; }
+  section[id], article[id] { scroll-margin-top: 20px; }
+}
+:root[data-mode="dark"] {color-scheme:dark;--bg:#101218;--card:#1b1e28;--text:#edf0f7;--muted:#a4adbf;--line:#343947;--accent-soft:#283355;--accent:#9aafff;--shadow:none;}
+:root[data-mode="dark"] :is(.topbar,.sidebar,.card,.modal-sheet,.overview-item,.balance-card,.week-panel) {background:#1b1e28;color:var(--text);border-color:var(--line);}
+:root[data-mode="dark"] :is(.date-button,.toolbar-icon,.empty,.chart-inspector,.selection-detail,.large-metric-field,.meal-item,.meal-symbol,.icon-button,.meal-table th,.source-row,.detail-kpis > div,.export-button) {background:#252a36;color:var(--text);border-color:var(--line);}
+:root[data-mode="dark"] :is(input,select,textarea) {background:#252a36;color:var(--text);border-color:var(--line);}
+:root[data-mode="dark"] .week-day.selected {background:#283355;border-color:#4e629b;}
+:root[data-mode="dark"] .meal-table tr:hover td {background:#252a36;}
+:root[data-mode="dark"] .level-0 {background:#252a36;color:#b2bdd1;}
+:root[data-mode="dark"] .overview-item > i {background:#343947;}
+:root[data-mode="dark"] kbd {background:#252a36;color:#b2bdd1;border-color:#46516b;}
+:root[data-mode="dark"] .kind-badge {background:#283355;color:#c0ccef;}
+
+:root[data-mode="dark"] #trendRange {background:#252a36;color:var(--text);border-color:var(--line);}
+:root[data-mode="dark"] .primary-button {background:#465ed1;color:white;}
+:root[data-mode="dark"] .record-day.selected {border-color:var(--accent);}
+:root[data-mode="dark"] .danger-section :is(h3,button) { color: #ff9caf; }

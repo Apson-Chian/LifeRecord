@@ -9,7 +9,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import android.util.Base64
 
-class Network(private val client: OkHttpClient = OkHttpClient.Builder().callTimeout(100, TimeUnit.SECONDS).build()) {
+class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(100, TimeUnit.SECONDS).build(), private val baseURL: () -> String = { BASE }) {
     private fun execute(url: String, secret: String, body: JSONObject?, header: String = "Authorization", bearer: Boolean = true, officialDeepSeek: Boolean = false): ByteArray {
         require(url.startsWith("https://")) { "接口地址需要使用 HTTPS" }
         require(secret.isNotBlank()) { "请先配置密钥" }
@@ -17,7 +17,7 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().callTime
         val request = Request.Builder().url(url).header(header, if(bearer) "Bearer $secret" else secret).apply {
             if(body != null) post(body.toString().toRequestBody("application/json".toMediaType()))
         }.build()
-        return client.newCall(request).execute().use { response ->
+        return client.newBuilder().followRedirects(false).followSslRedirects(false).callTimeout(100, TimeUnit.SECONDS).build().newCall(request).execute().use { response ->
             val bytes = response.body?.bytes() ?: error("服务端返回空数据")
             if(!response.isSuccessful) {
                 if(officialDeepSeek) AIAuthentication.deepSeekFailure(response.code)?.let { error(it) }
@@ -27,11 +27,11 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().callTime
             }; bytes
         }
     }
-    fun sync(snapshot: Snapshot, key: String): JSONObject = JSONObject(execute("$BASE/sync", key, Merge.wire(snapshot)).toString(Charsets.UTF_8))
-    fun upload(bytes: ByteArray, mealId: String, key: String): String = JSONObject(execute("$BASE/images", key, JSONObject().put("mealId", mealId).put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))).toString(Charsets.UTF_8)).getString("id")
+    fun sync(snapshot: Snapshot, key: String): JSONObject = JSONObject(execute("${baseURL().trimEnd('/')}/sync", key, Merge.wire(snapshot)).toString(Charsets.UTF_8))
+    fun upload(bytes: ByteArray, mealId: String, key: String): String = JSONObject(execute("${baseURL().trimEnd('/')}/images", key, JSONObject().put("mealId", mealId).put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))).toString(Charsets.UTF_8)).getString("id")
     fun photo(id: String, key: String): ByteArray {
         require(id.matches(Regex("[0-9a-f]{32}"))) { "图片编号无效" }
-        return execute("$BASE/images/$id", key, null)
+        return execute("${baseURL().trimEnd('/')}/images/$id", key, null)
     }
     fun complete(config: JSONObject, key: String, system: String, messages: List<JSONObject>, images: List<ByteArray> = emptyList(), json: Boolean = false): String {
         require(config.optString("model").isNotBlank()) { "请填写模型名" }
@@ -47,12 +47,16 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().callTime
             }; list.put(m)
         }
         val body = JSONObject().put("model", config.getString("model")).put("messages", list).put("stream", false)
-            .put("max_tokens", config.optInt("maxTokens", 4096).coerceIn(256, 4096)).put("temperature", config.optDouble("temperature", 0.2))
+            .put(config.optString("tokenParameter", "max_tokens"), config.optInt("maxTokens", 4096).coerceIn(256, 65536)).put("temperature", config.optDouble("temperature", 0.2))
+        if(!config.optBoolean("sendTemperature", true)) body.remove("temperature")
+        val extras = JSONObject(config.optString("extraBody", "{}").ifBlank { "{}" })
+        require(extras.keys().asSequence().none { it in listOf("model", "messages", "stream", "max_tokens", "max_completion_tokens", "temperature") }) { "扩展参数不能覆盖模型、消息和生成设置" }
+        extras.keys().forEach { body.put(it, extras.get(it)) }
         when(config.optString("provider")) {
             "Dots" -> body.put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
             "DeepSeek", "智谱 GLM" -> body.put("thinking", JSONObject().put("type", "disabled"))
         }
-        if(json && images.isEmpty() && config.optString("provider") != "Dots") body.put("response_format", JSONObject().put("type", "json_object"))
+        if(json && config.optBoolean("jsonMode", true) && images.isEmpty() && config.optString("provider") != "Dots") body.put("response_format", JSONObject().put("type", "json_object"))
         val endpoint = config.getString("endpoint").trim()
         val credential = AIAuthentication.credential(endpoint, config.optString("auth", "Bearer"), config.optString("header", "Authorization"), key)
         val bytes = execute(endpoint, credential.key, body, credential.header, credential.bearer, AIAuthentication.officialDeepSeek(endpoint))
@@ -65,7 +69,7 @@ fun providerConfig(provider: String) = JSONObject().apply {
     put("provider", provider); put("auth", if(provider == "Dots") "api-key" else "Bearer"); put("header", "Authorization")
     put("endpoint", when(provider) { "DeepSeek" -> "https://api.deepseek.com/chat/completions"; "Dots" -> "https://note3-prev-api.askdiandian.com/v1/chat/completions"; "智谱 GLM" -> "https://open.bigmodel.cn/api/paas/v4/chat/completions"; else -> "https://example.com/v1/chat/completions" })
     put("model", when(provider) { "DeepSeek" -> "deepseek-flash"; "Dots" -> "dots3-note-prev"; "智谱 GLM" -> "glm-4.6v-flash"; else -> "" })
-    put("vision", true); put("maxPhotos", 6); put("maxTokens", 4096); put("temperature", 0.2); put("instructions", ""); put("canWrite", false)
+    put("vision", true); put("maxPhotos", 6); put("maxTokens", 4096); put("temperature", 0.2); put("instructions", ""); put("canWrite", false); put("sendTemperature", true); put("jsonMode", true); put("tokenParameter", "max_tokens"); put("extraBody", "{}")
 }
 fun parseObject(text: String): JSONObject {
     val trimmed = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
@@ -122,4 +126,11 @@ object AgentActions {
 训练字段 bodyParts 数组、exercises:[{name,bodyPart,sets:[{reps,weight,durationSeconds}]}]、note。未知逐组数值为 null，不编造。动作库 name、bodyPart，清空用 clearBodyPart。
 目标字段 displayName、fitnessGoal(增肌/减脂/维持)、height、baselineWeight、targetWeight、weeklyWeightTarget、calorieGoal、proteinGoal、carbsGoal、fatGoal。
 优先使用常用餐食的固定营养。不得声称已执行，App 会在复核保存后显示回执。"""
+}
+
+fun apiScope(config: JSONObject): String = "ai." + config.optString("provider") + "." + java.security.MessageDigest.getInstance("SHA-256").digest(config.optString("endpoint").trim().toByteArray()).joinToString("") { "%02x".format(it) }
+fun syncScope(base: String, key: String): String = java.security.MessageDigest.getInstance("SHA-256").digest((base.trimEnd('/') + "\n" + key).toByteArray()).joinToString("") { "%02x".format(it) }
+fun validateHTTPS(endpoint: String) {
+    val url = java.net.URI(endpoint.trim())
+    require(url.scheme == "https" && !url.host.isNullOrBlank() && url.userInfo == null && url.fragment == null) { "请填写不含用户名和片段的完整 HTTPS 地址" }
 }

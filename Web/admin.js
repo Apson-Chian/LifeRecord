@@ -5,7 +5,8 @@ let profileVersion = null;
 let pendingAIPlan = [];
 let selectedTrend = { weight: null, bodyFat: null };
 let calendarSelection = dateKey(new Date());
-const recordKeys = { meal: 'meals', body: 'bodyMetrics' };
+let adminPage=1;
+const recordKeys = { meal: 'meals', body: 'bodyMetrics', workout: 'workoutEntries' };
 const fieldLabels = { name:'餐食名称',kind:'餐次',date:'时间',endDate:'结束时间',bodyParts:'训练部位',exercises:'训练动作与部位',weight:'体重 kg',bodyFat:'体脂率 %',waist:'腰围 cm',calories:'热量 kcal',protein:'蛋白质 g',carbs:'碳水 g',fat:'脂肪 g',fiber:'膳食纤维 g',note:'备注',source:'来源',photoIDs:'照片',displayName:'称呼',fitnessGoal:'健身目标',height:'身高 cm',baselineWeight:'起始体重 kg',targetWeight:'目标体重 kg',weeklyWeightTarget:'每周变化 kg',calorieGoal:'热量目标',proteinGoal:'蛋白质目标',carbsGoal:'碳水目标',fatGoal:'脂肪目标' };
 const profileFields = Object.keys(defaultSettings).filter(key => key !== 'id');
 const localDateTime = timestamp => {
@@ -23,7 +24,7 @@ async function saveAdminActions(actions) {
     while (syncInFlight) await new Promise(resolve => setTimeout(resolve, 30));
     syncInFlight = true;
     const result = await api('/admin', {method:'POST', body:JSON.stringify({actions})});
-    state = result;
+    state = cleanSnapshot(result); snapshotETag='';nextSyncAt=Date.now()+15000;
     touchLocalState();
     render();
     setSyncStatus(`已同步 · ${fmtSyncTime()}`, 'synced');
@@ -81,10 +82,14 @@ function renderBodyTrends() {
 function renderAdminRows() {
   const kind = $('#adminRecordType').value;
   const search = $('#adminSearch').value.trim().toLowerCase();
-  const records = [...state[recordKeys[kind]]].sort((a,b)=>b.date-a.date).filter(item=>`${fmtShortDate(item.date)} ${new Date(item.date*1000).toLocaleDateString('sv')} ${item.weight??''} ${item.bodyFat??''} ${item.note}`.toLowerCase().includes(search));
-  $('#adminHead').innerHTML = '<tr><th>测量 / 记录时间</th><th>体重 kg</th><th>体脂率 %</th><th>腰围 cm</th><th>备注</th><th>操作</th></tr>';
-  $('#adminRows').innerHTML = records.map(item=>`<tr><td>${fmtShortDate(item.date)}</td><td>${Number(item.weight).toFixed(1)}</td><td>${item.bodyFat==null?'未测量':Number(item.bodyFat).toFixed(1)}</td><td>${item.waist==null?'—':Number(item.waist).toFixed(1)}</td><td class="record-note">${escapeHtml(item.note||'—')}</td><td><button class="text-button" data-admin-edit="body" data-record-id="${item.id}">编辑</button><button class="delete-record" data-admin-delete="body" data-record-id="${item.id}">删除</button></td></tr>`).join('') || `<tr><td colspan="6"><div class="empty">暂无匹配记录</div></td></tr>`;
-  $('#adminCount').textContent = `共 ${records.length} 条 · 时间从新到旧`;
+  const records = [...(state[recordKeys[kind]] || [])].sort((a,b)=>b.date-a.date).filter(item=>`${fmtShortDate(item.date)} ${new Date(item.date*1000).toLocaleDateString('sv')} ${item.weight??''} ${item.bodyFat??''} ${item.note||''} ${(item.bodyParts||[]).join(' ')} ${(item.exercises||[]).map(x=>x.name).join(' ')}`.toLowerCase().includes(search));
+  adminPage=Math.min(Math.max(1,adminPage),Math.max(1,Math.ceil(records.length/PAGE_SIZE)));
+  const visible=records.slice((adminPage-1)*PAGE_SIZE,adminPage*PAGE_SIZE);
+  $('#adminHead').innerHTML=kind==='body'?'<tr><th>测量 / 记录时间</th><th>体重 kg</th><th>体脂率 %</th><th>腰围 cm</th><th>备注</th><th>操作</th></tr>':'<tr><th>开始时间</th><th>时长</th><th>训练部位</th><th>动作 / 组数</th><th>备注</th><th>操作</th></tr>';
+  $('#adminRows').innerHTML=visible.map(item=>`<tr><td>${fmtShortDate(item.date)}</td>${kind==='body'?`<td>${Number(item.weight).toFixed(1)}</td><td>${item.bodyFat==null?'未测量':Number(item.bodyFat).toFixed(1)}</td><td>${item.waist==null?'—':Number(item.waist).toFixed(1)}</td>`:`<td>${item.endDate==null?'未结束':Math.max(0,Math.round((item.endDate-item.date)/60))+' 分钟'}</td><td>${escapeHtml((item.bodyParts||[]).join('、')||'未分类')}</td><td>${(item.exercises||[]).length} 动作 / ${(item.exercises||[]).reduce((sum,x)=>sum+(x.sets||[]).length,0)} 组</td>`}<td class="record-note">${escapeHtml(item.note||'—')}</td><td><button class="text-button" data-admin-edit="${kind}" data-record-id="${item.id}">编辑</button><button class="delete-record" data-admin-delete="${kind}" data-record-id="${item.id}">删除</button></td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">暂无匹配记录</div></td></tr>';
+  $('#adminCount').textContent=`共 ${records.length} 条 · 时间从新到旧`;
+  $('#adminPageLabel').textContent=`${adminPage} / ${Math.max(1,Math.ceil(records.length/PAGE_SIZE))} 页`;
+  $('#adminPrev').disabled=adminPage===1;$('#adminNext').disabled=adminPage*PAGE_SIZE>=records.length;
 }
 
 function renderRecordCalendar() {
@@ -111,13 +116,15 @@ function editBodyRecord(original = null) {
 async function deleteAdminRecord(kind, id) {
   const original=state[recordKeys[kind]].find(x=>x.id===id);
   if(!original) return;
+  const label=kind==='meal'?original.name:kind==='workout'?'训练记录':'身体测量';
+  if(!confirm(`删除「${label}」\n${fmtShortDate(original.date)} 的这条记录？删除会同步到其他设备。`)) return;
   try { await saveAdminActions([recordAction(kind,original,{},'delete')]); $('#detailDialog').close(); showToast('记录已删除并同步'); }
   catch(error) { showToast(error.message); }
 }
 
 document.addEventListener('click', event => {
   const edit=event.target.closest('[data-admin-edit]');
-  if(edit) { const kind=edit.dataset.adminEdit, item=state[recordKeys[kind]].find(x=>x.id===edit.dataset.recordId); if(item && kind==='body') editBodyRecord(item); }
+  if(edit) { const kind=edit.dataset.adminEdit, item=state[recordKeys[kind]].find(x=>x.id===edit.dataset.recordId); if(item && kind==='body') editBodyRecord(item); else if(item && kind==='workout') editWorkoutRecord(item); }
   const del=event.target.closest('[data-admin-delete]'); if(del) deleteAdminRecord(del.dataset.adminDelete,del.dataset.recordId);
   const point=event.target.closest('[data-trend-id]'); if(point) { selectedTrend[point.dataset.trendKey]=point.dataset.trendId; renderBodyTrends(); }
   const day=event.target.closest('[data-record-day]'); if(day) { calendarSelection=day.dataset.recordDay; renderRecordCalendar(); }
@@ -125,8 +132,10 @@ document.addEventListener('click', event => {
 });
 document.addEventListener('keydown', event=>{const point=event.target.closest('[data-trend-id]'); if(point && ['Enter',' '].includes(event.key)) {event.preventDefault(); selectedTrend[point.dataset.trendKey]=point.dataset.trendId; renderBodyTrends(); document.querySelector(`[data-trend-key="${point.dataset.trendKey}"][data-trend-id="${point.dataset.trendId}"]`)?.focus();}});
 $('#trendRange').addEventListener('change',renderBodyTrends);
-$('#adminSearch').addEventListener('input',renderAdminRows);
-$('#adminRecordType').addEventListener('change',renderAdminRows);
+$('#adminSearch').addEventListener('input',()=>{adminPage=1;renderAdminRows();});
+$('#adminRecordType').addEventListener('change',()=>{adminPage=1;renderAdminRows();});
+$('#adminPrev').addEventListener('click',()=>{adminPage--;renderAdminRows();});
+$('#adminNext').addEventListener('click',()=>{adminPage++;renderAdminRows();});
 $('#newBodyRecord').addEventListener('click',()=>editBodyRecord());
 function displayField(key,value) {
   if(value==null) return '未填写';
@@ -140,18 +149,19 @@ $('#aiForm').addEventListener('submit',async event=>{
   event.preventDefault(); const button=$('#aiGenerate'); button.disabled=true; button.textContent='正在生成…';
   pendingAIPlan=[]; $('#aiApply').hidden=true; $('#aiPlan').innerHTML=''; $('#aiStatus').classList.remove('success'); $('#aiStatus').textContent='正在分析记录，通常需要几十秒…';
   try {
-    const result=await api('/ai/plan',{method:'POST',body:JSON.stringify({instruction:$('#aiInstruction').value,provider:$('#aiProvider').value,model:$('#aiModel').value,apiKey:$('#aiKey').value,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone})});
+    const result=await api('/ai/plan',{method:'POST',body:JSON.stringify({...readAPIConfig(),instruction:$('#aiInstruction').value,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone})});
     pendingAIPlan=result.actions||[]; $('#aiStatus').textContent='';
     $('#aiPlan').innerHTML=`<p class="ai-answer">${escapeHtml(result.answer)}</p>${pendingAIPlan.map(action=>`<article class="change-preview"><h4>${{add:'新增',update:'修改',delete:'删除'}[action.operation]} · ${{meal:'餐食',body:'身体测量',workout:'训练',settings:'个人档案与目标'}[action.recordType]}</h4><p>${escapeHtml(action.before?.name|| (action.before?.date?fmtShortDate(action.before.date):''))}</p>${action.operation==='delete'?'<p class="form-error">这条记录将被删除。</p>':`<dl>${Object.entries(action.fields).map(([key,value])=>`<div><dt>${escapeHtml(fieldLabels[key]||key)}</dt><dd><span>${escapeHtml(displayField(key,action.before?.[key]))}</span> → <strong>${escapeHtml(displayField(key,value))}</strong></dd></div>`).join('')}</dl>`}</article>`).join('')}`;
     $('#aiApply').hidden=!pendingAIPlan.length;
   } catch(error) {$('#aiStatus').textContent=error.message;} finally {button.disabled=false; button.textContent='生成修改预览';}
 });
 $('#aiApply').addEventListener('click',async()=>{
+  if(pendingAIPlan.some(x=>x.operation==='delete')&&!confirm('这批 AI 修改包含删除记录，确认应用全部修改？')) return;
   const button=$('#aiApply'); button.disabled=true;
   try { await saveAdminActions(pendingAIPlan.map(({operation,recordType,recordID,expectedUpdatedAt,fields})=>({operation,recordType,recordID,expectedUpdatedAt,fields}))); const count=pendingAIPlan.length; pendingAIPlan=[]; button.hidden=true; $('#aiStatus').classList.add('success'); $('#aiStatus').textContent=`已应用 ${count} 项修改并同步`; $('#aiPlan').innerHTML=''; }
   catch(error) {$('#aiStatus').textContent=error.message;} finally {button.disabled=false;}
 });
 // Editing a prompt invalidates its old preview, preventing an accidental apply.
 $('#aiInstruction').addEventListener('input',()=>{pendingAIPlan=[];$('#aiApply').hidden=true;$('#aiPlan').innerHTML='';});
-$('#aiProvider').addEventListener('change',()=>{$('#aiKey').value='';$('#aiModel').value='';});
+
 renderAdmin();

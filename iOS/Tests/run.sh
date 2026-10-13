@@ -13,6 +13,7 @@ check() {
   echo "PASS: $name"
 }
 
+check settings-privacy LifeRecord/Services/AppSettings.swift LifeRecord/Services/AIAuthentication.swift
 check ai-authentication LifeRecord/Services/AIAuthentication.swift
 check body-trend LifeRecord/Services/BodyTrend.swift
 check favorite-food-storage LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift

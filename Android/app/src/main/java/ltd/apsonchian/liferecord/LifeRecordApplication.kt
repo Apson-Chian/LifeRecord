@@ -10,5 +10,5 @@ class LifeRecordApplication : Application() {
     val store by lazy { Store(this) }
     val secrets by lazy { Secrets(this) }
     val photos by lazy { Photos(this) }
-    val network by lazy { Network() }
+    val network by lazy { Network(baseURL = { store.get("sync.base", Network.BASE) }) }
 }

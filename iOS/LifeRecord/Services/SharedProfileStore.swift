@@ -35,6 +35,11 @@ enum SharedProfileStore {
         static let updatedAt = "profile.updatedAt"
     }
 
+    static func clear() {
+        guard let suite else { return }
+        for key in suite.dictionaryRepresentation().keys where key.hasPrefix("profile.") || key.hasPrefix("daily.") { suite.removeObject(forKey:key) }
+    }
+
     static var isAvailable: Bool { suite != nil }
 
     @MainActor

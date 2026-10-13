@@ -1,3 +1,5 @@
+1.4.0-beta：结构化 SQLite 迁移、独立账号与 API 地址密钥隔离、外观和接口兼容设置。[公开测试说明](../Docs/public-beta.md)。
+
 # LifeRecord Android
 
 原生 Kotlin + Jetpack Compose 安卓客户端，最低 Android 8.0（API 26）。工程与原有 iOS、Web、后端并列，不包含 LifeTrack App Group、跳转或联动逻辑。

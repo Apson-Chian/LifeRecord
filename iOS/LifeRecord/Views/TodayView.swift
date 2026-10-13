@@ -14,7 +14,7 @@ struct TodayView: View {
 
     @State private var selectedDate = Date.now
     @State private var activeSheet: SheetDestination?
-    @State private var lifeTrackActivity = SharedProfileStore.lifeTrackActivity()
+    @State private var lifeTrackActivity: SharedProfileStore.LifeTrackActivitySnapshot? = nil
 
     private enum SheetDestination: String, Identifiable {
         case meal, weight
@@ -95,13 +95,13 @@ struct TodayView: View {
             .onReceive(router.$reminderRoute.compactMap { $0 }) { _ in selectedDate = .now }
             .onAppear {
                 publishSharedDailySummary()
-                lifeTrackActivity = SharedProfileStore.lifeTrackActivity()
+                lifeTrackActivity = settings.shareWithLifeTrack ? SharedProfileStore.lifeTrackActivity() : nil
             }
             .onChange(of: selectedMeals.count) { _, _ in publishSharedDailySummary() }
             .onChange(of: selectedDate) { _, _ in publishSharedDailySummary() }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
-                    lifeTrackActivity = SharedProfileStore.lifeTrackActivity()
+                    lifeTrackActivity = settings.shareWithLifeTrack ? SharedProfileStore.lifeTrackActivity() : nil
                 }
             }
             .sheet(item: $activeSheet) { destination in
@@ -250,7 +250,7 @@ struct TodayView: View {
     }
 
     private func publishSharedDailySummary() {
-        SharedProfileStore.publishDailySummary(date: selectedDate, nutrition: nutrition)
+        if settings.shareWithLifeTrack { SharedProfileStore.publishDailySummary(date: selectedDate, nutrition: nutrition) }
     }
 
     private var macroCard: some View {

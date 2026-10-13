@@ -10,6 +10,30 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class StorageTest {
+    @Test fun oldJsonStoreMigratesToTypedFieldsWithoutLosingNestedData() {
+        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val name="migration-${java.util.UUID.randomUUID()}.db"
+        val record=Record.create(RecordType.WORKOUT).apply { json.put("bodyParts",JSONArray().put("背部"));json.put("exercises",JSONArray().put(JSONObject().put("name","划船").put("sets",JSONArray().put(JSONObject().put("weight",40).put("reps",8).put("durationSeconds",JSONObject.NULL))))) }
+        try {
+            app.openOrCreateDatabase(name,android.content.Context.MODE_PRIVATE,null).use { db ->
+                db.execSQL("CREATE TABLE records(type TEXT,id TEXT,payload TEXT,PRIMARY KEY(type,id))")
+                db.execSQL("CREATE TABLE values_store(name TEXT PRIMARY KEY,payload TEXT)")
+                db.execSQL("INSERT INTO records VALUES(?,?,?)",arrayOf(record.type.name,record.id,record.json.toString()))
+                db.execSQL("INSERT INTO values_store VALUES(?,?)",arrayOf("profile",defaultProfile().toString()))
+                db.version=1
+            }
+            Store(app,name).use { store ->
+                val saved=store.load().records.single()
+                assertEquals(record.id,saved.id)
+                assertEquals(40.0,saved.json.getJSONArray("exercises").getJSONObject(0).getJSONArray("sets").getJSONObject(0).getDouble("weight"),0.0)
+                assertTrue(saved.json.getJSONArray("exercises").getJSONObject(0).getJSONArray("sets").getJSONObject(0).isNull("durationSeconds"))
+                store.readableDatabase.rawQuery("PRAGMA table_info(records)",null).use { c -> while(c.moveToNext()) assertNotEquals("payload",c.getString(1)) }
+                store.set("test.chat","[{\"role\":\"user\",\"content\":\"hello\"}]")
+                assertEquals("hello",JSONArray(store.get("test.chat")).getJSONObject(0).getString("content"))
+                store.clearAll();assertTrue(store.load().records.isEmpty());assertEquals("",store.get("test.chat"))
+            }
+        } finally { app.deleteDatabase(name) }
+    }
     @Test fun databaseReopenPreservesOriginalIdAndOptionalFields() {
         val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
         val r=Record.create(RecordType.BODY).apply { json.put("weight",72.3);json.put("bodyFat",JSONObject.NULL);json.put("waist",81.0) }
@@ -25,7 +49,7 @@ class StorageTest {
     @Test fun secretsAreIsolatedByProviderAndPersistAcrossInstances() {
         val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
         app.secrets.save("test.deepseek","test-a");app.secrets.save("test.glm","test-b")
-        try { val reopened=Secrets(app);assertEquals("test-a",reopened.get("test.deepseek"));assertEquals("test-b",reopened.get("test.glm")) } finally { app.secrets.save("test.deepseek","");app.secrets.save("test.glm","") }
+        try { val reopened=Secrets(app);assertEquals("test-a",reopened.get("test.deepseek"));assertEquals("test-b",reopened.get("test.glm"));reopened.clear();assertEquals("",reopened.get("test.deepseek"));assertEquals("",reopened.get("test.glm")) } finally { app.secrets.save("test.deepseek","");app.secrets.save("test.glm","") }
     }
     @Test fun chatPhotosPersistAcrossInstancesAndDeleteIndividually() {
         val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()

@@ -29,7 +29,6 @@ struct RootView: View {
         .environmentObject(coachTaskCenter)
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
-            DemoDataService.installIfNeeded(context: modelContext)
             refreshReminders()
             await syncCoordinator.sync(context: modelContext, settings: settings)
             while !Task.isCancelled {

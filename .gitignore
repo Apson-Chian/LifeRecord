@@ -16,3 +16,6 @@ Android/**/build/
 *.jks
 *.keystore
 Android/dist/
+
+# Local test distributions and private invitation credentials
+/dist/

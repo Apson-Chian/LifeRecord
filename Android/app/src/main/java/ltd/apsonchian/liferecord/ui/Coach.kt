@@ -100,7 +100,7 @@ import ltd.apsonchian.liferecord.data.*
                     Text(if(config.optBoolean("canWrite")) "今天想聊什么？" else "AI 助手",fontSize=22.sp,fontWeight=FontWeight.Bold)
                 }
                 Text(if(config.optBoolean("vision")) "可以发送食物、配料表、营养表或训练截图，也可以让我替你记录数据。" else "当前模型未开启图片输入，请在设置中切换多模态模型。",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                val prompts=listOf("帮我记录今天晨重 64.2kg","分析今天是否适合加餐","看这张配料表是否适合增肌")
+                val prompts=listOf("分析最近的身体趋势","分析今天是否适合加餐","看看这张配料表")
                 prompts.chunked(2).forEach { row -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     row.forEach { prompt ->
                         Box(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha=.6f)).clickable {text=prompt;inputFocus.requestFocus();keyboard?.show()}.defaultMinSize(minHeight=52.dp).padding(horizontal=11.dp,vertical=8.dp),contentAlignment=Alignment.CenterStart) {

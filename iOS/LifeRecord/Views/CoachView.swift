@@ -30,7 +30,7 @@ struct CoachView: View {
     @State private var handledRouteID: UUID?
     @FocusState private var composerFocused: Bool
 
-    private let suggestions = ["帮我记录今天晨重 64.2kg", "分析今天是否适合加餐", "看这张配料表是否适合增肌"]
+    private let suggestions = ["分析最近的身体趋势", "分析今天是否适合加餐", "看看这张配料表"]
 
     private var activeConversation: CoachConversation? {
         conversations.first(where: { $0.id == activeConversationID }) ?? conversations.first

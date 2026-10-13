@@ -72,6 +72,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
 @MainActor
 @Observable
 final class AppSettings {
+    private let defaults: UserDefaults
     private enum Key {
         static let calorieGoal = "calorieGoal"
         static let proteinGoal = "proteinGoal"
@@ -113,10 +114,19 @@ final class AppSettings {
         didSet {
             save(provider.rawValue, Key.provider)
             guard provider != oldValue else { return }
-            endpoint = provider.endpoint
-            model = provider.model
-            authStyle = provider.authStyle
-            supportsVision = provider.supportsVisionByDefault
+            let previous: [String: Any] = ["endpoint":endpoint,"model":model,"auth":authStyle.rawValue,"header":customHeaderName,"vision":supportsVision,"extra":extraBody,"tokens":maxTokens,"parameter":tokenParameter,"json":jsonMode,"temperatureEnabled":sendTemperature]
+            defaults.set(previous, forKey: "ai.profile.\(oldValue.keychainID)")
+            let saved = defaults.dictionary(forKey: "ai.profile.\(provider.keychainID)") ?? [:]
+            endpoint = saved["endpoint"] as? String ?? provider.endpoint
+            model = saved["model"] as? String ?? provider.model
+            authStyle = AIAuthStyle(rawValue: saved["auth"] as? String ?? "") ?? provider.authStyle
+            customHeaderName = saved["header"] as? String ?? "Authorization"
+            supportsVision = saved["vision"] as? Bool ?? provider.supportsVisionByDefault
+            extraBody = saved["extra"] as? String ?? "{}"
+            maxTokens = saved["tokens"] as? Int ?? 4096
+            tokenParameter = saved["parameter"] as? String ?? "max_tokens"
+            jsonMode = saved["json"] as? Bool ?? true
+            sendTemperature = saved["temperatureEnabled"] as? Bool ?? true
         }
     }
     var endpoint: String { didSet { save(endpoint, Key.endpoint) } }
@@ -130,20 +140,38 @@ final class AppSettings {
     var customInstructions: String { didSet { save(customInstructions, Key.customInstructions) } }
     var aiCanWrite: Bool { didSet { save(aiCanWrite, Key.aiCanWrite) } }
 
+    var appearance: String { didSet { save(appearance, "appearance") } }
+    var accentColor: String { didSet { save(accentColor, "accentColor") } }
+    var syncBaseURL: String { didSet { save(syncBaseURL, "sync.base") } }
+    var shareWithLifeTrack: Bool { didSet { save(shareWithLifeTrack, "shareWithLifeTrack"); if !shareWithLifeTrack { SharedProfileStore.clear() } else { publishSharedProfile() } } }
+    var tokenParameter: String { didSet { save(tokenParameter, "ai.tokenParameter") } }
+    var jsonMode: Bool { didSet { save(jsonMode, "ai.jsonMode") } }
+    var sendTemperature: Bool { didSet { save(sendTemperature, "ai.sendTemperature") } }
+    var extraBody: String { didSet { save(extraBody, "ai.extraBody") } }
+
     init(defaults: UserDefaults = .standard) {
-        // 181 cm / 64 kg 的增肌起始模板；每一项都可以在设置中修改。
-        calorieGoal = defaults.object(forKey: Key.calorieGoal) as? Double ?? 2600
-        proteinGoal = defaults.object(forKey: Key.proteinGoal) as? Double ?? 130
-        carbsGoal = defaults.object(forKey: Key.carbsGoal) as? Double ?? 340
-        fatGoal = defaults.object(forKey: Key.fatGoal) as? Double ?? 70
-        targetWeight = defaults.object(forKey: Key.targetWeight) as? Double ?? 72
-        height = defaults.object(forKey: Key.height) as? Double ?? 181
-        baselineWeight = defaults.object(forKey: Key.baselineWeight) as? Double ?? 64
-        weeklyWeightTarget = defaults.object(forKey: Key.weeklyWeightTarget) as? Double ?? 0.25
-        fitnessGoal = FitnessGoal(rawValue: defaults.string(forKey: Key.fitnessGoal) ?? "") ?? .gainMuscle
+        self.defaults = defaults
+        appearance = defaults.string(forKey: "appearance") ?? "system"
+        accentColor = defaults.string(forKey: "accentColor") ?? "purple"
+        syncBaseURL = defaults.string(forKey: "sync.base") ?? "https://apsonchian.ltd/liferecord-api"
+        shareWithLifeTrack = defaults.bool(forKey: "shareWithLifeTrack")
+        tokenParameter = defaults.string(forKey: "ai.tokenParameter") ?? "max_tokens"
+        jsonMode = defaults.object(forKey: "ai.jsonMode") as? Bool ?? true
+        sendTemperature = defaults.object(forKey: "ai.sendTemperature") as? Bool ?? true
+        extraBody = defaults.string(forKey: "ai.extraBody") ?? "{}"
+        // Neutral placeholders; users should fill their own measurements and goals.
+        calorieGoal = defaults.object(forKey: Key.calorieGoal) as? Double ?? 2000
+        proteinGoal = defaults.object(forKey: Key.proteinGoal) as? Double ?? 100
+        carbsGoal = defaults.object(forKey: Key.carbsGoal) as? Double ?? 250
+        fatGoal = defaults.object(forKey: Key.fatGoal) as? Double ?? 60
+        targetWeight = defaults.object(forKey: Key.targetWeight) as? Double ?? 70
+        height = defaults.object(forKey: Key.height) as? Double ?? 170
+        baselineWeight = defaults.object(forKey: Key.baselineWeight) as? Double ?? 70
+        weeklyWeightTarget = defaults.object(forKey: Key.weeklyWeightTarget) as? Double ?? 0
+        fitnessGoal = FitnessGoal(rawValue: defaults.string(forKey: Key.fitnessGoal) ?? "") ?? .maintain
         displayName = defaults.string(forKey: Key.displayName) ?? ""
         let savedProfileTimestamp = defaults.double(forKey: Key.profileUpdatedAt)
-        profileUpdatedAt = savedProfileTimestamp > 0 ? Date(timeIntervalSince1970: savedProfileTimestamp) : .now
+        profileUpdatedAt = savedProfileTimestamp > 0 ? Date(timeIntervalSince1970: savedProfileTimestamp) : Date(timeIntervalSince1970:1)
 
         let savedProvider = AIProvider(rawValue: defaults.string(forKey: Key.provider) ?? "") ?? .glm
         let savedModel = defaults.string(forKey: Key.model)
@@ -170,8 +198,24 @@ final class AppSettings {
         temperature = defaults.object(forKey: Key.temperature) as? Double ?? 0.2
         maxTokens = defaults.object(forKey: Key.maxTokens) as? Int ?? 1600
         customInstructions = defaults.string(forKey: Key.customInstructions) ?? ""
-        aiCanWrite = defaults.object(forKey: Key.aiCanWrite) as? Bool ?? true
+        aiCanWrite = defaults.object(forKey: Key.aiCanWrite) as? Bool ?? false
+        if !shareWithLifeTrack { SharedProfileStore.clear() }
         publishSharedProfile()
+    }
+
+    func resetAfterLocalDeletion() {
+        isApplyingSyncedProfile=true
+        displayName="";fitnessGoal = .maintain
+        height=170;baselineWeight=70;targetWeight=70;weeklyWeightTarget=0
+        calorieGoal=2000;proteinGoal=100;carbsGoal=250;fatGoal=60
+        provider = .deepSeek;endpoint=provider.endpoint;model=provider.model;authStyle = .bearer;customHeaderName="Authorization"
+        customInstructions="";aiCanWrite=false;supportsVision=true;maxPhotos=6;maxTokens=4096;temperature=0.2
+        extraBody="{}";tokenParameter="max_tokens";jsonMode=true;sendTemperature=true
+        shareWithLifeTrack=false;appearance="system";accentColor="purple"
+        syncBaseURL="https://apsonchian.ltd/liferecord-api"
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("ai.profile.") { defaults.removeObject(forKey:key) }
+        profileUpdatedAt=Date(timeIntervalSince1970:1);save(1.0,Key.profileUpdatedAt)
+        isApplyingSyncedProfile=false
     }
 
     func applyGoalTemplate(_ goal: FitnessGoal) {
@@ -187,7 +231,7 @@ final class AppSettings {
     }
 
     private func publishSharedProfile() {
-        SharedProfileStore.publish(self)
+        if shareWithLifeTrack { SharedProfileStore.publish(self) }
     }
 
     func applySyncedProfile(_ profile: SyncedProfile, updatedAt: Date) {
@@ -216,6 +260,6 @@ final class AppSettings {
     }
 
     private func save(_ value: Any, _ key: String) {
-        UserDefaults.standard.set(value, forKey: key)
+        defaults.set(value, forKey: key)
     }
 }
