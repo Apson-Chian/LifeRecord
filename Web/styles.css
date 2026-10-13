@@ -571,6 +571,9 @@ button:disabled { cursor: default; opacity: .6; }
 .settings-section { padding: 20px 0; border-top: 1px solid var(--line); }
 .settings-section h3 { margin: 0 0 10px; font-size: 16px; }
 .settings-section .upload-hint { line-height: 1.7; }
+.settings-section .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.settings-section .actions button { min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+.settings-section .actions button:disabled { opacity: .45; cursor: default; }
 .settings-actions { display: grid; gap: 10px; }
 .settings-actions button, .danger-section button { min-height: 44px; text-align: left; }
 .settings-section .checkbox-label { display: flex; align-items: center; gap: 10px; min-height: 44px; }

@@ -25,3 +25,5 @@
 ## 验证与分支
 
 `main` 的提交说明为“优化api设置”。网页回归覆盖配置新增、更新、删除、页面刷新恢复及密钥不持久化；iOS 回归覆盖配置切换、重启恢复、旧预设迁移及清除本机数据；Android 回归覆盖旧预设迁移与兼容参数。iOS 模拟器构建、Swift 回归、Android Debug 构建/单元测试/lint 和网页回归通过。未调用真实计费 AI。本次更新以仓库源码为交付，默认服务分支的部署需要单独切换服务端版本。
+
+主网站 API 设置优化与手机配置按钮样式已上线：https://apsonchian.ltd/liferecord/ 。不要求用户提供 AI Key 的独立版本已在 `codex/default-ai-service` 分支提供，并部署到 https://apsonchian.ltd/liferecord-default/ 。默认服务的私有配置、额度、真实请求验证及分发记录见[分支交付说明](https://github.com/Apson-Chian/LifeRecord/blob/codex/default-ai-service/Docs/default-ai-service.md)。服务器当前运行该分支的兼容后端，同时支持两个网页版本；重部署 main 后端会移除默认服务路由，部署时需保留默认服务模块。
