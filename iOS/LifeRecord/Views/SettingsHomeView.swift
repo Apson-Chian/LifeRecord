@@ -4,6 +4,7 @@ import UIKit
 struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
+    @State private var showsCoachProfile = false
 
     var body: some View {
         NavigationStack {
@@ -33,6 +34,17 @@ struct SettingsView: View {
                 }
 
                 Section("智能与连接") {
+                    Button { showsCoachProfile = true } label: {
+                        HStack(spacing: 12) {
+                            CoachAvatarView(data: settings.coachAvatarData, size: 36)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("教练名称与头像").foregroundStyle(.primary)
+                                Text(settings.coachName).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                        }
+                    }
                     NavigationLink {
                         AISettingsView()
                     } label: {
@@ -81,6 +93,9 @@ struct SettingsView: View {
                         )
                     }
                 }
+            }
+            .sheet(isPresented: $showsCoachProfile) {
+                CoachProfileView(name: settings.coachName, avatarData: settings.coachAvatarData)
             }
             .scrollContentBackground(.hidden)
             .background { AppBackground() }

@@ -31,51 +31,6 @@ enum MealScanMode: String, CaseIterable, Identifiable {
     }
 }
 
-struct AIAgentReply: Codable {
-    var answer: String
-    var actions: [AIAgentAction] = []
-}
-
-struct AIAgentAction: Codable, Identifiable {
-    var id = UUID()
-    var type: String
-    var recordID: String?
-    var date: String?
-    var endDate: String?
-    var exercises: [WorkoutExercise]?
-    var bodyParts: [String]?
-    var bodyPart: String?
-    var clearBodyPart: Bool?
-    var mealKind: String?
-    var source: String?
-    var name: String?
-    var calories: Double?
-    var protein: Double?
-    var carbs: Double?
-    var fat: Double?
-    var fiber: Double?
-    var weight: Double?
-    var bodyFat: Double?
-    var waist: Double?
-    var clearBodyFat: Bool?
-    var clearWaist: Bool?
-    var displayName: String?
-    var fitnessGoal: String?
-    var height: Double?
-    var baselineWeight: Double?
-    var weeklyWeightTarget: Double?
-    var targetWeight: Double?
-    var calorieGoal: Double?
-    var proteinGoal: Double?
-    var carbsGoal: Double?
-    var fatGoal: Double?
-    var note: String?
-
-    enum CodingKeys: String, CodingKey {
-        case type, recordID, date, endDate, exercises, bodyParts, bodyPart, clearBodyPart, mealKind, source, name, calories, protein, carbs, fat, fiber, weight, bodyFat, waist, clearBodyFat, clearWaist, displayName, fitnessGoal, height, baselineWeight, weeklyWeightTarget, targetWeight, calorieGoal, proteinGoal, carbsGoal, fatGoal, note
-    }
-}
-
 enum AIClientError: LocalizedError {
     case missingKey
     case invalidEndpoint
@@ -246,7 +201,7 @@ struct AIClient {
         图片可能是食物、饮料、营养表、配料表、训练截图或用户希望你分析的任何内容。
         """
         let response = try await complete(
-            system: system,
+            system: system + "\n" + CoachMealRecorder.instructions,
             user: envelope,
             images: images,
             wantsJSON: true,

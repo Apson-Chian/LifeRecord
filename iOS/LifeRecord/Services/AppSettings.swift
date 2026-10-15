@@ -79,6 +79,7 @@ struct SavedAPIProfile: Codable, Identifiable {
 @MainActor
 @Observable
 final class AppSettings {
+    static let defaultCoachName = "AI 助手"
     private let defaults: UserDefaults
     private enum Key {
         static let calorieGoal = "calorieGoal"
@@ -102,6 +103,8 @@ final class AppSettings {
         static let maxTokens = "maxTokens"
         static let customInstructions = "customInstructions"
         static let aiCanWrite = "aiCanWrite"
+        static let coachName = "coach.name"
+        static let coachAvatar = "coach.avatar"
         static let profileUpdatedAt = "sync.profileUpdatedAt"
     }
 
@@ -148,6 +151,21 @@ final class AppSettings {
     var maxTokens: Int { didSet { save(maxTokens, Key.maxTokens) } }
     var customInstructions: String { didSet { save(customInstructions, Key.customInstructions) } }
     var aiCanWrite: Bool { didSet { save(aiCanWrite, Key.aiCanWrite) } }
+    private(set) var coachName: String { didSet { save(coachName, Key.coachName) } }
+    private(set) var coachAvatarData: Data? { didSet { defaults.set(coachAvatarData, forKey: Key.coachAvatar) } }
+
+    func updateCoachIdentity(name: String, avatarData: Data?) throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= 30,
+              !trimmed.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+            throw NSError(domain: "CoachSettings", code: 1, userInfo: [NSLocalizedDescriptionKey: "请填写 1–30 个字的教练名称，不包含换行。"])
+        }
+        guard (avatarData?.count ?? 0) <= 512_000 else {
+            throw NSError(domain: "CoachSettings", code: 2, userInfo: [NSLocalizedDescriptionKey: "头像过大，请重新选择照片。"])
+        }
+        coachName = trimmed
+        coachAvatarData = avatarData
+    }
 
     var appearance: String { didSet { save(appearance, "appearance") } }
     var accentColor: String { didSet { save(accentColor, "accentColor") } }
@@ -192,6 +210,9 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        let savedCoachName = defaults.string(forKey: Key.coachName)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        coachName = savedCoachName.isEmpty ? Self.defaultCoachName : savedCoachName
+        coachAvatarData = defaults.data(forKey: Key.coachAvatar)
         savedAPIProfiles = defaults.data(forKey:"ai.savedProfiles").flatMap { try? JSONDecoder().decode([SavedAPIProfile].self, from:$0) } ?? []
         imageDetail = defaults.string(forKey:"ai.imageDetail") ?? ""
         appearance = defaults.string(forKey: "appearance") ?? "system"
@@ -258,6 +279,7 @@ final class AppSettings {
         calorieGoal=2000;proteinGoal=100;carbsGoal=250;fatGoal=60
         provider = .deepSeek;endpoint=provider.endpoint;model=provider.model;authStyle = .bearer;customHeaderName="Authorization"
         customInstructions="";aiCanWrite=false;supportsVision=true;maxPhotos=6;maxTokens=4096;temperature=0.2
+        coachName = Self.defaultCoachName; coachAvatarData = nil
         savedAPIProfiles=[];imageDetail=""
         extraBody="{}";tokenParameter="max_tokens";jsonMode=true;sendTemperature=true
         shareWithLifeTrack=false;appearance="system";accentColor="purple"

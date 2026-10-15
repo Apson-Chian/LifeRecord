@@ -21,7 +21,7 @@ struct SyncedProfile: Codable {
 
 
 @main struct SettingsPrivacyChecks {
-    @MainActor static func main() {
+    @MainActor static func main() throws {
         let suite="liferecord-settings-test-"+UUID().uuidString
         let defaults=UserDefaults(suiteName:suite)!
         defer {defaults.removePersistentDomain(forName:suite)}
@@ -29,6 +29,21 @@ struct SyncedProfile: Codable {
         precondition(settings.height==170 && settings.baselineWeight==70 && settings.targetWeight==70)
         precondition(settings.fitnessGoal == .maintain && !settings.aiCanWrite && !settings.shareWithLifeTrack)
         precondition(settings.profileUpdatedAt.timeIntervalSince1970==1)
+        precondition(settings.coachName == AppSettings.defaultCoachName && settings.coachAvatarData == nil)
+        let avatar = Data([0x01, 0x02, 0x03])
+        try settings.updateCoachIdentity(name: "  小满教练  ", avatarData: avatar)
+        let coachRestored = AppSettings(defaults: defaults)
+        precondition(coachRestored.coachName == "小满教练" && coachRestored.coachAvatarData == avatar)
+        for (invalidName, invalidAvatar) in [("  ", avatar), (String(repeating: "长", count: 31), avatar), ("错误\n名称", avatar), ("新名称", Data(repeating: 0, count: 512_001))] {
+            do {
+                try settings.updateCoachIdentity(name: invalidName, avatarData: invalidAvatar)
+                preconditionFailure("Invalid coach identity should not save")
+            } catch { }
+            precondition(settings.coachName == "小满教练" && settings.coachAvatarData == avatar)
+        }
+        // Draft editing happens in the view; only an explicit save changes the persisted identity.
+        try settings.updateCoachIdentity(name: "小满教练", avatarData: nil)
+        precondition(AppSettings(defaults: defaults).coachAvatarData == nil)
         settings.provider = .custom
         settings.endpoint="https://gateway.test/v1/chat/completions";settings.model="private-model"
         settings.extraBody="{\"top_p\":0.8}";settings.tokenParameter="max_completion_tokens";settings.jsonMode=false;settings.sendTemperature=false
@@ -43,14 +58,19 @@ struct SyncedProfile: Codable {
         settings.model="updated-model";_ = try! settings.saveAPIProfile(name:"接口 A 更新",updating:first)
         let reopened=AppSettings(defaults:defaults);reopened.loadAPIProfile(first);precondition(reopened.model=="updated-model")
         reopened.loadAPIProfile(second);precondition(reopened.imageDetail=="medium" && reopened.model=="second-model")
+        precondition(reopened.coachName == "小满教练")
         settings.deleteAPIProfile(second);precondition(settings.savedAPIProfiles.count==1)
         settings.displayName="private name";settings.customInstructions="private preference";settings.height=188
         precondition(defaults.string(forKey:"displayName")=="private name")
+        try settings.updateCoachIdentity(name: "私人教练", avatarData: avatar)
         settings.resetAfterLocalDeletion()
         precondition(settings.displayName.isEmpty && settings.customInstructions.isEmpty && settings.height==170)
         precondition(settings.profileUpdatedAt.timeIntervalSince1970==1 && !settings.aiCanWrite && !settings.shareWithLifeTrack)
         precondition(!defaults.dictionaryRepresentation().keys.contains(where:{$0.hasPrefix("ai.profile.")}))
         precondition(settings.savedAPIProfiles.isEmpty)
+        precondition(settings.coachName == AppSettings.defaultCoachName && settings.coachAvatarData == nil)
+        let resetCoach = AppSettings(defaults: defaults)
+        precondition(resetCoach.coachName == AppSettings.defaultCoachName && resetCoach.coachAvatarData == nil)
         defaults.set("Dots",forKey:"provider");defaults.set(AIProvider.dots.endpoint,forKey:"endpoint");defaults.set("dots3-note-prev",forKey:"model")
         let migrated=AppSettings(defaults:defaults);precondition(migrated.provider == .custom && migrated.authStyle == .apiKey && !migrated.jsonMode && migrated.imageDetail=="medium")
         print("PASS: neutral defaults, opt-in sharing/writes, provider settings restore, isolated preferences, private settings reset")
