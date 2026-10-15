@@ -27,3 +27,4 @@ check workout-details LifeRecord/Services/WorkoutDetails.swift
 check workout-part-review LifeRecord/Services/WorkoutDetails.swift LifeRecord/Services/WorkoutPartReview.swift
 check workout-storage LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check workout-summary LifeRecord/Services/WorkoutSummary.swift
+check workout-calendar LifeRecord/Services/WorkoutDetails.swift LifeRecord/Services/WorkoutCalendar.swift

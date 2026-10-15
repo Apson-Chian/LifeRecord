@@ -93,6 +93,19 @@ struct WorkoutTrendCard: View {
                     Label("有训练进行中，结束后计入统计", systemImage: "timer").font(.caption).foregroundStyle(tint)
                 }
                 Divider().overlay(tint.opacity(0.06))
+                NavigationLink { WorkoutCalendarView() } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "calendar").font(.title3)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("训练日历").font(.subheadline.weight(.semibold))
+                            Text("按月查看训练量与训练内容").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(tint)
+                    .padding(.vertical, 4)
+                }
                 NavigationLink { detail } label: {
                     HStack {
                         Text("训练内容与明细")
