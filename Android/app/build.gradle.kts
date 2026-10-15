@@ -10,8 +10,8 @@ android {
         applicationId = "ltd.apsonchian.liferecord"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4.0-beta"
+        versionCode = 6
+        versionName = "1.4.0-beta.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
@@ -36,6 +36,7 @@ dependencies {
     testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.04.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }

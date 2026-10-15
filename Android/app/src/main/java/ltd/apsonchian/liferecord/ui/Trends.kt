@@ -37,12 +37,13 @@ import kotlinx.coroutines.delay
 import java.time.*
 import kotlin.math.abs
 
-@Composable fun Trends(vm: AppViewModel,s:Snapshot,detail:(Record)->Unit,coach:(String)->Unit,notify:(String)->Unit) {
+@Composable fun Trends(vm: AppViewModel,s:Snapshot,detail:(Record)->Unit,coach:(String)->Unit,notify:(String)->Unit,edit:(Record)->Unit=detail) {
     var range by rememberSaveable { mutableIntStateOf(30) }
     var details by rememberSaveable { mutableStateOf(false) }
     var measurement by rememberSaveable { mutableStateOf<String?>(null) }
     var quality by rememberSaveable { mutableStateOf(false) }
     var showReport by rememberSaveable { mutableStateOf(false) }
+    var showCalendar by rememberSaveable { mutableStateOf(false) }
     var at by remember { mutableDoubleStateOf(now()) }
     LaunchedEffect(Unit) { while(true) { delay(60_000); at=now() } }
     val acknowledged by vm.acknowledgedQuality.collectAsState()
@@ -56,6 +57,7 @@ import kotlin.math.abs
     val workouts=records.filter { it.type==RecordType.WORKOUT }.sortedByDescending { it.date }
     val feedback=GoalFeedback.summarize(s.records,s.profile,range,at,acknowledged)
     val pending=RecordQuality.issues(s.records,at).filter { it.id !in acknowledged }
+    if(showCalendar) { WorkoutCalendarPage(s.records,{showCalendar=false},edit); return }
     if(details) { RecordDataDetails(s,s.records.filter { !it.demo && it.date.day()>=start },{details=false},detail); return }
     measurement?.let { field -> MeasurementDetail(real,field,start,{measurement=null},detail); return }
     if(quality) { QualityReview(vm,s,{quality=false},detail,notify); return }
@@ -86,6 +88,11 @@ import kotlin.math.abs
             val byPart=workouts.flatMap {it.json.optJSONArray("bodyParts")?.strings().orEmpty().ifEmpty {it.json.optJSONArray("exercises")?.objects()?.map {ex -> ex.optString("bodyPart","未分类")}?.distinct().orEmpty()}}.groupingBy {it}.eachCount()
             if(byPart.isNotEmpty()) Text(byPart.entries.sortedByDescending {it.value}.joinToString(" · ") {"${it.key} ${it.value} 次"},style=MaterialTheme.typography.bodySmall)
             HorizontalDivider(color=MaterialTheme.colorScheme.onSurface.copy(alpha=.08f))
+            Row(Modifier.fillMaxWidth().clickable {showCalendar=true}.padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                AppIcon(Glyph.Calendar,teal,Modifier.size(24.dp))
+                Column(Modifier.weight(1f)) {Text("训练日历",style=MaterialTheme.typography.titleMedium,color=teal);Text("按月查看训练量与训练内容",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp))
+            }
             Row(Modifier.fillMaxWidth().clickable {details=true}.heightIn(min=30.dp),verticalAlignment=Alignment.CenterVertically) {Text("训练内容与明细",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.SemiBold),color=teal);AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp))}
         } }
         item { Panel {

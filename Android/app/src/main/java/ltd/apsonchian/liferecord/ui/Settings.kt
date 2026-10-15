@@ -159,20 +159,27 @@ import android.net.Uri
 }
 @Composable private fun CoachSettings(vm:AppViewModel,dismiss:()->Unit,openInterface:()->Unit,notify:(String)->Unit) {
     val current by vm.config.collectAsState()
+    val identity by vm.coachIdentity.collectAsState()
+    var showProfile by rememberSaveable {mutableStateOf(false)}
     var instructions by rememberSaveable { mutableStateOf(current.optString("instructions")) }
-    var canWrite by rememberSaveable { mutableStateOf(current.optBoolean("canWrite")) }
+    val canWrite=current.optBoolean("canWrite")
     var error by remember { mutableStateOf("") }
     fun save():Boolean = runCatching {
         vm.saveConfig(vm.config.value.copy().put("instructions",instructions).put("canWrite",canWrite),null)
     }.fold({true},{error=it.message.orEmpty();false})
     SettingsForm("教练与 AI",dismiss,{TextButton(onClick={if(save()) {dismiss();notify("教练偏好已保存")}}) {Text("保存")}}) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).clickable {showProfile=true}.padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            CoachAvatar(identity,36.dp);Text(identity.name,Modifier.weight(1f),style=MaterialTheme.typography.bodyLarge)
+            Text("名称与头像",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(12.dp))
+        }
         TextFieldRow("长期偏好，例如训练安排、忌口",instructions,{instructions=it},lines=3)
-        Toggle("允许 AI 提出写入操作","每次操作均需复核保存",canWrite,{canWrite=it})
+        Toggle("允许 AI 修改记录",if(canWrite) "按你的明确要求更改记录。" else "只读模式，仅分析和回答。",canWrite,{runCatching {vm.setCoachWrites(it)}.onFailure {error=it.message.orEmpty()}})
         SettingsGroup("AI 服务") {
             DestinationRow("接口与模型","${current.optString("provider")} · ${current.optString("model")}",Glyph.Coach,MaterialTheme.colorScheme.primary) { if(save()) openInterface() }
         }
         if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
     }
+    if(showProfile) CoachProfile(vm,{showProfile=false},notify)
 }
 
 @Composable fun AISettings(vm:AppViewModel,dismiss:()->Unit,notify:(String)->Unit) {

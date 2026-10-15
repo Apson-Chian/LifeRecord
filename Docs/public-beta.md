@@ -58,4 +58,4 @@ python3 Tests/android-sync.py
 node Tests/web-smoke.cjs
 ```
 
-APK 是调试测试包，非商店签名发布。iOS 工程可通过 Xcode 构建；对外通过 TestFlight 分发仍需要组织者自己的 Apple Developer 签名、上传和测试邀请。不要把开发者真机数据、同步密钥、服务端环境文件或 tester 凭证文件打入源码包或公开下载目录。
+初始 1.4 测试 APK 是调试构建；后续 [1.4.0-beta.2](android-release-1.4-beta2.md) 使用未启用调试的 Release 构建并在 GitHub Releases 分发，沿用旧测试签名，仍非应用商店生产发布。iOS 工程可通过 Xcode 构建；对外通过 TestFlight 分发仍需要组织者自己的 Apple Developer 签名、上传和测试邀请。不要把开发者真机数据、同步密钥、服务端环境文件或 tester 凭证文件打入源码包或公开下载目录。

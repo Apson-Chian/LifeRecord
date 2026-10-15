@@ -10,6 +10,21 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class StorageTest {
+    @Test fun privateCameraUriAcceptsPhotoAndDoesNotExposeMealOrDatabaseDirectories() {
+        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val uri=app.photos.captureUri()
+        try {
+            assertEquals("${app.packageName}.camera",uri.authority)
+            val bitmap=android.graphics.Bitmap.createBitmap(8,12,android.graphics.Bitmap.Config.ARGB_8888)
+            app.contentResolver.openOutputStream(uri)!!.use {bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it)};bitmap.recycle()
+            assertTrue(app.photos.read(uri).isNotEmpty())
+            val avatar=app.photos.readAvatar(uri);assertTrue(avatar.size<=512_000)
+            val decoded=android.graphics.BitmapFactory.decodeByteArray(avatar,0,avatar.size)
+            assertEquals(512,decoded.width);assertEquals(512,decoded.height);decoded.recycle()
+            assertThrows(IllegalArgumentException::class.java) {androidx.core.content.FileProvider.getUriForFile(app,"${app.packageName}.camera",java.io.File(app.filesDir,"meal-photos/private.jpg"))}
+        } finally {app.photos.discardCapture(uri)}
+        assertThrows(java.io.FileNotFoundException::class.java) {app.contentResolver.openInputStream(uri)}
+    }
     @Test fun oldJsonStoreMigratesToTypedFieldsWithoutLosingNestedData() {
         val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
         val name="migration-${java.util.UUID.randomUUID()}.db"

@@ -1,4 +1,6 @@
-# Android 1.3.0 与 iOS 对齐记录
+# Android 与 iOS 对齐记录
+
+2026-10-15：最新对齐内容见 [1.4.0-beta.2 发布记录](android-release-1.4-beta2.md)。
 
 2026-10-12。以仓库内 `iOS/LifeRecord/Views/` 与 `AppTheme` 为参照，保留两个独立原生工程，共享已有同步协议。
 
@@ -75,7 +77,7 @@ Android 15 / API 35 ARM64 模拟器验证深浅色界面、滚动背景、键盘
 
 新增回归覆盖跨夏令时平滑、偶数中位数、重复分组、确认版本失效、漏记、目标方向、周一重置和未来记录；设备测试覆盖页面保留、质量确认/修改重查、周报阅读、对话侧栏、聊天照片重启查看、缩放/下滑和系统相册写入。新增截图已逐张查看。
 
-苹果原生 Liquid Glass 不能直接用于安卓，当前为原生渲染近似；圆环光照仍有差异。直接拍照、训练 AI 部位分类复核及教练停止生成尚未移植；聊天/常用餐食照片、质量确认和周报本机保存，不跨设备同步。这些平台差异见 [Android 说明](../Android/README.md#当前平台差异)。
+苹果原生 Liquid Glass 不能直接用于安卓，当前为原生渲染近似；圆环光照仍有差异。1.4.0-beta.2 已补齐直接拍照与停止生成；训练详情内的专用 AI 部位分类/部位管理页面尚未移植；聊天/常用餐食照片、质量确认和周报本机保存，不跨设备同步。这些平台差异见 [Android 说明](../Android/README.md#当前平台差异)。
 DeepSeek 的真实有效密钥未提供，自动回归验证请求构造和模拟响应，不能证明用户账户的密钥有效。新安装包/新 iOS 构建安装后才会应用修复；如果仍为 401，需要在官方平台重新生成密钥，不能通过改模型名或充值替代鉴权。[官方接口与模型](https://api-docs.deepseek.com/)、[错误码](https://api-docs.deepseek.com/quick_start/error_codes/)。
 
 具体检查结果见 [Android/VALIDATION.md](../Android/VALIDATION.md)，界面截图见 [Android/README.md](../Android/README.md#界面预览)。

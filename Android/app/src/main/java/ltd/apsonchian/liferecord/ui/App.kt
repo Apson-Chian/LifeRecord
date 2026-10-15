@@ -78,7 +78,7 @@ import java.time.format.DateTimeFormatter
                             if(type == RecordType.WORKOUT) { json.put("date", minOf(this.date, now())); json.put("endDate", minOf(this.date + 3600, now())) }
                         } }, notify, { editor = it.copy() },
                             { draft -> coachDraft = draft; tab = 2 }, { photos -> mealHistory = photos })
-                        1 -> Trends(vm, snapshot, { detail = it }, { draft -> tab = 2; coachDraft = draft }, notify)
+                        1 -> Trends(vm, snapshot, { detail = it }, { draft -> tab = 2; coachDraft = draft }, notify, {editor=it.copy()})
                         2 -> Box(Modifier.fillMaxSize().padding(bottom = if(keyboardVisible) 0.dp else glassPageBottomPadding() - 16.dp)) {
                             Coach(vm, notify, coachDraft) { coachDraft = "" }
                         }

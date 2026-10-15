@@ -22,8 +22,16 @@ class AppFlowTest {
     private var conversations = "[]"
     private var acknowledgements = "[]"
     private var report = ""
+    private var identity = "{}"
+    private var aiConfig = ""
+    private var appearance = "system"
+    private var accent = "purple"
     @Before fun setup() {
         app = ApplicationProvider.getApplicationContext()
+        appearance=app.store.get("appearance","system");accent=app.store.get("accent","purple")
+        app.store.set("appearance","system");app.store.set("accent","purple")
+        identity=app.store.get("coach.identity","{}");aiConfig=app.store.get("aiConfig")
+        app.store.set("coach.identity","{}");app.store.set("aiConfig",providerConfig("DeepSeek").toString())
         before = app.store.load(); onboarding = app.store.get("onboarded")
         conversations = app.store.get("conversations", "[]"); app.store.set("conversations", "[]")
         acknowledgements=app.store.get("recordQuality.acknowledged","[]");report=app.store.get("weeklyReport")
@@ -36,6 +44,8 @@ class AppFlowTest {
         if(android.os.Build.VERSION.SDK_INT>=31) (app.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).setApplicationNightMode(android.app.UiModeManager.MODE_NIGHT_AUTO)
         scenario.close(); app.store.commit(before); app.store.set("onboarded", onboarding); app.store.set("conversations", conversations)
         app.store.set("recordQuality.acknowledged",acknowledgements);app.store.set("weeklyReport",report)
+        app.store.set("coach.identity",identity);app.store.set("aiConfig",aiConfig.ifBlank {providerConfig("DeepSeek").toString()})
+        app.store.set("appearance",appearance);app.store.set("accent",accent)
     }
     @Test fun manualMealSaveAndDeleteUsesSamePersistentRecord() {
         compose.onNodeWithContentDescription("添加记录").performClick()
@@ -270,6 +280,11 @@ class AppFlowTest {
         compose.onNodeWithTag("glass-navigation").assertDoesNotExist()
         capture("coach-keyboard-1.3")
         hideKeyboard()
+        // Exercise the app's actual theme setting without restarting the instrumentation Activity.
+        model {it.personalize("dark","purple")};capture("coach-dark-beta2")
+        scenario.onActivity {assertFalse(androidx.core.view.WindowCompat.getInsetsController(it.window,it.window.decorView).isAppearanceLightStatusBars)}
+        compose.onNodeWithTag("tab-0").performClick();capture("today-dark-beta2")
+        compose.onNodeWithTag("tab-3").performClick();capture("settings-dark-beta2")
     }
     @Test fun coachAlwaysOpensAtLatestMessageIncludingEqualLengthConversationSwitches() {
         scenario.close()
@@ -305,6 +320,95 @@ class AppFlowTest {
         compose.onNodeWithTag("feedback-details").performClick()
         expose("热量在目标 ±10% 内")
         compose.onNodeWithText("热量在目标 ±10% 内").assertExists()
+    }
+
+    @Test fun coachIdentityCanBeEditedCanceledAndSurvivesRelaunchWithoutBeingExported() {
+        compose.onNodeWithTag("tab-2").performClick()
+        compose.onNodeWithContentDescription("自定义教练：AI 助手").performClick()
+        compose.onNodeWithContentDescription("聊天 AI 名称").performTextReplacement("力量教练")
+        androidx.test.espresso.Espresso.closeSoftKeyboard();capture("coach-profile-beta2")
+        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithTag("coach-title").assertTextEquals("力量教练")
+        compose.onNodeWithContentDescription("自定义教练：力量教练").performClick()
+        compose.onNodeWithContentDescription("聊天 AI 名称").performTextReplacement("尚未保存")
+        androidx.test.espresso.Espresso.closeSoftKeyboard();compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithTag("coach-title").assertTextEquals("力量教练")
+        val bitmap=android.graphics.Bitmap.createBitmap(16,16,android.graphics.Bitmap.Config.ARGB_8888).apply {eraseColor(android.graphics.Color.BLUE)}
+        val avatar=java.io.ByteArrayOutputStream().use {bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it);it.toByteArray()};bitmap.recycle()
+        model {it.saveCoachIdentity("力量教练",avatar)}
+        model {assertFalse(it.export().contains("力量教练"))}
+        scenario.close();scenario=ActivityScenario.launch(MainActivity::class.java)
+        compose.onNodeWithTag("tab-2").performClick()
+        compose.onNodeWithTag("coach-title").assertTextEquals("力量教练")
+        model {assertArrayEquals(avatar,it.coachIdentity.value.avatar)}
+        compose.onNodeWithTag("coach-write-toggle").performClick().assertIsOn()
+        model {assertTrue(it.config.value.getBoolean("canWrite"))}
+        capture("coach-identity-beta2")
+    }
+    @Test fun workoutCalendarNavigatesMonthsShowsCompleteDayAndOpensOriginalRecord() {
+        scenario.close()
+        val day=java.time.LocalDate.now().withDayOfMonth(12)
+        val r=Record.create(RecordType.WORKOUT,day.epochAt(java.time.LocalTime.of(9,0))).apply {
+            json.put("endDate",date+3600);json.put("bodyParts",org.json.JSONArray().put("背部"));json.put("note","月历训练检查")
+            json.put("exercises",org.json.JSONArray().put(org.json.JSONObject().put("name","坐姿划船").put("sets",org.json.JSONArray().put(org.json.JSONObject().put("weight",40).put("reps",8)))))
+        }
+        app.store.commit(Snapshot(listOf(r),defaultProfile(),emptyList()))
+        scenario=ActivityScenario.launch(MainActivity::class.java)
+        compose.onNodeWithTag("tab-1").performClick();expose("训练日历")
+        compose.onNodeWithText("训练日历").performClick()
+        compose.onNodeWithTag("workout-calendar").assertExists()
+        compose.onNodeWithContentDescription("上个月").performClick()
+        compose.onNodeWithTag("workout-month").assertTextEquals("${java.time.YearMonth.now().minusMonths(1).monthValue}月")
+        compose.onNodeWithText("回到本月").performClick()
+        capture("workout-calendar-beta2")
+        compose.onNodeWithTag("workout-day-$day").performClick()
+        compose.onNodeWithText("40 kg × 8 次",substring=true).assertExists()
+        capture("workout-calendar-day-beta2")
+        compose.onNodeWithText("月历训练检查",substring=true).performClick()
+        compose.onNodeWithText("编辑训练").assertExists()
+        compose.onNodeWithText("取消").performClick()
+        assertEquals(r.id,app.store.load().records.single().id)
+    }
+    @Test fun coachWritesOnlyValidatedDataAndReportsActualPersistence() {
+        model {vm ->
+            val id=vm.newConversation();val before=vm.snapshot.value
+            val action=org.json.JSONObject().put("type","add_meal").put("name","鸡胸饭").put("calories",600).put("protein",42)
+            val reply=org.json.JSONObject().put("answer","餐食估算").put("actions",org.json.JSONArray().put(action))
+            vm.acceptCoachReply(id,reply,before,"帮我记录",emptyList(),false)
+            assertTrue(app.store.load().records.isEmpty())
+            assertTrue(vm.conversations.value.first().getJSONArray("messages").getJSONObject(0).getString("content").startsWith("未保存"))
+            val invalid=reply.copy().put("actions",org.json.JSONArray().put(action).put(org.json.JSONObject().put("type","delete_meal").put("recordID","missing")))
+            assertThrows(IllegalStateException::class.java) {vm.acceptCoachReply(id,invalid,before,"帮我记录",emptyList(),true)}
+            assertTrue(app.store.load().records.isEmpty())
+            vm.acceptCoachReply(id,reply,before,"帮我记录",emptyList(),true)
+            val saved=app.store.load().records.single()
+            assertEquals("鸡胸饭",saved.title);assertEquals(600.0,saved.json.getDouble("calories"),0.0)
+            assertTrue(vm.conversations.value.first().getJSONArray("messages").objects().last().getString("content").contains("已核验并执行"))
+            assertThrows(IllegalArgumentException::class.java) {vm.acceptCoachReply(id,reply,before,"帮我记录",emptyList(),true)}
+            assertEquals(1,app.store.load().records.size)
+        }
+    }
+    @Test fun stoppingCoachKeepsQuestionAndDoesNotWriteRecords() {
+        val started=java.util.concurrent.CountDownLatch(1);val release=java.util.concurrent.CountDownLatch(1)
+        val client=okhttp3.OkHttpClient.Builder().addInterceptor {chain ->
+            started.countDown();release.await(5,java.util.concurrent.TimeUnit.SECONDS)
+            okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
+                .body(okhttp3.ResponseBody.create(null,"{\"choices\":[{\"message\":{\"content\":\"{\\\"answer\\\":\\\"已记录\\\",\\\"actions\\\":[]}\"}}]}" )).build()
+        }.build()
+        val vm=AppViewModel(app,ltd.apsonchian.liferecord.service.Network(client))
+        val config=providerConfig("自定义").put("model","local-test").put("endpoint","https://coach-local-test.invalid/chat/completions")
+        val keyScope=ltd.apsonchian.liferecord.service.apiScope(config)
+        app.secrets.save(keyScope,"local-test-key")
+        try {
+            scenario.onActivity {vm.config.value=config;vm.send("帮我记录午餐")}
+            val reached=started.await(5,java.util.concurrent.TimeUnit.SECONDS)
+            assertTrue("Request did not reach the mock transport: ${app.store.get("conversations")}",reached)
+            scenario.onActivity {vm.stopCoach()};release.countDown()
+            compose.waitUntil(5000) {!vm.aiBusy.value}
+        } finally {release.countDown();app.secrets.save(keyScope,"")}
+        val messages=org.json.JSONArray(app.store.get("conversations")).getJSONObject(0).getJSONArray("messages").objects()
+        assertEquals("帮我记录午餐",messages.first().getString("content"));assertTrue(messages.last().toString(),messages.last().getString("content").startsWith("已停止生成"));assertTrue(app.store.load().records.isEmpty())
+        assertTrue(vm.activeCoachTasks.value.isEmpty())
     }
 
     private fun capture(name:String) {

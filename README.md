@@ -1,5 +1,7 @@
 # LifeRecord（生活记录）
 
+安卓安装：[1.4.0-beta.2 Release 下载](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.2) · [更新与验证](Docs/android-release-1.4-beta2.md)。在 Assets 下载 APK，可覆盖安装旧测试版。
+
 API 设置更新：预设仅保留 DeepSeek 和 GLM，三端支持新增、保存与切换多个自定义配置。[配置说明与本机 Dots 设置步骤](Docs/api-settings.md)。
 
 1.4 公开邀请测试版本：独立用户、结构化 SQLite 迁移、更自由的 API 兼容参数与外观设置。新安装从空白记录开始。[测试分发与安全说明](Docs/public-beta.md)。
@@ -37,7 +39,7 @@ LifeRecord/
 | iOS | Xcode 打开 `iOS/LifeRecord.xcodeproj` | [运行、功能与平台配置](iOS/README.md) |
 | Web / 后端 | 部署 `Web/` 与 `Backend/` | 下方说明与现有服务配置 |
 
-安卓 1.3.0 使用实际 iOS 页面校准的大标题、圆环、分组设置、教练输入与趋势卡片，并用 Compose 实现浮动玻璃导航，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。界面变化、系统效果支持与剩余差异见[安卓与 iOS 对齐记录](Docs/android-ios-parity.md)。
+安卓客户端使用实际 iOS 页面校准的大标题、圆环、分组设置、教练输入与趋势卡片，并用 Compose 实现浮动玻璃导航，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。界面变化、系统效果支持与剩余差异见[安卓与 iOS 对齐记录](Docs/android-ios-parity.md)。
 
 ## 快速构建
 

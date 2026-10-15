@@ -15,6 +15,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalContext
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
@@ -54,7 +56,7 @@ import java.time.format.DateTimeFormatter
 @Composable fun TextFieldRow(label: String, value: String, change: (String) -> Unit, number: Boolean = false, lines: Int = 1) {
     Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Text(label,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        BasicTextField(value,change,Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).defaultMinSize(minHeight=44.dp).padding(12.dp),
+        BasicTextField(value,change,Modifier.fillMaxWidth().semantics {contentDescription=label}.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).defaultMinSize(minHeight=44.dp).padding(12.dp),
             textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions=KeyboardOptions(keyboardType=if(number && !label.contains("负数")) KeyboardType.Decimal else KeyboardType.Text),singleLine=lines==1,minLines=lines)
     }
@@ -108,9 +110,6 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
     var showFavorites by remember { mutableStateOf(false) }
     var showExercises by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) { uris ->
-        scope.launch { runCatching { vm.readPhotos(uris) }.onSuccess { images = it }.onFailure { error = it.message.orEmpty() } }
-    }
     val s by vm.snapshot.collectAsState()
     val build: () -> Record = {
         val edited = r.copy(); edited.json.put("date", if(date == r.date.localText()) r.date else date.timestamp())
@@ -131,7 +130,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { SoftButton(onClick = { ai = !ai }) { Text("AI 识别 / 修改") }; if(r.type == RecordType.MEAL) TextButton(onClick = { showFavorites = true }) { Text("常用餐食") } }
                 if(ai) {
                     TextFieldRow("描述食物、份量或修改要求", input, { input = it }, lines = 3)
-                    SoftButton(onClick = { picker.launch(ActivityResultContracts.PickVisualMedia.ImageOnly.let { androidx.activity.result.PickVisualMediaRequest(it) }) }) { Text(if(images.isEmpty()) "选择食物 / 营养表照片" else "重新选择 · 已选 ${images.size} 张") }
+                    PhotoInput(vm,images,enabled=!aiBusy,change={images=it},notify={error=it}) {open -> SoftButton(onClick=open) {Text(if(images.isEmpty()) "添加食物 / 营养表照片" else "继续添加 · 已选 ${images.size} 张")} }
                     if(images.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { images.forEach { PhotoBytes(it, Modifier.size(70.dp)) } }
                     AppButton(enabled = !aiBusy && (input.isNotBlank() || images.isNotEmpty()), onClick = {
                         aiBusy = true; scope.launch {

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
@@ -44,7 +45,10 @@ import ltd.apsonchian.liferecord.data.*
 
 @Composable fun Coach(vm:AppViewModel,notify:(String)->Unit,draft:String="",consumeDraft:()->Unit={}) {
     val snapshot by vm.snapshot.collectAsState()
-    val chats by vm.conversations.collectAsState(); val selected by vm.selectedConversation.collectAsState(); val busy by vm.aiBusy.collectAsState(); val proposal by vm.proposal.collectAsState()
+    val chats by vm.conversations.collectAsState(); val selected by vm.selectedConversation.collectAsState(); val tasks by vm.activeCoachTasks.collectAsState(); val proposal by vm.proposal.collectAsState()
+    val busy=selected in tasks
+    val identity by vm.coachIdentity.collectAsState()
+    var showProfile by rememberSaveable {mutableStateOf(false)}
     var text by rememberSaveable { mutableStateOf("") }; val images by vm.draftPhotos.collectAsState(); var favorites by remember { mutableStateOf(false) }; var deleteId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(draft) { if(draft.isNotBlank()) { text=draft; consumeDraft() } }
     val scope=rememberCoroutineScope(); val list=rememberLazyListState()
@@ -54,7 +58,6 @@ import ltd.apsonchian.liferecord.data.*
     val drawer=rememberDrawerState(DrawerValue.Closed)
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     val chat=chats.firstOrNull { it.getString("id")==selected }; val messages=chat?.getJSONArray("messages")?.objects().orEmpty()
-    val picker=rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) { uris -> scope.launch { runCatching { vm.readPhotos(uris) }.onSuccess { vm.draftPhotos.value=it }.onFailure { notify(it.message.orEmpty()) } } }
     val hasProposal=proposal?.conversation==selected
     val bottomIndex=1+messages.size+(if(busy) 1 else 0)+(if(hasProposal) 1 else 0)
     LaunchedEffect(selected,messages.size,busy,proposal) {
@@ -92,7 +95,14 @@ import ltd.apsonchian.liferecord.data.*
     }) {
     Column(Modifier.fillMaxSize().imePadding()) {
         Box(Modifier.fillMaxWidth().height(60.dp).padding(horizontal=16.dp),contentAlignment=Alignment.Center) {
-            Text(chat?.getString("title") ?: "AI 助手",Modifier.padding(horizontal=104.dp).testTag("coach-title"),style=MaterialTheme.typography.titleLarge,maxLines=1,overflow=TextOverflow.Ellipsis)
+            Row(Modifier.padding(horizontal=96.dp).clip(RoundedCornerShape(12.dp)).clickable {showProfile=true}.padding(4.dp).testTag("coach-title").semantics(mergeDescendants=true) {contentDescription="自定义教练：${identity.name}"},verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {
+                CoachAvatar(identity,28.dp)
+                Column(Modifier.weight(1f,false)) {
+                    Text(identity.name,style=MaterialTheme.typography.titleMedium,maxLines=1,overflow=TextOverflow.Ellipsis)
+                    chat?.let {Text(it.getString("title"),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)}
+                }
+                AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(10.dp).then(Modifier.rotate(90f)))
+            }
             SymbolButton(Glyph.Sidebar,"对话列表",{keyboard?.hide();scope.launch {drawer.open()}},Modifier.align(Alignment.CenterStart))
             Row(Modifier.align(Alignment.CenterEnd).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surface.copy(alpha=.85f))) {
                 IconButton(onClick={favorites=true}) {AppIcon(Glyph.Meal,MaterialTheme.colorScheme.primary,Modifier.size(21.dp),"选择常用餐食")}
@@ -102,8 +112,8 @@ import ltd.apsonchian.liferecord.data.*
         LazyColumn(Modifier.weight(1f).testTag("coach-messages"),state=list,contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
             item { if(messages.isEmpty()) Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    AppIcon(Glyph.Coach,MaterialTheme.colorScheme.primary,Modifier.size(22.dp),filled=true)
-                    Text(if(config.optBoolean("canWrite")) "今天想聊什么？" else "AI 助手",fontSize=22.sp,fontWeight=FontWeight.Bold)
+                    CoachAvatar(identity,40.dp)
+                    Text(identity.name,fontSize=22.sp,fontWeight=FontWeight.Bold)
                 }
                 Text(if(config.optBoolean("vision")) "可以发送食物、配料表、营养表或训练截图，也可以让我替你记录数据。" else "当前模型未开启图片输入，请在设置中切换多模态模型。",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 val prompts=listOf("分析最近的身体趋势","分析今天是否适合加餐","看看这张配料表")
@@ -117,13 +127,17 @@ import ltd.apsonchian.liferecord.data.*
                 }}
             } }
             itemsIndexed(messages) { _, m -> ChatMessage(vm,m) }
-            if(busy) item { Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp); Text("正在思考，离开页面也会继续…",style=MaterialTheme.typography.bodySmall) } }
+            if(busy) item { Panel {Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp); Text("正在生成，离开页面也会继续…",Modifier.weight(1f),style=MaterialTheme.typography.bodySmall);TextButton(onClick={vm.stopCoach(selected)}) {Text("停止")} }} }
             proposal?.takeIf { it.conversation==selected }?.let { p -> item { Panel {
                 Text("待复核的操作",style=MaterialTheme.typography.titleLarge)
                 p.actions.forEach { a -> Text(actionDescription(a,p.original),style=MaterialTheme.typography.bodyMedium) }
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { TextButton(onClick={vm.proposal.value=null}) { Text("放弃") }; AppButton(onClick={runCatching { vm.applyProposal() }.onFailure { notify(it.message.orEmpty()) }}) { Text("确认并保存 ${p.actions.size} 项") } }
             } } }
             item(key="conversation-bottom") { Spacer(Modifier.height(1.dp).testTag("coach-bottom")) }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal=24.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text("允许 AI 修改记录",Modifier.weight(1f),style=MaterialTheme.typography.bodySmall)
+            Switch(config.optBoolean("canWrite"),{runCatching {vm.setCoachWrites(it)}.onFailure {notify(it.message.orEmpty())}},enabled=tasks.isEmpty(),modifier=Modifier.testTag("coach-write-toggle"))
         }
         Surface(shape=RoundedCornerShape(25.dp),color=MaterialTheme.colorScheme.surface.copy(alpha=.8f),border=BorderStroke(.7.dp,Color.White.copy(alpha=.2f)),modifier=Modifier.padding(horizontal=16.dp,vertical=8.dp)) {
             Column(Modifier.padding(7.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -139,21 +153,24 @@ import ltd.apsonchian.liferecord.data.*
                 val send={runCatching {vm.send(text,images);text="";vm.draftPhotos.value=emptyList()}.onFailure {notify(it.message.orEmpty())};Unit}
                 val sendEnabled=!busy && (text.isNotBlank() || images.isNotEmpty())
                 Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.6f)).clickable(enabled=!busy && config.optBoolean("vision")) {picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))},contentAlignment=Alignment.Center) {
-                        AppIcon(Glyph.Plus,MaterialTheme.colorScheme.onSurface,Modifier.size(21.dp),"添加照片")
+                    PhotoInput(vm,images,config.optInt("maxPhotos",6),!busy && config.optBoolean("vision"),{vm.draftPhotos.value=it},notify) {open ->
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.6f)).clickable(enabled=!busy && config.optBoolean("vision"),onClick=open),contentAlignment=Alignment.Center) {
+                            AppIcon(Glyph.Plus,MaterialTheme.colorScheme.onSurface,Modifier.size(21.dp),"添加照片")
+                        }
                     }
                     BasicTextField(text,{text=it},Modifier.weight(1f).focusRequester(inputFocus).defaultMinSize(minHeight=44.dp).padding(vertical=10.dp),textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),maxLines=5,
                         keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={if(sendEnabled) send()}),decorationBox={inner ->
                             Box {if(text.isEmpty()) Text("问问题，或让我替你记录…",style=MaterialTheme.typography.bodyLarge,color=MaterialTheme.colorScheme.onSurfaceVariant);inner()}
                         })
-                    Box(Modifier.size(44.dp).clip(CircleShape).background(if(sendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha=.15f)).clickable(enabled=sendEnabled,onClick=send),contentAlignment=Alignment.Center) {
-                        AppIcon(Glyph.Up,Color.White,Modifier.size(24.dp),"发送")
+                    Box(Modifier.size(44.dp).clip(CircleShape).background(if(sendEnabled || busy) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha=.15f)).clickable(enabled=sendEnabled || busy,onClick={if(busy) vm.stopCoach(selected) else send()}),contentAlignment=Alignment.Center) {
+                        if(busy) Icon(Icons.Default.Close,"停止生成",tint=Color.White,modifier=Modifier.size(24.dp)) else AppIcon(Glyph.Up,Color.White,Modifier.size(24.dp),"发送")
                     }
                 }
             }
         }
 
     }
+    if(showProfile) CoachProfile(vm,{showProfile=false},notify)
     }
     if(favorites) FullForm("常用餐食",{favorites=false}) {
         val foods=snapshot.records.filter { it.type==RecordType.FAVORITE }
@@ -164,15 +181,17 @@ import ltd.apsonchian.liferecord.data.*
 }
 @Composable private fun ChatMessage(vm:AppViewModel,m:org.json.JSONObject) {
     val user=m.getString("role")=="user"
+    val identity by vm.coachIdentity.collectAsState()
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val bubbleWidth=(maxWidth-(if(user) 52.dp else 94.dp)).coerceAtLeast(80.dp)
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=if(user) Arrangement.End else Arrangement.Start) {
             if(!user) {
-                Image(painterResource(R.drawable.coach_avatar),null,Modifier.size(32.dp).clip(CircleShape),contentScale=ContentScale.Crop)
+                CoachAvatar(identity)
                 Spacer(Modifier.width(10.dp))
             }
             Surface(Modifier.widthIn(max=bubbleWidth),shape=RoundedCornerShape(20.dp),color=if(user) Purple else MaterialTheme.colorScheme.surface.copy(alpha=.32f),border=if(user) null else BorderStroke(.5.dp,Color.White.copy(alpha=.14f))) {
                 Column(Modifier.padding(horizontal=14.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    if(!user) Text(identity.name,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     val files=m.optJSONArray("localPhotoFiles")?.strings().orEmpty()
                     if(files.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                         files.forEach { name ->

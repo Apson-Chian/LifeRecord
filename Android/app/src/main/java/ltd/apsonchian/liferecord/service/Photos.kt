@@ -18,7 +18,14 @@ class Photos(private val context: Context) {
     private val local = File(context.filesDir, "meal-photos").apply { mkdirs() }
     private val chat = File(context.filesDir, "chat-photos").apply { mkdirs() }
     private val cache = File(context.cacheDir, "private-photos").apply { mkdirs() }
-    fun clearAll() { listOf(local, chat, cache).forEach { folder -> folder.listFiles()?.forEach { it.delete() } } }
+    private val captures = File(context.cacheDir, "camera").apply { mkdirs() }
+    fun clearAll() { listOf(local, chat, cache, captures).forEach { folder -> folder.listFiles()?.forEach { it.delete() } } }
+    fun captureUri(): Uri {
+        captures.listFiles().orEmpty().filter {it.lastModified()<System.currentTimeMillis()-86_400_000}.forEach {it.delete()}
+        val file=File(captures,"${java.util.UUID.randomUUID()}.jpg").apply {createNewFile()}
+        return androidx.core.content.FileProvider.getUriForFile(context,"${context.packageName}.camera",file)
+    }
+    fun discardCapture(uri: Uri) {require(uri.authority=="${context.packageName}.camera");context.contentResolver.delete(uri,null,null)}
     fun read(uri: Uri): ByteArray {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, options) }
@@ -70,6 +77,20 @@ class Photos(private val context: Context) {
     fun chat(name: String): ByteArray { require(name.matches(Regex("[0-9a-f-]+\\.jpg"))); return File(chat, name).readBytes() }
     fun deleteChat(name: String) { require(name.matches(Regex("[0-9a-f-]+\\.jpg"))); File(chat, name).delete() }
     fun local(name: String): ByteArray { require(name.matches(Regex("[0-9a-f-]+\\.jpg"))); return File(local, name).readBytes() }
+    fun deleteLocal(name: String) { require(name.matches(Regex("[0-9a-f-]+\\.jpg"))); File(local,name).delete() }
+    fun readAvatar(uri: Uri): ByteArray {
+        val bytes=read(uri)
+        val bitmap=BitmapFactory.decodeByteArray(bytes,0,bytes.size) ?: error("无法读取头像")
+        val side=minOf(bitmap.width,bitmap.height)
+        val cropped=Bitmap.createBitmap(bitmap,(bitmap.width-side)/2,(bitmap.height-side)/2,side,side)
+        val scaled=Bitmap.createScaledBitmap(cropped,512,512,true)
+        return ByteArrayOutputStream().use {stream ->
+            scaled.compress(Bitmap.CompressFormat.JPEG,85,stream)
+            val result=stream.toByteArray()
+            if(scaled!==cropped) scaled.recycle();if(cropped!==bitmap) cropped.recycle();bitmap.recycle()
+            require(result.size<=512_000) {"头像过大，请重新选择照片。"};result
+        }
+    }
     fun remote(id: String, key: String, network: Network): ByteArray {
         val scope = MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
         require(id.matches(Regex("[0-9a-f]{32}")))
