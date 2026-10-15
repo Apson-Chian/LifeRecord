@@ -55,7 +55,13 @@ import ltd.apsonchian.liferecord.data.*
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     val chat=chats.firstOrNull { it.getString("id")==selected }; val messages=chat?.getJSONArray("messages")?.objects().orEmpty()
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) { uris -> scope.launch { runCatching { vm.readPhotos(uris) }.onSuccess { vm.draftPhotos.value=it }.onFailure { notify(it.message.orEmpty()) } } }
-    LaunchedEffect(messages.size,selected) { if(messages.isNotEmpty()) list.animateScrollToItem(messages.size) }
+    val hasProposal=proposal?.conversation==selected
+    val bottomIndex=1+messages.size+(if(busy) 1 else 0)+(if(hasProposal) 1 else 0)
+    LaunchedEffect(selected,messages.size,busy,proposal) {
+        if(messages.isEmpty() && !busy && !hasProposal) return@LaunchedEffect
+        withFrameNanos { }
+        list.scrollToItem(bottomIndex)
+    }
     ModalNavigationDrawer(drawerState=drawer, drawerContent={
         ModalDrawerSheet(modifier=Modifier.widthIn(max=306.dp).fillMaxHeight(),drawerContainerColor=MaterialTheme.colorScheme.surface) {
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -93,7 +99,7 @@ import ltd.apsonchian.liferecord.data.*
                 IconButton(onClick=vm::newConversation) {AppIcon(Glyph.Compose,MaterialTheme.colorScheme.primary,Modifier.size(21.dp),"新对话")}
             }
         }
-        LazyColumn(Modifier.weight(1f),state=list,contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        LazyColumn(Modifier.weight(1f).testTag("coach-messages"),state=list,contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
             item { if(messages.isEmpty()) Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     AppIcon(Glyph.Coach,MaterialTheme.colorScheme.primary,Modifier.size(22.dp),filled=true)
@@ -117,6 +123,7 @@ import ltd.apsonchian.liferecord.data.*
                 p.actions.forEach { a -> Text(actionDescription(a,p.original),style=MaterialTheme.typography.bodyMedium) }
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { TextButton(onClick={vm.proposal.value=null}) { Text("放弃") }; AppButton(onClick={runCatching { vm.applyProposal() }.onFailure { notify(it.message.orEmpty()) }}) { Text("确认并保存 ${p.actions.size} 项") } }
             } } }
+            item(key="conversation-bottom") { Spacer(Modifier.height(1.dp).testTag("coach-bottom")) }
         }
         Surface(shape=RoundedCornerShape(25.dp),color=MaterialTheme.colorScheme.surface.copy(alpha=.8f),border=BorderStroke(.7.dp,Color.White.copy(alpha=.2f)),modifier=Modifier.padding(horizontal=16.dp,vertical=8.dp)) {
             Column(Modifier.padding(7.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {

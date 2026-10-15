@@ -63,38 +63,34 @@ struct RecordInsightChecks {
         let weeklyBody: [InsightRecords.Body] = [.init(date: day(-7), weight: 60), .init(date: day(-3), weight: 61), .init(date: day(0), weight: 62)]
         assert(summary([], weeklyBody, days: 7).weeklyChange != nil)
         assert(summary([], weeklyBody, days: 7).measurementDays == 2)
-        // The progress bar follows Monday–Sunday, independently of the chart range and overall goal.
+        // Feedback reviews a historical range ending today, without a future week deadline.
         let weekStart = RecordWeek.start(containing: now, calendar: calendar)
         assert(calendar.component(.weekday, from: weekStart) == 2)
-        assert(calendar.component(.day, from: weekStart) == 5)
-        assert(RecordWeek.start(containing: day(2), calendar: calendar) == weekStart) // Sunday stays in this week.
-        let nextMonday = RecordWeek.start(containing: day(3), calendar: calendar)
-        assert(calendar.component(.day, from: nextMonday) == 12)
-        let weekWeights: [InsightRecords.Body] = [.init(date: day(-4), weight: 60), .init(date: day(0), weight: 60.4)]
-        let week = summary([], weekWeights).weeklyProgress!
-        let weekTrend = BodyTrend.series(weekWeights.map { .init(date: $0.date, value: $0.weight) }, calendar: calendar)
-        assert(week.start == weekStart && calendar.component(.day, from: week.end) == 11)
-        assert(abs(week.change - (weekTrend.last!.trend - weekTrend.first!.trend)) < 0.000001)
-        assert(abs(week.fraction - week.change / goals.weeklyWeightChange) < 0.000001)
-        assert(summary([], weekWeights, days: 7).weeklyProgress!.fraction == week.fraction)
-        assert(summary([], weekWeights, days: nil).weeklyProgress!.fraction == week.fraction)
-        assert(summary([], [.init(date: day(-4), weight: 60)]).weeklyProgress == nil)
-        assert(summary([], [.init(date: day(-8), weight: 60), .init(date: day(-5), weight: 61)]).weeklyProgress == nil)
-        assert(summary([], [.init(date: day(-12), weight: 60), .init(date: day(0), weight: 61)]).weeklyProgress == nil)
-        assert(summary([], [.init(date: day(-5), weight: 60), .init(date: day(0), weight: 61)]).weeklyProgress == nil)
-        assert(summary([], [.init(date: day(-2), weight: 60), .init(date: day(0), weight: 60.4)]).weeklyProgress != nil)
-        assert(summary([], [.init(date: day(-4), weight: 60), .init(date: day(0), weight: 59)]).weeklyProgress!.fraction == 0)
-        assert(summary([], [.init(date: day(-4), weight: 60), .init(date: day(0), weight: 62)]).weeklyProgress!.fraction == 1)
-        let lossWeek = summary([], [.init(date: day(-4), weight: 80), .init(date: day(0), weight: 79.5)], goals: lose).weeklyProgress!
-        assert(lossWeek.change < 0 && lossWeek.fraction > 0 && lossWeek.fraction < 1)
-        assert(summary([], weekWeights, goals: maintain).weeklyProgress == nil)
-        assert(summary([], weekWeights, goals: reversedGoals).weeklyProgress == nil)
+        assert(RecordWeek.start(containing: day(2), calendar: calendar) == weekStart)
+        let periodBody: [InsightRecords.Body] = [.init(date: day(-20), weight: 60), .init(date: day(-5), weight: 61), .init(date: day(0), weight: 61.2)]
+        let month = summary([], periodBody).periodProgress!
+        let week = summary([], periodBody, days: 7).periodProgress!
+        assert(calendar.isDate(month.end, inSameDayAs: now) && month.end <= now)
+        assert(calendar.isDate(week.start, inSameDayAs: day(-6)))
+        assert(calendar.isDate(week.baselineDate, inSameDayAs: day(-5)))
+        assert(abs(month.targetChange - goals.weeklyWeightChange * 20 / 7) < 0.000001)
+        assert(abs(week.targetChange - goals.weeklyWeightChange * 5 / 7) < 0.000001)
+        assert(month.baselineDate < week.baselineDate && month.change > week.change)
+        assert(summary([], [.init(date: day(-1), weight: 60)]).periodProgress == nil)
+        assert(summary([], [.init(date: day(-12), weight: 60), .init(date: day(0), weight: 61)], days: 7).periodProgress == nil)
+        assert(summary([], [.init(date: day(-4), weight: 60), .init(date: day(0), weight: 59)]).periodProgress!.fraction == 0)
+        assert(summary([], [.init(date: day(-4), weight: 60), .init(date: day(0), weight: 62)]).periodProgress!.fraction == 1)
+        let loss = summary([], [.init(date: day(-4), weight: 80), .init(date: day(0), weight: 79.5)], goals: lose).periodProgress!
+        assert(loss.change < 0 && loss.targetChange < 0 && loss.fraction > 0 && loss.fraction < 1)
+        assert(summary([], periodBody, goals: maintain).periodProgress == nil)
+        assert(summary([], periodBody, goals: reversedGoals).periodProgress == nil)
         var zeroWeeklyGoal = goals; zeroWeeklyGoal.weeklyWeightChange = 0
-        assert(summary([], weekWeights, goals: zeroWeeklyGoal).weeklyProgress == nil)
-        let excludedWeekRecords = weekWeights + [.init(date: day(1), weight: 100), .init(date: day(-1), weight: 150, isDemo: true), .init(date: day(-2), weight: .nan)]
-        assert(summary([], excludedWeekRecords).weeklyProgress!.fraction == week.fraction)
-        let resetWeek = GoalFeedback.summarize(goals: goals, meals: [], body: weekWeights, workouts: [], days: 30, now: day(3), calendar: calendar)
-        assert(resetWeek.weeklyProgress == nil) // No measurement yet in the new week.
+        assert(summary([], periodBody, goals: zeroWeeklyGoal).periodProgress == nil)
+        let excluded = periodBody + [.init(date: day(1), weight: 100), .init(date: day(-1), weight: 150, isDemo: true), .init(date: day(-2), weight: .nan)]
+        assert(summary([], excluded).periodProgress!.fraction == month.fraction)
+        let monday = GoalFeedback.summarize(goals: goals, meals: [], body: periodBody + [.init(date: day(2), weight: 61.3)], workouts: [], days: 7, now: day(3), calendar: calendar)
+        assert(monday.periodProgress != nil && monday.periodProgress!.end <= day(3))
+        assert(summary([], [.init(date: day(-15), weight: 60), .init(date: day(-8), weight: 61)]).periodProgress == nil)
         // Count a completed cross-midnight workout by start date, but not active, future or reversed records.
         let workouts: [InsightRecords.Workout] = [
             .init(date: day(-1, hour: 23), endDate: day(0, hour: 1)),

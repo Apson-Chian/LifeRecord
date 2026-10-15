@@ -40,7 +40,6 @@ struct WorkoutTrendCard: View {
                     IconBadge(symbol: AppSymbol.workout, tint: tint)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("训练节奏").font(.headline)
-                        Text("每一次投入，都算数").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     NavigationLink { detail } label: {

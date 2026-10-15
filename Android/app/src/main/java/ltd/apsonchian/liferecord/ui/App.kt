@@ -203,7 +203,6 @@ import java.time.format.DateTimeFormatter
         } }
         item { Panel {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { IconBadge(Glyph.Workout,Color(0xFF31B8C4),36.dp);Spacer(Modifier.width(10.dp));Text("健身记录", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)); TextButton(onClick = { add(RecordType.WORKOUT) }) { Text("补记") } }
-            Text("留一点时间，给更好的自己",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(date == LocalDate.now()) {
                 val active = activeWorkout
                 AppButton(onClick = { runCatching {

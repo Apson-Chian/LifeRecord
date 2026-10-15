@@ -71,7 +71,7 @@ import kotlin.math.abs
             val teal=Color(0xFF31B8C4)
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 IconBadge(Glyph.Workout,teal)
-                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {Text("训练节奏",style=MaterialTheme.typography.titleLarge);Text("每一次投入，都算数",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                Text("训练节奏",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
                 IconButton(onClick={details=true},modifier=Modifier.size(32.dp)) {AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp),"查看训练详情")}
             }
             val complete=workouts.filter { !it.json.isNull("endDate") && it.json.optDouble("endDate") in it.date..at }
@@ -107,8 +107,7 @@ import kotlin.math.abs
             Text("当前时段 · $mealDays 天记录饮食 · ${if(mealDays>0) format(Insights.total(meals,"calories")/mealDays) else "—"} kcal / 记录日",style=MaterialTheme.typography.bodyMedium)
         } }
         item { Panel {
-            Text("把记录，变成下一步",style=MaterialTheme.typography.titleLarge)
-            Text(if(report.text.isEmpty()) "一份属于你的 AI 周报，发现变化，找到节奏。" else "本周复盘已就绪，查看趋势解读与行动建议。",color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("AI 周报 · 近 7 天",style=MaterialTheme.typography.titleLarge)
             if(report.text.isNotEmpty()) {
                 report.generatedAt?.let { Text("生成于 ${it.localText()}",style=MaterialTheme.typography.bodySmall) }
                 SoftButton(onClick={showReport=true},modifier=Modifier.fillMaxWidth()) { Text("阅读本周报告") }
@@ -120,7 +119,7 @@ import kotlin.math.abs
             }
             if(real.isEmpty()) Text("先添加真实记录，示例不参与周报。",style=MaterialTheme.typography.bodySmall)
         } }
-        item { FeedbackCard(feedback,s.profile) { coach("请依据我的设定目标与以下本机统计，复盘执行情况并给出下一周 2–3 条具体行动。先指出记录不足，不把体重变化当成脂肪或肌肉变化，不自动改动目标。\n${feedback.context}") } }
+        item { FeedbackCard(feedback,s.profile) { coach("请依据以下截至今天的历史记录，回顾这段时间的身体、饮食和训练变化。先说明记录不足，再给出简短解读，不把体重变化当成脂肪或肌肉变化，不自动调整目标。\n${feedback.context}") } }
         item { Panel(Modifier.clickable { quality=true }) {
             Text("记录质量检查",style=MaterialTheme.typography.titleLarge)
             Text(if(pending.isEmpty()) "暂无待核对项 · 检查全部真实记录" else "${pending.size} 项待核对 · 查看疑点并修正",color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -130,32 +129,55 @@ import kotlin.math.abs
 }
 
 @Composable private fun FeedbackCard(summary:GoalFeedback.Summary,goals:org.json.JSONObject,coach:()->Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val dateFormat=java.time.format.DateTimeFormatter.ofPattern("M/d")
     Panel {
-        Text("目标反馈",style=MaterialTheme.typography.titleLarge)
-        Text("${summary.start} — ${now().day()}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(summary.headline,style=MaterialTheme.typography.titleMedium)
-        summary.latest?.let { latest ->
-            Text("${format(latest.trend)} kg",style=MaterialTheme.typography.headlineMedium)
-            Text("最近趋势体重 · ${latest.day} · 真实测量每日中位数平滑计算",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            summary.week?.let { week ->
-                Text("本周进度 · ${week.start} — ${week.start.plusDays(6)}")
-                LinearProgressIndicator(progress={week.fraction.toFloat()},modifier=Modifier.fillMaxWidth())
-                Text("本周 ${(week.fraction*100).toInt()}% · 趋势变化 ${signed(week.change)} kg / 每周目标 ${format(goals.optDouble("weeklyWeightTarget"))} kg",style=MaterialTheme.typography.bodySmall)
-                Text("每周一重算，以本周首次测量（${week.baseline}）为基准；体重进度不等同于增肌或减脂成果。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            summary.distance?.let { Text("距目标 ${format(goals.optDouble("targetWeight"))} kg：${format(it)} kg") }
-            summary.weeklyChange?.let { Text("区间趋势折算 ${signed(it)} kg/周",style=MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            IconBadge(Glyph.Target,MaterialTheme.colorScheme.primary)
+            Text("目标反馈",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
+            Text("${summary.start.format(dateFormat)}—${summary.end.format(dateFormat)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        HorizontalDivider()
-        FeedbackRow("饮食记录覆盖","${summary.mealDays} / ${summary.days} 天")
-        FeedbackRow("热量在设定目标 ±10% 内","${summary.calorieDays} / ${summary.mealDays} 个记录日")
-        FeedbackRow("蛋白质达到设定目标","${summary.proteinDays} / ${summary.mealDays} 个记录日")
-        summary.calories?.let { FeedbackRow("已记录日均热量 / 蛋白质","${format(it)} kcal / ${format(summary.protein ?: 0.0)} g") }
-        FeedbackRow("身体测量 / 完成训练","${summary.measurementDays} 天 / ${summary.completedWorkouts} 次")
-        Text("只统计真实、非未来且数值有效的记录；有记录不代表记全，缺失日期不按零计算。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("下一步",style=MaterialTheme.typography.titleMedium)
-        summary.actions.forEachIndexed { i,text -> Text("${i+1}. $text",style=MaterialTheme.typography.bodyMedium) }
-        SoftButton(onClick=coach,modifier=Modifier.fillMaxWidth()) { Text("和教练制定下一周计划") }
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+            Text(summary.latest?.trend?.let(::format) ?: "—",style=MaterialTheme.typography.headlineLarge)
+            Text("kg",Modifier.padding(bottom=5.dp),color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.weight(1f))
+            Text("趋势体重",Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(summary.headline,style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.Medium))
+        summary.period?.let { period ->
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                    Text("阶段变化 ${signed(period.change)} kg",style=MaterialTheme.typography.bodySmall)
+                    Text("参考 ${signed(period.targetChange)} kg",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                LinearProgressIndicator(progress={period.fraction.toFloat()},modifier=Modifier.fillMaxWidth().semantics { contentDescription="所选历史时段的体重变化相对于阶段目标" })
+            }
+        }
+        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            listOf(Triple("饮食记录",summary.mealDays,"天"),Triple("身体测量",summary.measurementDays,"天"),Triple("完成训练",summary.completedWorkouts,"次")).forEach { (title,value,unit) ->
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha=.05f)).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    Text(title,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$value $unit",style=MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
+        TextButton(onClick={expanded=!expanded},contentPadding=PaddingValues(0.dp),modifier=Modifier.testTag("feedback-details")) {
+            Text(if(expanded) "收起记录与解读" else "记录与解读")
+        }
+        if(expanded) {
+            summary.latest?.let { FeedbackRow("最近测量",it.day.format(dateFormat)) }
+            summary.distance?.let { FeedbackRow("距目标体重","${format(it)} kg") }
+            summary.period?.let { period -> Text("比较 ${period.baseline.format(dateFormat)} 至最近测量的趋势体重；参考值按每周目标和实际测量跨度换算。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+            summary.weeklyChange?.let { FeedbackRow("平均每周变化","${signed(it)} kg") }
+            FeedbackRow("热量在目标 ±10% 内",if(goals.optDouble("calorieGoal")>0) "${summary.calorieDays} / ${summary.mealDays} 个记录日" else "请核对目标")
+            FeedbackRow("蛋白质达到目标",if(goals.optDouble("proteinGoal")>0) "${summary.proteinDays} / ${summary.mealDays} 个记录日" else "请核对目标")
+            summary.calories?.let { FeedbackRow("记录日均热量","${format(it)} kcal") }
+            summary.protein?.let { FeedbackRow("记录日均蛋白质","${format(it)} g") }
+            Text("仅统计真实有效记录，缺失日期不按零计算。体重变化不等同于增肌或减脂成果。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            HorizontalDivider()
+            summary.actions.forEach { Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        SoftButton(onClick=coach,modifier=Modifier.fillMaxWidth()) { Text("和教练复盘") }
     }
 }
 @Composable private fun FeedbackRow(title:String,value:String) { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) { Text(title,modifier=Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant); Text(value,style=MaterialTheme.typography.bodySmall) } }

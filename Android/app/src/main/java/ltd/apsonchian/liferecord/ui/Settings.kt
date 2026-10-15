@@ -52,28 +52,32 @@ import android.net.Uri
     val ai by vm.config.collectAsState()
     if(page.isEmpty()) LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,8.dp,16.dp,glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(24.dp)) {
         item {PageTitle("设置","偏好与个人目标")}
-        item {SettingsGroup("个人") {
-            DestinationRow("身体与目标","${s.profile.optString("fitnessGoal")} · ${format(s.profile.optDouble("height"))} cm · 目标 ${String.format(java.util.Locale.ROOT,"%.1f",s.profile.optDouble("targetWeight"))} kg",Glyph.Person,MaterialTheme.colorScheme.primary) {page="profile"}
+        item {SettingsGroup("日常使用") {
+            DestinationRow("个人与目标","${s.profile.optString("fitnessGoal")} · 身体与营养",Glyph.Person,MaterialTheme.colorScheme.primary) {page="profile"}
             GroupDivider()
-            DestinationRow("每日目标","${format(s.profile.optDouble("calorieGoal"))} kcal · 蛋白质 ${format(s.profile.optDouble("proteinGoal"))} g",Glyph.Target,Carbs) {page="goals"}
+            DestinationRow("记录与提醒","",Glyph.Workout,Color(0xFF31B8C4)) {page="recording"}
+            GroupDivider()
+            DestinationRow("教练与 AI",ai.optString("provider"),Glyph.Coach,MaterialTheme.colorScheme.primary) {page="coach"}
         }}
-        item {SettingsGroup("智能与连接") {
-            DestinationRow("AI 助手","${ai.optString("provider")} · ${if(ai.optBoolean("canWrite")) "可管理记录" else "只读"}",Glyph.Coach,MaterialTheme.colorScheme.primary) {page="ai"}
+        item {SettingsGroup("应用与数据") {
+            DestinationRow("外观与个性化","",Glyph.Person,Protein) {page="appearance"}
             GroupDivider()
             DestinationRow("跨设备同步",status,Glyph.Sync,Color(0xFF29AD5E)) {page="sync"}
-        }}
-        item {SettingsGroup("常用记录与提醒") {
-            DestinationRow("常用餐食","固定名称、照片与每份营养",Glyph.Meal,Carbs) {page="favorites"}
             GroupDivider()
-            DestinationRow("我的动作库","自定义动作与默认组数",Glyph.Workout,Color(0xFF31B8C4)) {page="exercises"}
-            GroupDivider()
-            DestinationRow("漏记提醒","提醒时间、记录类别与训练日",Glyph.Bell,Carbs) {page="reminders"}
+            DestinationRow("隐私、数据与帮助","",Glyph.Shield,Protein) {page="privacy"}
         }}
-        item {SettingsGroup("应用") {DestinationRow("外观与个性化","主题模式和强调色",Glyph.Person,Protein) {page="appearance"}; GroupDivider(); DestinationRow("隐私、数据与帮助","隐私说明、使用引导与示例数据",Glyph.Shield,Protein) {page="privacy"}}}
     }
     when(page) {
         "profile" -> ProfileForm(vm,s.profile,{page=""},notify)
-        "goals" -> ProfileForm(vm,s.profile,{page=""},notify,true)
+        "recording" -> SettingsForm("记录与提醒",{page=""}) {
+            SettingsGroup("常用记录") {
+                DestinationRow("常用餐食","",Glyph.Meal,Carbs) {page="favorites"}
+                GroupDivider()
+                DestinationRow("我的动作库","",Glyph.Workout,Color(0xFF31B8C4)) {page="exercises"}
+            }
+            SettingsGroup("提醒") { DestinationRow("漏记提醒","",Glyph.Bell,Carbs) {page="reminders"} }
+        }
+        "coach" -> CoachSettings(vm,{page=""},{page="ai"},notify)
         "privacy" -> SettingsForm("隐私、数据与帮助",{page=""}) {
             Text("LifeRecord · Android 1.4 测试版",style=MaterialTheme.typography.titleMedium)
             SettingsRow("导出记录 JSON","包含照片编号；照片字节、对话和密钥不导出") {export.launch("LifeRecord-${java.time.LocalDate.now()}.json")}
@@ -89,11 +93,11 @@ import android.net.Uri
             Text("强调色")
             FlowRow { listOf("purple" to "紫色", "blue" to "蓝色", "green" to "绿色", "orange" to "橙色").forEach { (value,title) -> FilterChip(color==value,{vm.personalize(mode,value)},label={Text(title)}) } }
         }
-        "ai" -> AISettings(vm,{page=""},notify)
+        "ai" -> AISettings(vm,{page="coach"},notify)
         "sync" -> SyncSettings(vm,{page=""},notify)
-        "favorites" -> Library(vm,RecordType.FAVORITE,{page=""},notify)
-        "exercises" -> Library(vm,RecordType.EXERCISE,{page=""},notify)
-        "reminders" -> Reminders(vm,{page=""},notify)
+        "favorites" -> Library(vm,RecordType.FAVORITE,{page="recording"},notify)
+        "exercises" -> Library(vm,RecordType.EXERCISE,{page="recording"},notify)
+        "reminders" -> Reminders(vm,{page="recording"},notify)
     }
     if(reset) AlertDialog(onDismissRequest={reset=false},title={Text("清除全部本机数据？")},text={Text("请先导出需要保留的记录。这会清除记录、对话、照片、接口偏好和密钥，云端记录保留。")},confirmButton={TextButton(onClick={runCatching {vm.resetLocalData();reset=false;notify("本机数据已清除")}.onFailure {notify(it.message.orEmpty())}}) {Text("清除")}},dismissButton={TextButton(onClick={reset=false}) {Text("取消")}})
     if(clear) AlertDialog(onDismissRequest={clear=false},title={Text("清除示例数据？")},text={Text("你自己记录和同步的内容会保留。")},confirmButton={TextButton(onClick={vm.clearDemo();clear=false;notify("示例数据已清除")}) { Text("清除") }},dismissButton={TextButton(onClick={clear=false}) { Text("取消") }})
@@ -105,23 +109,23 @@ import android.net.Uri
     }
 }
 @Composable private fun DestinationRow(title:String,subtitle:String,kind:Glyph,tint:Color,onClick:()->Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(horizontal=16.dp,vertical=20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(13.dp)) {
+    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(horizontal=16.dp,vertical=16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(13.dp)) {
         IconBadge(kind,tint)
-        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {Text(title,style=MaterialTheme.typography.bodyLarge.copy(fontWeight=FontWeight.Medium));Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {Text(title,style=MaterialTheme.typography.bodyLarge.copy(fontWeight=FontWeight.Medium));if(subtitle.isNotBlank()) Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.onSurface.copy(alpha=.3f),Modifier.size(15.dp))
     }
 }
 @Composable private fun GroupDivider() {HorizontalDivider(Modifier.padding(start=73.dp,end=16.dp),color=MaterialTheme.colorScheme.onSurface.copy(alpha=.08f),thickness=.5.dp)}
 @Composable fun SettingsRow(title:String,subtitle:String,onClick:()->Unit) { Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title,style=MaterialTheme.typography.titleMedium); Spacer(Modifier.height(4.dp)); Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,title) } }
 @Composable fun Toggle(title:String,subtitle:String="",checked:Boolean,onChange:(Boolean)->Unit) { Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); if(subtitle.isNotBlank()) Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked,onChange) } }
-@Composable fun ProfileForm(vm:AppViewModel,original:JSONObject,dismiss:()->Unit,notify:(String)->Unit,daily:Boolean=false) {
+@Composable fun ProfileForm(vm:AppViewModel,original:JSONObject,dismiss:()->Unit,notify:(String)->Unit) {
     val fields=remember { mutableStateMapOf<String,String>().apply { original.keys().forEach { put(it,original.opt(it)?.toString().orEmpty()) } } }
     var error by remember { mutableStateOf("") }
-    SettingsForm(if(daily) "每日目标" else "身体与目标",dismiss,{TextButton(onClick={runCatching {
+    SettingsForm("个人与目标",dismiss,{TextButton(onClick={runCatching {
         val p=original.copy(); fields.forEach { (key,value) -> if(key in listOf("displayName","fitnessGoal","id")) p.put(key,value) else if(key!="updatedAt") p.put(key,value.toDouble()) }; vm.saveProfile(p); dismiss(); notify("目标已保存")
     }.onFailure { error=it.message.orEmpty() }}) { Text("保存") }}) {
         if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
-        if(!daily) SettingsGroup("个人资料") {
+        SettingsGroup("个人资料") {
             Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Text("称呼",style=MaterialTheme.typography.bodyLarge)
                 BasicTextField(fields["displayName"].orEmpty(),{fields["displayName"]=it},Modifier.weight(1f).semantics {contentDescription="称呼"},textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface,textAlign=TextAlign.End),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),singleLine=true,
@@ -135,8 +139,11 @@ import android.net.Uri
                 }
             }
         }
-        val entries=if(daily) listOf(Triple("calorieGoal","热量","kcal"),Triple("proteinGoal","蛋白质","g"),Triple("carbsGoal","碳水","g"),Triple("fatGoal","脂肪","g")) else listOf(Triple("height","身高","cm"),Triple("baselineWeight","起始体重","kg"),Triple("targetWeight","目标体重","kg"),Triple("weeklyWeightTarget","每周体重变化","kg"))
-        SettingsGroup(if(daily) "每日营养目标" else "身体与体重") {
+        val groups=listOf(
+            "身体与体重" to listOf(Triple("height","身高","cm"),Triple("baselineWeight","起始体重","kg"),Triple("targetWeight","目标体重","kg"),Triple("weeklyWeightTarget","每周体重变化","kg")),
+            "每日营养目标" to listOf(Triple("calorieGoal","热量","kcal"),Triple("proteinGoal","蛋白质","g"),Triple("carbsGoal","碳水","g"),Triple("fatGoal","脂肪","g"))
+        )
+        groups.forEach { (heading,entries) -> SettingsGroup(heading) {
             entries.forEachIndexed {index,(key,title,unit) ->
                 if(index>0) FieldDivider()
                 Row(Modifier.fillMaxWidth().heightIn(min=52.dp).padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -145,11 +152,29 @@ import android.net.Uri
                     Text(unit,style=MaterialTheme.typography.bodyLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-        }
-        if(!daily) Text("每周体重变化：减重填负数。根据连续记录观察趋势后，再调整自己的目标。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        } }
+        Text("每周体重变化：减重填负数。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
 
     }
 }
+@Composable private fun CoachSettings(vm:AppViewModel,dismiss:()->Unit,openInterface:()->Unit,notify:(String)->Unit) {
+    val current by vm.config.collectAsState()
+    var instructions by rememberSaveable { mutableStateOf(current.optString("instructions")) }
+    var canWrite by rememberSaveable { mutableStateOf(current.optBoolean("canWrite")) }
+    var error by remember { mutableStateOf("") }
+    fun save():Boolean = runCatching {
+        vm.saveConfig(vm.config.value.copy().put("instructions",instructions).put("canWrite",canWrite),null)
+    }.fold({true},{error=it.message.orEmpty();false})
+    SettingsForm("教练与 AI",dismiss,{TextButton(onClick={if(save()) {dismiss();notify("教练偏好已保存")}}) {Text("保存")}}) {
+        TextFieldRow("长期偏好，例如训练安排、忌口",instructions,{instructions=it},lines=3)
+        Toggle("允许 AI 提出写入操作","每次操作均需复核保存",canWrite,{canWrite=it})
+        SettingsGroup("AI 服务") {
+            DestinationRow("接口与模型","${current.optString("provider")} · ${current.optString("model")}",Glyph.Coach,MaterialTheme.colorScheme.primary) { if(save()) openInterface() }
+        }
+        if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
+    }
+}
+
 @Composable fun AISettings(vm:AppViewModel,dismiss:()->Unit,notify:(String)->Unit) {
     val current by vm.config.collectAsState()
     var provider by remember { mutableStateOf(current.getString("provider")) }
@@ -174,11 +199,12 @@ import android.net.Uri
         fields.forEach { (name,value) -> c.put(name,when(name) { "temperature" -> value.toDouble(); "maxPhotos","maxTokens" -> value.toInt(); else -> value }) }
         vm.saveConfig(c,if(keyTouched) key else null)
     }
-    SettingsForm("AI 接口",dismiss,{TextButton(enabled=!busy,onClick={runCatching { save();dismiss();notify("AI 设置已保存") }.onFailure { error=it.message.orEmpty() }}) { Text("保存") }}) {
+    SettingsForm("接口与模型",dismiss,{TextButton(enabled=!busy,onClick={runCatching { save();dismiss();notify("AI 设置已保存") }.onFailure { error=it.message.orEmpty() }}) { Text("保存") }}) {
         if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) { providers.forEach { p -> FilterChip(provider==p,onClick={
             if(provider!=p) { provider=p; val c=org.json.JSONObject(vm.app.store.get("ai.profile.$p",providerConfig(p).toString())); sendTemperature=c.optBoolean("sendTemperature",true);jsonMode=c.optBoolean("jsonMode",true); fields.keys.toList().forEach { fields[it]=c.opt(it)?.toString().orEmpty() }; vision=c.optBoolean("vision"); key="";keyTouched=false }
         },label={Text(p)}) } }
+        SettingsDisclosure("保存与切换接口") {
         Text("已保存的接口",style=MaterialTheme.typography.titleSmall)
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) { savedProfiles.forEach { p ->
             FilterChip(selectedProfile==p.getString("id"), onClick={selectedProfile=p.getString("id");profileName=p.getString("name");loadProfile(p.getJSONObject("config"))}, label={Text(p.getString("name"))})
@@ -191,6 +217,7 @@ import android.net.Uri
                 TextButton(onClick={vm.deleteAPIProfile(selectedProfile);selectedProfile="";profileName=""}) {Text("删除所选配置")}
             }
         }
+        }
         TextFieldRow("接口地址（HTTPS）",fields["endpoint"].orEmpty(),{fields["endpoint"]=it});TextFieldRow("模型名",fields["model"].orEmpty(),{fields["model"]=it})
         if(officialDeepSeek) {
             Text("DeepSeek 官方接口使用 Authorization: Bearer；更新会自动纠正旧认证配置。请使用开放平台创建的完整 API Key。deepseek-flash 支持图片；已有配置可开启下方的“支持图片”。",style=MaterialTheme.typography.bodySmall)
@@ -200,6 +227,7 @@ import android.net.Uri
         SecretFieldRow("API Key（留空保留已有密钥）",key,{key=it;keyTouched=true})
         Text("每个服务商的密钥分别保存。切换不会把其他服务商的密钥发到当前接口。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         Toggle("支持图片","需要模型本身支持视觉输入",vision,{vision=it})
+        SettingsDisclosure("高级参数") {
         listOf("maxPhotos" to "最多照片数（1–12）","temperature" to "Temperature（0–2）","maxTokens" to "最大输出 Token（256–65536）").forEach { (name,label) -> TextFieldRow(label,fields[name].orEmpty(),{fields[name]=it},true) }
         Text("输出 Token 参数")
         FlowRow { listOf("max_tokens","max_completion_tokens").forEach { name -> FilterChip(fields["tokenParameter"]==name,{fields["tokenParameter"]=name},label={Text(name)}) } }
@@ -208,8 +236,7 @@ import android.net.Uri
         TextFieldRow("图片 detail 参数（留空不发送）",fields["imageDetail"].orEmpty(),{fields["imageDetail"]=it})
         TextFieldRow("额外请求参数 JSON",fields["extraBody"].orEmpty(),{fields["extraBody"]=it},lines=4)
         Text("只支持 OpenAI Chat Completions 兼容接口；改接口地址后需为新地址重新保存密钥。扩展参数用于 top_p 等，不要填写密钥。",style=MaterialTheme.typography.bodySmall)
-        TextFieldRow("自定义指令",fields["instructions"].orEmpty(),{fields["instructions"]=it},lines=3)
-        Toggle("允许 AI 提出写入操作","每次操作均需在教练中复核保存",canWrite,{canWrite=it})
+        }
         AppButton(enabled=!busy,onClick={runCatching { save() }.onSuccess {
             busy=true;scope.launch { try { notify(vm.testConnection());error="" } catch(e:Exception) { error="设置已保存，但连接失败：${e.message}" } finally { busy=false } }
         }.onFailure { error=it.message.orEmpty() }},modifier=Modifier.fillMaxWidth()) { Text(if(busy) "正在测试…" else "保存并测试连接") }
@@ -263,3 +290,11 @@ import android.net.Uri
 }
 
 @Composable private fun FieldDivider() {HorizontalDivider(Modifier.padding(horizontal=16.dp),color=MaterialTheme.colorScheme.onSurface.copy(alpha=.08f),thickness=.5.dp)}
+
+@Composable private fun SettingsDisclosure(title:String,content:@Composable ColumnScope.()->Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        TextButton(onClick={expanded=!expanded},contentPadding=PaddingValues(0.dp)) { Text(if(expanded) "收起$title" else title) }
+        if(expanded) content()
+    }
+}

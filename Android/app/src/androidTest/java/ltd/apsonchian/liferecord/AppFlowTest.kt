@@ -86,7 +86,7 @@ class AppFlowTest {
     }
     @Test fun tabsRetainRangeSearchAndUnsentCoachDraft() {
         compose.onNodeWithTag("tab-1").performClick()
-        compose.onNodeWithText("7 天").performClick()
+        compose.onNodeWithText("近 7 天").performClick()
         compose.onNodeWithContentDescription("查看全部数据详情").performClick()
         compose.onNode(hasSetTextAction()).performTextReplacement("retained search")
         hideKeyboard()
@@ -100,7 +100,7 @@ class AppFlowTest {
         compose.onNodeWithTag("tab-1").performClick()
         compose.onNode(hasSetTextAction()).assertTextContains("retained search")
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithText("7 天").assertIsSelected()
+        compose.onNodeWithText("近 7 天").assertIsSelected()
         compose.onNodeWithTag("tab-2").performClick()
         compose.onNode(hasSetTextAction()).assertTextContains("draft retained without sending")
         assertEquals("[]", app.store.get("conversations", "[]"))
@@ -230,7 +230,7 @@ class AppFlowTest {
         compose.onNode(hasText("次测量",substring=true)).assertExists()
         capture("measurement-detail")
     }
-    @Test fun nativeLayoutDailyGoalsAndScreenshots() {
+    @Test(timeout=45000) fun nativeLayoutDailyGoalsAndScreenshots() {
         scenario.close()
         val profile=defaultProfile().put("fitnessGoal","增肌").put("height",181).put("baselineWeight",64).put("targetWeight",72).put("weeklyWeightTarget",.25).put("calorieGoal",2600).put("proteinGoal",130).put("carbsGoal",340).put("fatGoal",70)
         val meals=listOf(
@@ -248,24 +248,21 @@ class AppFlowTest {
         compose.onNodeWithContentDescription("今日营养圆环，用餐 4 次").assertExists()
         capture("today-light-1.3")
         compose.onNodeWithTag("tab-3").performClick()
-        compose.onNodeWithText("身体与目标").assertExists()
-        compose.onNodeWithText("每日目标").assertExists()
-        compose.onNodeWithText("智能与连接").assertExists()
-        capture("settings-light-1.3")
-        compose.onNodeWithText("每日目标").performClick()
-        compose.onNodeWithText("热量").assertExists()
-        compose.onNodeWithText("身高").assertDoesNotExist()
-        compose.onAllNodes(hasSetTextAction())[0].performTextReplacement("2500")
+        compose.onNodeWithText("个人与目标").assertExists()
+        compose.onNodeWithText("记录与提醒").assertExists()
+        compose.onNodeWithText("教练与 AI").assertExists()
+        compose.onNodeWithText("每日目标").assertDoesNotExist()
+        capture("settings-light-oct15")
+        compose.onNodeWithText("个人与目标").performClick()
+        compose.onNodeWithContentDescription("身高").assertExists()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasContentDescription("热量"))
+        compose.onNodeWithContentDescription("热量").performTextReplacement("2500")
         hideKeyboard()
+        capture("profile-light-oct15")
         compose.onNodeWithText("保存").performClick()
         compose.waitForIdle()
         assertEquals(2500.0,app.store.load().profile.getDouble("calorieGoal"),0.0)
         assertEquals(181.0,app.store.load().profile.getDouble("height"),0.0)
-        compose.onNodeWithText("身体与目标").performClick()
-        capture("profile-light-1.3")
-        compose.onNodeWithText("身高").assertExists()
-        compose.onNodeWithText("热量").assertDoesNotExist()
-        compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithTag("tab-2").performClick()
         capture("coach-light-1.3")
         compose.onNode(hasSetTextAction()).performClick().performTextReplacement("键盘和导航测试")
@@ -273,16 +270,43 @@ class AppFlowTest {
         compose.onNodeWithTag("glass-navigation").assertDoesNotExist()
         capture("coach-keyboard-1.3")
         hideKeyboard()
-        // App-only appearance changes keep the emulator's system preference intact.
-        if(android.os.Build.VERSION.SDK_INT>=31) {
-            scenario.onActivity {(it.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).setApplicationNightMode(android.app.UiModeManager.MODE_NIGHT_YES)}
-            compose.waitUntil(5000) {app.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES}
-            compose.waitForIdle();capture("coach-dark-1.3")
-            compose.onNodeWithTag("tab-0").performClick();capture("today-dark-1.3")
-            compose.onNodeWithTag("tab-3").performClick();capture("settings-dark-1.3")
-            scenario.onActivity {(it.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).setApplicationNightMode(android.app.UiModeManager.MODE_NIGHT_AUTO)}
-        }
     }
+    @Test fun coachAlwaysOpensAtLatestMessageIncludingEqualLengthConversationSwitches() {
+        scenario.close()
+        fun chat(id:String):org.json.JSONObject {
+            val entries=org.json.JSONArray()
+            repeat(32) { index -> entries.put(org.json.JSONObject().put("role",if(index%2==0) "user" else "assistant")
+                .put("content",if(index==31) "LATEST-$id" else "Message-$id-$index\nHistorical conversation content with several lines.")) }
+            return org.json.JSONObject().put("id",id).put("title","Thread-$id").put("messages",entries)
+        }
+        app.store.set("conversations",org.json.JSONArray().put(chat("A")).put(chat("B")).toString())
+        scenario=ActivityScenario.launch(MainActivity::class.java)
+        compose.onNodeWithTag("tab-2").performClick()
+        compose.onNodeWithText("LATEST-A").assertIsDisplayed()
+        compose.onNodeWithTag("coach-messages").performScrollToIndex(0)
+        compose.onNodeWithText("Message-A-0",substring=true).assertIsDisplayed()
+        compose.onNodeWithTag("tab-0").performClick()
+        compose.onNodeWithTag("tab-2").performClick()
+        compose.onNodeWithText("LATEST-A").assertIsDisplayed()
+        compose.onNodeWithContentDescription("对话列表").performClick()
+        compose.onNodeWithText("Thread-B").performClick()
+        compose.onNodeWithText("LATEST-B").assertIsDisplayed()
+        capture("coach-latest-oct15")
+    }
+    @Test fun feedbackIsCompactAndOnlyExpandsDetailsOnRequest() {
+        scenario.close()
+        val points=listOf(6L,3L,1L).map { offset -> Record.create(RecordType.BODY,java.time.LocalDate.now().minusDays(offset).epochAt()).apply {json.put("weight",70.0+offset*.05)} }
+        app.store.commit(Snapshot(points,defaultProfile(),emptyList()))
+        scenario=ActivityScenario.launch(MainActivity::class.java)
+        compose.onNodeWithTag("tab-1").performClick()
+        expose("和教练复盘")
+        compose.onNodeWithText("热量在目标 ±10% 内").assertDoesNotExist()
+        capture("feedback-compact-oct15")
+        compose.onNodeWithTag("feedback-details").performClick()
+        expose("热量在目标 ±10% 内")
+        compose.onNodeWithText("热量在目标 ±10% 内").assertExists()
+    }
+
     private fun capture(name:String) {
         val instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         if(android.os.Build.VERSION.SDK_INT<29 || androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("captureScreenshots")!="true") return

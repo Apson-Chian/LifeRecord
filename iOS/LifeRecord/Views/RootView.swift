@@ -71,7 +71,7 @@ struct RootView: View {
             TabView(selection: $selectedTab) {
                 Tab("今日", systemImage: AppSymbol.today, value: 0) { TodayView() }
                 Tab("趋势", systemImage: AppSymbol.trends, value: 1) { ProgressDashboardView() }
-                Tab("教练", systemImage: AppSymbol.coach, value: 2) { CoachView() }
+                Tab("教练", systemImage: AppSymbol.coach, value: 2) { CoachView(isVisible: selectedTab == 2) }
                 Tab("设置", systemImage: AppSymbol.settings, value: 3) { SettingsView() }
             }
         } else {
@@ -87,7 +87,7 @@ struct RootView: View {
             ProgressDashboardView()
                 .tabItem { Label("趋势", systemImage: AppSymbol.trends) }
                 .tag(1)
-            CoachView()
+            CoachView(isVisible: selectedTab == 2)
                 .tabItem { Label("教练", systemImage: AppSymbol.coach) }
                 .tag(2)
             SettingsView()

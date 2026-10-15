@@ -4,6 +4,8 @@ import PhotosUI
 import UIKit
 
 struct CoachView: View {
+    var isVisible = true
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
@@ -89,21 +91,32 @@ struct CoachView: View {
                                         .foregroundStyle(status.hasPrefix("回答失败") ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                                 }
                             }
+                            Color.clear.frame(height: 1).id("conversation-bottom")
                         }
                         .padding(16)
                         .padding(.bottom, 8)
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .defaultScrollAnchor(.bottom)
+                    .task(id: "\(isVisible):\(activeConversation?.id.uuidString ?? "empty")") {
+                        guard isVisible else { return }
+                        await Task.yield()
+                        guard !Task.isCancelled else { return }
+                        proxy.scrollTo("conversation-bottom", anchor: .bottom)
+                    }
+                    .onChange(of: scenePhase) { _, phase in
+                        if phase == .active && isVisible { proxy.scrollTo("conversation-bottom", anchor: .bottom) }
+                    }
                     .onChange(of: messages.count) { _, _ in
-                        guard let id = messages.last?.id else { return }
+                        guard isVisible else { return }
                         withAnimation(.spring(response: 0.35, dampingFraction: 1)) {
-                            proxy.scrollTo(id, anchor: .bottom)
+                            proxy.scrollTo("conversation-bottom", anchor: .bottom)
                         }
                     }
-                    .onChange(of: coachTaskCenter.generatingConversationIDs) { _, _ in
-                        if isSending {
+                    .onChange(of: isSending) { _, _ in
+                        if isVisible {
                             withAnimation(.spring(response: 0.35, dampingFraction: 1)) {
-                                proxy.scrollTo("sending", anchor: .bottom)
+                                proxy.scrollTo("conversation-bottom", anchor: .bottom)
                             }
                         }
                     }

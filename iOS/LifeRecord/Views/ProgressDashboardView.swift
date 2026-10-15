@@ -34,8 +34,8 @@ struct ProgressDashboardView: View {
     }
 
     private enum TrendRange: String, CaseIterable, Identifiable {
-        case week = "7 天"
-        case month = "30 天"
+        case week = "近 7 天"
+        case month = "近 30 天"
         case all = "全部"
 
         var id: String { rawValue }
@@ -48,21 +48,19 @@ struct ProgressDashboardView: View {
     }
 
     private var filteredMetrics: [BodyMetric] {
-        guard let cutoff else { return bodyMetrics }
-        return bodyMetrics.filter { $0.date >= cutoff }
+        bodyMetrics.filter { $0.date <= .now && (cutoff == nil || $0.date >= cutoff!) }
     }
 
     private var filteredMeals: [MealEntry] {
-        guard let cutoff else { return meals }
-        return meals.filter { $0.date >= cutoff }
+        meals.filter { $0.date <= .now && (cutoff == nil || $0.date >= cutoff!) }
     }
 
     private var weightSeries: [BodyTrend.Point] {
-        BodyTrend.series(bodyMetrics.map { .init(date: $0.date, value: $0.weight) })
+        BodyTrend.series(bodyMetrics.filter { $0.date <= .now }.map { .init(date: $0.date, value: $0.weight) })
     }
 
     private var fatSeries: [BodyTrend.Point] {
-        BodyTrend.series(bodyMetrics.compactMap { metric in
+        BodyTrend.series(bodyMetrics.filter { $0.date <= .now }.compactMap { metric in
             metric.bodyFat.flatMap { (1...80).contains($0) ? BodyTrend.Sample(date: metric.date, value: $0) : nil }
         })
     }
@@ -265,7 +263,7 @@ struct ProgressDashboardView: View {
     }
 
     private var workoutChart: some View {
-        WorkoutTrendCard(workouts: workouts.filter { cutoff == nil || $0.date >= cutoff! }, cutoff: cutoff)
+        WorkoutTrendCard(workouts: workouts.filter { $0.date <= .now && (cutoff == nil || $0.date >= cutoff!) }, cutoff: cutoff)
     }
 
     private var calendarDays: [Date] {
@@ -334,13 +332,9 @@ struct ProgressDashboardView: View {
                         .font(.title2).foregroundStyle(.white)
                         .frame(width: 48, height: 48)
                         .background(AppTheme.accent.gradient, in: RoundedRectangle(cornerRadius: 16))
+                    Text("AI 周报").font(.headline)
                     Spacer()
                     Text("最近 7 天").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("把记录，变成下一步").font(.title2.bold())
-                    Text(report.isEmpty ? "一份属于你的 AI 周报，发现变化，找到节奏。" : "本周复盘已就绪，查看趋势解读与行动建议。")
-                        .font(.subheadline).foregroundStyle(.secondary)
                 }
                 if !report.isEmpty {
                     NavigationLink {

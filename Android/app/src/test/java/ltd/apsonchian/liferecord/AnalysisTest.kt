@@ -79,12 +79,33 @@ class AnalysisTest {
         assertNotNull(GoalFeedback.summarize(points,defaultProfile(),7,at).weeklyChange)
         assertNull(GoalFeedback.summarize(points.drop(1),defaultProfile(),7,at).weeklyChange)
     }
-    @Test fun mondayWeekResetsProgressAndUsesFirstMeasurementThisWeek() {
+    @Test fun feedbackReviewsSelectedHistoricalRangeAndProratesMeasuredSpan() {
         val goals=defaultProfile().put("fitnessGoal","增肌").put("baselineWeight",70).put("targetWeight",75).put("weeklyWeightTarget",.5)
-        val records=listOf(body("2026-10-11",70.0),body("2026-10-12",70.0),body("2026-10-13",71.0),body("2026-10-14",72.0))
-        val summary=GoalFeedback.summarize(records,goals,30,at)
-        assertEquals(LocalDate.parse("2026-10-12"),summary.week!!.start);assertEquals(.29,summary.week.change,1e-9);assertEquals(.58,summary.week.fraction,1e-9)
-        assertNull(GoalFeedback.summarize(records,goals,30,date("2026-10-19")).week)
+        val records=listOf(body("2026-10-01",70.0),body("2026-10-12",70.0),body("2026-10-14",70.4))
+        val month=GoalFeedback.summarize(records,goals,30,at)
+        val week=GoalFeedback.summarize(records,goals,7,at)
+        assertEquals(at.day(),week.period!!.end)
+        assertEquals(at.day().minusDays(6),week.period.start)
+        assertEquals(LocalDate.parse("2026-10-12"),week.period.baseline)
+        assertEquals(.5*2/7,week.period.targetChange,1e-9)
+        assertEquals(.5*13/7,month.period!!.targetChange,1e-9)
+        assertEquals(LocalDate.parse("2026-10-01"),month.period.baseline)
+        assertNull(GoalFeedback.summarize(records,goals,2,at).period)
+        val more=records+body("2026-10-18",70.5)
+        val monday=GoalFeedback.summarize(more,goals,7,date("2026-10-19"))
+        assertNotNull(monday.period)
+        assertFalse(monday.period!!.end.isAfter(date("2026-10-19").day()))
+        assertEquals(week.period.change,GoalFeedback.summarize(records+body("2026-10-15",100.0),goals,7,at).period!!.change,0.0)
+    }
+    @Test fun referenceProgressHandlesLossMissingDaysAndInvalidGoals() {
+        val goals=defaultProfile().put("fitnessGoal","减脂").put("baselineWeight",80).put("targetWeight",70).put("weeklyWeightTarget",-.5)
+        val records=listOf(body("2026-10-12",80.0),body("2026-10-14",79.6))
+        val period=GoalFeedback.summarize(records,goals,7,at).period!!
+        assertTrue(period.change<0 && period.targetChange<0 && period.fraction>0 && period.fraction<1)
+        assertNull(GoalFeedback.summarize(records.take(1),goals,7,at).period)
+        assertNull(GoalFeedback.summarize(records,goals.copy().put("weeklyWeightTarget",0),7,at).period)
+        assertNull(GoalFeedback.summarize(records,goals.copy().put("fitnessGoal","维持"),7,at).period)
+        assertNull(GoalFeedback.summarize(records,goals,30,date("2026-10-23")).period)
     }
     @Test fun staleMeasurementsInvalidDirectionAndInvalidGoalsHaveSpecificFeedback() {
         val records=listOf(body("2026-10-13",70.0))

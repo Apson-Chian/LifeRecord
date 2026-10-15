@@ -33,7 +33,6 @@ struct WorkoutDayCard: View {
                         editing = active
                     }.buttonStyle(AppButtonStyle(tint: Color(red: 0.05, green: 0.43, blue: 0.43)))
                 } else if Calendar.current.isDateInToday(date) {
-                    Text("留一点时间，给更好的自己").font(.subheadline).foregroundStyle(.secondary)
                     Button { context.insert(WorkoutEntry()); persist() } label: {
                         Label("开始训练", systemImage: "play.fill").frame(maxWidth: .infinity)
                     }.buttonStyle(AppButtonStyle(tint: Color(red: 0.05, green: 0.43, blue: 0.43)))

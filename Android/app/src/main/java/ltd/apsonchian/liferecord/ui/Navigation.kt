@@ -26,7 +26,7 @@ import java.time.YearMonth
 
 @Composable fun RangePicker(selected:Int, change:(Int)->Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(2.dp).selectableGroup()) {
-        listOf(7 to "7 天",30 to "30 天",0 to "全部").forEach { (value,label) ->
+        listOf(7 to "近 7 天",30 to "近 30 天",0 to "全部").forEach { (value,label) ->
             Box(Modifier.weight(1f).clip(RoundedCornerShape(9.dp))
                 .background(if(selected==value) MaterialTheme.colorScheme.surface else Color.Transparent)
                 .selectable(selected==value,role=Role.Tab,onClick={change(value)}).padding(vertical=5.dp),contentAlignment=Alignment.Center) {
