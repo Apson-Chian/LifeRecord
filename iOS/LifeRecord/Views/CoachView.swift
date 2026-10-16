@@ -265,8 +265,8 @@ struct CoachView: View {
             }
             .sheet(isPresented: $showsFavorites) {
                 NavigationStack {
-                    FavoriteFoodsView(onSelect: { food in
-                        input = food.name
+                    FavoriteFoodsView(onSelect: { foods in
+                        input = foods.map(\.name).joined(separator: "、")
                         composerFocused = true
                     })
                 }
@@ -526,6 +526,7 @@ struct CoachView: View {
         }
 
         let userMessage = CoachMessage(role: "user", content: displayText)
+        userMessage.images = attachedImages
         userMessage.conversation = conversation
         modelContext.insert(userMessage)
         conversation.updatedAt = .now
@@ -1246,6 +1247,7 @@ private struct ChatBubble: View {
     @Environment(AppSettings.self) private var settings
     let message: CoachMessage
     private var isUser: Bool { message.role == "user" }
+    @State private var selectedPhoto: PhotoSelection?
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
@@ -1258,10 +1260,26 @@ private struct ChatBubble: View {
 
             Group {
                 if isUser {
-                    Text(message.content)
-                        .font(.body)
-                        .textSelection(.enabled)
-                        .foregroundStyle(.white)
+                    VStack(alignment: .leading, spacing: 10) {
+                        let photos = message.images
+                        if !photos.isEmpty {
+                            LazyVGrid(columns: Array(repeating: GridItem(.fixed(84), spacing: 6), count: min(photos.count, 2)), spacing: 6) {
+                                ForEach(photos.indices, id: \.self) { index in
+                                    if let image = UIImage(data: photos[index]) {
+                                        Button { selectedPhoto = PhotoSelection(id: String(index)) } label: {
+                                            Image(uiImage: image).resizable().scaledToFill()
+                                                .frame(width: 84, height: 84)
+                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        }.buttonStyle(.plain)
+                                            .accessibilityLabel("查看第 \(index + 1) 张照片，共 \(photos.count) 张")
+                                    }
+                                }
+                            }
+                        }
+                        if !message.visibleContent.isEmpty {
+                            Text(message.visibleContent).font(.body).textSelection(.enabled).foregroundStyle(.white)
+                        }
+                    }
                         .padding(.horizontal, 15)
                         .padding(.vertical, 11)
                         .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -1287,6 +1305,9 @@ private struct ChatBubble: View {
             }
         }
         .padding(.horizontal, 2)
+        .fullScreenCover(item: $selectedPhoto) { photo in
+            LocalPhotoViewer(images: message.images, initialIndex: Int(photo.id) ?? 0)
+        }
     }
 }
 

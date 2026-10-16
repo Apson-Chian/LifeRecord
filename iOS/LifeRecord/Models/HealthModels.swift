@@ -230,6 +230,21 @@ final class CoachMessage {
     var role: String
     var content: String
     var conversation: CoachConversation?
+    // Optional storage preserves existing conversations during lightweight migration.
+    @Attribute(.externalStorage) var imageData: Data? = nil
+
+    var images: [Data] {
+        get { imageData.flatMap { try? PropertyListDecoder().decode([Data].self, from: $0) } ?? [] }
+        set { imageData = newValue.isEmpty ? nil : try? PropertyListEncoder().encode(newValue) }
+    }
+
+    var visibleContent: String {
+        let count = images.count
+        guard count > 0 else { return content }
+        if content == "[发送了 \(count) 张图片]" { return "" }
+        let suffix = "\n[附带 \(count) 张图片]"
+        return content.hasSuffix(suffix) ? String(content.dropLast(suffix.count)) : content
+    }
 
     init(id: UUID = UUID(), date: Date = .now, role: String, content: String) {
         self.id = id
@@ -247,6 +262,22 @@ struct MealDraft: Codable {
     var fat = 0.0
     var fiber = 0.0
     var note = ""
+}
+
+extension MealDraft {
+    init(favorites: [FavoriteFood]) {
+        self.init(
+            name: favorites.map(\.name).joined(separator: "、"),
+            calories: favorites.reduce(0) { $0 + $1.calories },
+            protein: favorites.reduce(0) { $0 + $1.protein },
+            carbs: favorites.reduce(0) { $0 + $1.carbs },
+            fat: favorites.reduce(0) { $0 + $1.fat },
+            fiber: favorites.reduce(0) { $0 + $1.fiber },
+            note: favorites.map { food in
+                [food.name, food.portion, food.note].filter { !$0.isEmpty }.joined(separator: " · ")
+            }.joined(separator: "\n")
+        )
+    }
 }
 
 struct DailyNutrition {
