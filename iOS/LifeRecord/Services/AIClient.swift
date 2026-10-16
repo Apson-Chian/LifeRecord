@@ -309,7 +309,7 @@ struct AIClient {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await PrivateHTTPSession.session.data(for: request)
+        let (data, response) = try await PrivateHTTPSession.aiSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AIClientError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             if AIAuthentication.isOfficialDeepSeek(endpoint), let failure = AIAuthentication.deepSeekFailure(status: http.statusCode) {
@@ -457,9 +457,17 @@ private final class CredentialRedirectGuard: NSObject, URLSessionTaskDelegate, @
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
 }
 enum PrivateHTTPSession {
-    static let session: URLSession = {
+    static let session = makeSession(waitsForConnectivity: false)
+    static let aiSession = makeSession(waitsForConnectivity: true)
+
+    private static func makeSession(waitsForConnectivity: Bool) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
+        config.waitsForConnectivity = waitsForConnectivity
+        if waitsForConnectivity {
+            config.timeoutIntervalForRequest = 90
+            config.timeoutIntervalForResource = 120
+        }
         return URLSession(configuration:config, delegate:CredentialRedirectGuard(), delegateQueue:nil)
-    }()
+    }
 }

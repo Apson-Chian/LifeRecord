@@ -57,8 +57,14 @@ struct CoachView: View {
                         LazyVStack(spacing: 14) {
                             coachIntro
                             ForEach(messages) { message in
-                                ChatBubble(message: message)
-                                    .id(message.id)
+                                VStack(spacing: 10) {
+                                    ChatBubble(message: message)
+                                    if let retryTarget = retryTarget(for: message) {
+                                        generationNotice(for: retryTarget, retryAllowed: true)
+                                    } else if message.role == "user", !message.generationFailure.isEmpty {
+                                        generationNotice(for: message, retryAllowed: false)
+                                    }
+                                }.id(message.id)
                             }
                             if isSending {
                                 GlassCard {
@@ -68,7 +74,7 @@ struct CoachView: View {
                                             Text(coachTaskCenter.activeQuestion(for: activeConversation?.id ?? UUID()) ?? "正在生成回答…")
                                                 .font(.subheadline.weight(.semibold))
                                                 .lineLimit(2)
-                                            Text("你可以离开这个页面，回答会继续生成并自动保存到当前对话。")
+                                            Text("切换页面会继续生成；切换应用后，系统允许的时间内也会继续。")
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
@@ -84,12 +90,6 @@ struct CoachView: View {
                                     }
                                 }
                                 .id("sending")
-                            } else if let status = activeConversation.flatMap({ coachTaskCenter.statusMessage(for: $0.id) }), !status.isEmpty {
-                                GlassCard {
-                                    Label(status, systemImage: status.hasPrefix("回答失败") ? "exclamationmark.triangle" : "checkmark.circle")
-                                        .font(.caption)
-                                        .foregroundStyle(status.hasPrefix("回答失败") ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-                                }
                             }
                             Color.clear.frame(height: 1).id("conversation-bottom")
                         }
@@ -150,7 +150,6 @@ struct CoachView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) { composer }
-            .keyboardDismissControl()
             .navigationTitle(settings.coachName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -321,12 +320,24 @@ struct CoachView: View {
         @Bindable var settings = settings
         let visionEnabled = settings.supportsVision
         return VStack(spacing: 0) {
-            Toggle("允许 AI 修改记录", isOn: $settings.aiCanWrite)
-                .font(.caption)
-                .disabled(isSending)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 6)
-                .accessibilityHint("开启后，明确要求添加的餐食会实际保存到记录中")
+            HStack(spacing: 12) {
+                Toggle("允许 AI 修改记录", isOn: $settings.aiCanWrite)
+                    .font(.caption)
+                    .disabled(isSending)
+                    .accessibilityHint("开启后，明确要求添加的餐食会实际保存到记录中")
+                if composerFocused {
+                    Button { composerFocused = false } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .font(.body.weight(.medium))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                        .accessibilityLabel("收起键盘")
+                        .accessibilityIdentifier("coach-dismiss-keyboard")
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 6)
             if !imageData.isEmpty {
                 ScrollView(.horizontal) {
                     HStack(spacing: 9) {
@@ -413,7 +424,7 @@ struct CoachView: View {
                         .frame(width: 44, height: 44)
                         .background(
                             Group {
-                                if canSend {
+                                if canSend || isSending {
                                     Circle().fill(AppTheme.accent)
                                 } else {
                                     Circle().fill(Color(.systemGray3))
@@ -423,7 +434,7 @@ struct CoachView: View {
                 }
                 .buttonStyle(PressScaleButtonStyle())
                 .disabled(isLoadingPhotos || (!canSend && !isSending))
-                .accessibilityLabel(isSending ? "正在生成" : "发送")
+                .accessibilityLabel(isSending ? "停止生成" : "发送")
             }
             .padding(7)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
@@ -449,6 +460,15 @@ struct CoachView: View {
 
     @MainActor
     private func prepareConversations() {
+        var recovered = false
+        for message in allMessages where message.role == "user" {
+            let running = message.conversation.map { coachTaskCenter.isGenerating($0.id) } ?? false
+            if message.recoverInterruptedGeneration(isRunning: running) { recovered = true }
+        }
+        if recovered {
+            do { try modelContext.save() }
+            catch { modelContext.rollback(); errorMessage = "恢复生成状态失败：\(error.localizedDescription)" }
+        }
         if conversations.isEmpty, !allMessages.isEmpty {
             let legacy = CoachConversation(title: "历史对话")
             modelContext.insert(legacy)
@@ -483,6 +503,7 @@ struct CoachView: View {
 
     @MainActor
     private func deleteConversation(_ conversation: CoachConversation) {
+        coachTaskCenter.cancel(conversation.id)
         modelContext.delete(conversation)
         do {
             try modelContext.save()
@@ -505,16 +526,6 @@ struct CoachView: View {
         let displayText = text.isEmpty
             ? "[发送了 \(attachedImages.count) 张图片]"
             : (attachedImages.isEmpty ? text : "\(text)\n[附带 \(attachedImages.count) 张图片]")
-        let requestText: String
-        if attachedImages.isEmpty {
-            requestText = text
-        } else if text.isEmpty {
-            requestText = "请识别我发送的图片。如果这是我实际吃下的餐食或饮料，请估算营养并直接记录进饮食记录；如果只是配料表、包装或菜单，则只分析。"
-        } else {
-            requestText = text + "\n如果图片是我实际吃下的餐食或饮料，且我没有明确说不要记录，请同时记录进饮食记录。"
-        }
-        let outgoingHistory = messages.map { AIChatMessage(role: $0.role, content: $0.content) }
-            + [AIChatMessage(role: "user", content: requestText)]
 
         let conversation = activeConversation ?? CoachConversation()
         if activeConversation == nil {
@@ -527,6 +538,7 @@ struct CoachView: View {
 
         let userMessage = CoachMessage(role: "user", content: displayText)
         userMessage.images = attachedImages
+        userMessage.generationState = .pending
         userMessage.conversation = conversation
         modelContext.insert(userMessage)
         conversation.updatedAt = .now
@@ -547,36 +559,97 @@ struct CoachView: View {
            let favorite = favoriteFoods.first(where: { $0.name.caseInsensitiveCompare(text) == .orderedSame }) {
             let note = favorite.note.isEmpty ? "" : "\n备注：\(favorite.note)"
             insertAssistantMessage(favorite.nutritionSummary + note, in: conversation)
+            userMessage.generationState = .completed
             do { try modelContext.save() }
             catch { modelContext.rollback(); errorMessage = "常用餐食回复保存失败：\(error.localizedDescription)" }
             return
         }
 
+        generateReply(to: userMessage, in: conversation)
+    }
+
+    private func retryTarget(for message: CoachMessage) -> CoachMessage? {
+        if message.role == "user", message.generationState.canRetry { return message }
+        // Existing versions stored failure as an assistant message, without request state.
+        if message.role == "assistant", message.id == messages.last?.id,
+           message.content.hasPrefix("回答失败："),
+           let question = messages.last(where: { $0.role == "user" }), question.generationState == .none {
+            return question
+        }
+        return nil
+    }
+
+    private func generationNotice(for message: CoachMessage, retryAllowed: Bool) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(message.generationFailure.isEmpty ? "上次回答失败，问题已保留。" : message.generationFailure,
+                      systemImage: "exclamationmark.circle")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                if retryAllowed {
+                    Button("重新生成", systemImage: "arrow.clockwise") {
+                        guard let conversation = message.conversation else { return }
+                        composerFocused = false
+                        generateReply(to: message, in: conversation)
+                    }.buttonStyle(.bordered).disabled(isSending)
+                        .accessibilityIdentifier("coach-regenerate")
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @MainActor
+    private func generateReply(to userMessage: CoachMessage, in conversation: CoachConversation) {
         let conversationID = conversation.id
+        guard !coachTaskCenter.isGenerating(conversationID), userMessage.modelContext != nil else { return }
+        let attachedImages = userMessage.images
+        let text = userMessage.visibleContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if attachedImages.isEmpty, text.range(of: #"(?m)^\[(发送了|附带) \d+ 张图片\]$"#, options: .regularExpression) != nil {
+            errorMessage = "这条旧消息没有保存图片，请重新添加照片后发送。"
+            return
+        }
+        let displayText = userMessage.content
+        let requestText: String
+        if attachedImages.isEmpty { requestText = text }
+        else if text.isEmpty {
+            requestText = "请识别我发送的图片。如果这是我实际吃下的餐食或饮料，请估算营养并直接记录进饮食记录；如果只是配料表、包装或菜单，则只分析。"
+        } else {
+            requestText = text + "\n如果图片是我实际吃下的餐食或饮料，且我没有明确说不要记录，请同时记录进饮食记录。"
+        }
+        let ordered = conversation.messages.sorted { $0.date < $1.date }
+        let position = ordered.firstIndex(where: { $0.id == userMessage.id }) ?? ordered.count
+        let outgoingHistory = ordered.prefix(position)
+            .filter { !($0.role == "assistant" && $0.content.hasPrefix("回答失败：")) }
+            .map { AIChatMessage(role: $0.role, content: $0.content) }
+            + [AIChatMessage(role: "user", content: requestText + "\n原问题发送时间：" + userMessage.date.formatted(.iso8601) + "。相对日期按原问题发送时间理解。")]
+        userMessage.generationState = .pending
+        userMessage.generationFailure = ""
+        do { try modelContext.save() }
+        catch { modelContext.rollback(); errorMessage = "问题保存失败：\(error.localizedDescription)"; return }
         AIAnswerNotificationCenter.shared.requestAuthorizationIfNeeded()
         let context = systemContext
         let settings = settings
         let modelContext = modelContext
+        let taskCenter = coachTaskCenter
         let writesAllowed = settings.aiCanWrite
-
-        let accepted = coachTaskCenter.submit(conversationID: conversationID, question: displayText) {
+        let accepted = taskCenter.submit(conversationID: conversationID, question: displayText) {
+            var applyingActions = false
             do {
-                let client = AIClient(settings: settings)
-                let reply = try await client.agent(
-                    system: context,
-                    messages: outgoingHistory,
-                    images: attachedImages
-                )
+                let reply = try await AIClient(settings: settings).agent(system: context, messages: outgoingHistory, images: attachedImages)
+                try Task.checkCancellation()
+                guard userMessage.modelContext != nil, conversation.modelContext != nil, !conversation.isDeleted else { throw CancellationError() }
                 let canWrite = writesAllowed && settings.aiCanWrite
                 if let blocked = CoachActionPolicy.blockedMessage(for: reply, writesAllowed: canWrite, request: text) {
                     insertAssistantMessage(blocked, in: conversation)
                 } else if canWrite {
+                    userMessage.generationState = .applying
+                    try modelContext.save()
+                    applyingActions = true
                     let execution = try await apply(
                         reply.actions,
                         attachedImages: attachedImages,
                         inputText: displayText,
                         conversationID: conversationID,
-                        explicitlyRequestedDate: requestedActionDate(in: requestText)
+                        explicitlyRequestedDate: requestedActionDate(in: requestText, referenceDate: userMessage.date)
                     )
                     let content: String
                     if !execution.receipts.isEmpty {
@@ -597,22 +670,35 @@ struct CoachView: View {
                 } else {
                     insertAssistantMessage(reply.answer, in: conversation)
                 }
+                userMessage.generationState = .completed
+                userMessage.generationFailure = ""
                 try modelContext.save()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             } catch {
                 modelContext.rollback()
-                insertAssistantMessage("回答失败：\(error.localizedDescription)", in: conversation)
+                guard userMessage.modelContext != nil, conversation.modelContext != nil, !conversation.isDeleted else { throw CancellationError() }
+                if applyingActions {
+                    userMessage.generationState = .needsReview
+                    userMessage.generationFailure = "处理回答时中断，请先核对记录，再决定是否重新提问。"
+                } else if taskCenter.wasBackgroundInterrupted(conversationID) {
+                    userMessage.generationState = .interrupted
+                    userMessage.generationFailure = "后台运行被系统中断，问题和已附图片已保留。"
+                } else if Task.isCancelled || error is CancellationError {
+                    userMessage.generationState = .stopped
+                    userMessage.generationFailure = "已停止生成。"
+                } else {
+                    userMessage.generationState = .failed
+                    userMessage.generationFailure = CoachFailureDescription.message(for: error)
+                }
                 try? modelContext.save()
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                if !Task.isCancelled { UINotificationFeedbackGenerator().notificationOccurred(.error) }
                 throw error
             }
         }
-
         if !accepted {
-            // 极端情况下任务未成功提交时，把输入恢复，避免用户问题被吞掉。
-            input = text
-            imageData = attachedImages
-            errorMessage = "当前对话正在生成，请稍后再发。"
+            userMessage.generationState = .interrupted
+            userMessage.generationFailure = "当前对话正在生成，请稍后重新生成。"
+            try? modelContext.save()
         }
     }
 
@@ -679,6 +765,7 @@ struct CoachView: View {
         var photoUploadError: Error?
         var didAttachPhotos = false
         for action in actions.prefix(12) {
+            try Task.checkCancellation()
             let date = explicitlyRequestedDate ?? resolvedActionDate(action.date)
             let type = action.type
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -791,12 +878,14 @@ struct CoachView: View {
                     do {
                         photoIDs = try await syncCoordinator.uploadMealPhotos(attachedImages, mealID: meal.id)
                     } catch {
+                        if Task.isCancelled || error is CancellationError { throw CancellationError() }
                         // 图片持久化是附加能力，不应该把已经成功的 AI 识别和数据写入整体判定为失败。
                         photoIDs = []
                         photoUploadError = error
                         let warning = "AI 识别和记录已完成，但附带图片未保存：\(error.localizedDescription)"
                         if !warnings.contains(warning) { warnings.append(warning) }
                     }
+                    try Task.checkCancellation()
                     didAttachPhotos = true
                 } else {
                     photoIDs = []
@@ -900,6 +989,7 @@ struct CoachView: View {
         }
         if !receipts.isEmpty {
             // 只有数据库真正保存成功，界面才允许显示成功回执。
+            try Task.checkCancellation()
             try modelContext.save()
             await syncCoordinator.sync(context: modelContext, settings: settings)
             if let photoUploadError {
@@ -940,7 +1030,7 @@ struct CoachView: View {
     }
 
     /// Explicit times in the user's own instruction win over a model-produced timestamp.
-    private func requestedActionDate(in text: String) -> Date? {
+    private func requestedActionDate(in text: String, referenceDate: Date = .now) -> Date? {
         let normalized = text.replacingOccurrences(of: "：", with: ":")
         let timePattern = #"(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?!\d)|(?<!\d)([0-2]?\d)点(?:(半)|([0-5]?\d)分?)?"#
         guard let match = firstRegexMatch(timePattern, in: normalized) else { return nil }
@@ -958,7 +1048,7 @@ struct CoachView: View {
         }
 
         let calendar = Calendar.current
-        var base = Date.now
+        var base = referenceDate
         if normalized.contains("前天") {
             base = calendar.date(byAdding: .day, value: -2, to: base) ?? base
         } else if normalized.contains("昨天") || normalized.contains("昨日") {

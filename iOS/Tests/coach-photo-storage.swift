@@ -15,6 +15,8 @@ import SwiftData
             context.insert(conversation)
             let message = CoachMessage(role: "user", content: "午餐\n[附带 2 张图片]")
             message.images = photos
+            message.generationState = .failed
+            message.generationFailure = "网络连接中断"
             message.conversation = conversation
             context.insert(message)
             let legacy = CoachMessage(role: "user", content: "[发送了 1 张图片]")
@@ -28,8 +30,22 @@ import SwiftData
             let messages = try context.fetch(FetchDescriptor<CoachMessage>())
             let photoMessage = messages.first { !$0.images.isEmpty }!
             assert(photoMessage.images == photos && photoMessage.visibleContent == "午餐")
+            assert(photoMessage.generationState == .failed && photoMessage.generationState.canRetry)
+            assert(photoMessage.generationFailure == "网络连接中断")
+            photoMessage.generationState = .pending
+            assert(!photoMessage.recoverInterruptedGeneration(isRunning: true))
+            assert(photoMessage.generationState == .pending)
+            assert(photoMessage.recoverInterruptedGeneration(isRunning: false))
+            assert(photoMessage.generationState == .interrupted && photoMessage.generationState.canRetry)
+            assert(photoMessage.images == photos)
+            photoMessage.generationState = .applying
+            assert(photoMessage.recoverInterruptedGeneration(isRunning: false))
+            assert(photoMessage.generationState == .needsReview && !photoMessage.generationState.canRetry)
+            photoMessage.generationState = .completed
+            assert(!photoMessage.recoverInterruptedGeneration(isRunning: false))
+            assert(!photoMessage.generationState.canRetry)
             let legacy = messages.first { $0.imageData == nil }!
-            assert(legacy.images.isEmpty && legacy.visibleContent == "[发送了 1 张图片]")
+            assert(legacy.images.isEmpty && legacy.visibleContent == "[发送了 1 张图片]" && legacy.generationState == .none)
             photoMessage.content = "[发送了 2 张图片]"
             assert(photoMessage.visibleContent.isEmpty)
             context.delete(try context.fetch(FetchDescriptor<CoachConversation>()).first!)
