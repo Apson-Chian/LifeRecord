@@ -4,7 +4,8 @@
 
 - 主网站（main）：https://apsonchian.ltd/liferecord/
 - 独立默认版本：https://apsonchian.ltd/liferecord-default/
-- Android 1.4.0-default-beta（build 6）：https://apsonchian.ltd/liferecord-default/downloads/LifeRecord-1.4.0-default-beta.apk
+- Android 当前版 1.4.0-default-beta.3（build 7）：[直接下载 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.3/LifeRecord-Android-1.4.0-default-beta.3.apk) · [Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.3)
+- 原 2026-10-13 默认版（build 6）保留在独立测试网站，当前版以 GitHub Release 为准。
 - iOS 1.4（build 6）工程：本机 `dist/default-ai-2026-10-13/LifeRecord-iOS-1.4-default-beta.zip`。尚未上传 TestFlight。
 
 新安装默认使用“默认 AI 服务”，无需填写 AI Key。用户仍需通过自己的独立同步密钥连接账号；旧安装保留已经选用的自定义配置，也可以在设置中切换默认服务。用户可继续选择 DeepSeek、GLM 或新增并保存自己的兼容接口。
@@ -42,8 +43,18 @@
 
 本次私有数据库、代码、环境与 Nginx 备份：`/opt/liferecord-sync/backups/default-ai-20261013-094916/`。当前服务器运行此分支后端，同时提供 main 网页与独立默认版网页；以后重新部署 main 后端时需保留默认服务模块与路由，否则默认版客户端无法调用默认服务。
 
-APK SHA-256：`6b0fd24049126b3eed8521d668a2ddcaa7e4dd10484811fb79d81572c762b32d`。
+2026-10-13 旧 APK SHA-256：`6b0fd24049126b3eed8521d668a2ddcaa7e4dd10484811fb79d81572c762b32d`。
 
 iOS 工程包 SHA-256：`881d2c8d5d5eb0028e15246d555ff7b56f78ca3617f757a8b35a5a22b2fcd59f`。
 
 本轮未重新执行模拟器设备 UI 测试、并发负载压测或完整渗透测试；iOS 仍仅交付工程，Android 为调试测试签名。
+
+## 2026-10-16：同步主线安卓 UI 与训练部位模块
+
+合并当前 main 的日历、教练自定义/头像/写入开关/停止请求、精简设置、玻璃导航与专用训练部位分类/管理/复核。默认服务请求同样支持取消；默认设置隐藏上游接口和密钥输入，客户端仅发送消息及输出长度，使用用户自己的同步账号鉴权。旧配置与用户健康数据保持兼容。
+
+本轮只更新源码和客户端，不部署服务器，不读取或变更服务器真实密钥，也不使用计费 AI 测试。默认版 Debug / Release 构建成功，50 项 JVM 和 26 项 API 35 设备测试全部通过，无失败、错误或跳过；两者 Lint 均为 0 错误、16 警告。新增代理回归检查仅使用账号鉴权、请求字段白名单以及取消后不进入 DNS/网络。`Tests/default-ai.py`、安卓/后端协议和同步编辑检查通过，15 个 Swift 回归程序与 iOS 模拟器构建通过。测试使用模拟上游与合成记录。
+
+Release 未启用应用调试，v2/v3 签名通过。专用 API 35 模拟器验证旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3 覆盖安装及冷启动，均成功，无崩溃。versionCode 同为 7，签名与旧测试版一致。
+
+默认版 APK SHA-256：`b2d398206bfc3c09d657d0c1314aa24b3b626c88bdcbdfb41dc52dba7c7d36fc`。

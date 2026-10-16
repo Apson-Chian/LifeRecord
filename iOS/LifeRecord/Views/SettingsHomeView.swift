@@ -8,77 +8,26 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("个人") {
-                    NavigationLink {
-                        ProfileSettingsView()
-                    } label: {
-                        SettingsDestinationLabel(
-                            title: "身体与目标",
-                            subtitle: "\(settings.fitnessGoal.rawValue) · \(Int(settings.height)) cm · 目标 \(settings.targetWeight.formatted(.number.precision(.fractionLength(1)))) kg",
-                            symbol: "person",
-                            tint: AppTheme.accent
-                        )
+                Section("日常使用") {
+                    NavigationLink { ProfileSettingsView() } label: {
+                        SettingsDestinationLabel(title: "个人与目标", subtitle: "\(settings.fitnessGoal.rawValue) · 身体与营养", symbol: "person", tint: AppTheme.accent)
                     }
-
-                    NavigationLink {
-                        DailyGoalSettingsView()
-                    } label: {
-                        SettingsDestinationLabel(
-                            title: "每日目标",
-                            subtitle: "\(Int(settings.calorieGoal)) kcal · 蛋白质 \(Int(settings.proteinGoal)) g",
-                            symbol: "target",
-                            tint: .orange
-                        )
+                    NavigationLink { RecordingSettingsView() } label: {
+                        SettingsDestinationLabel(title: "记录与提醒", symbol: AppSymbol.workout, tint: .teal)
+                    }
+                    NavigationLink { CoachSettingsView() } label: {
+                        SettingsDestinationLabel(title: "教练与 AI", subtitle: settings.provider.rawValue, symbol: AppSymbol.coach, tint: AppTheme.accentSoft)
                     }
                 }
-
-                Section("智能与连接") {
-                    NavigationLink {
-                        AISettingsView()
-                    } label: {
-                        SettingsDestinationLabel(
-                            title: "AI 助手",
-                            subtitle: "\(settings.provider.rawValue) · \(settings.aiCanWrite ? "可管理记录" : "只读")",
-                            symbol: AppSymbol.coach,
-                            tint: AppTheme.accentSoft
-                        )
+                Section("应用与数据") {
+                    NavigationLink { PersonalizationSettingsView() } label: {
+                        SettingsDestinationLabel(title: "外观与个性化", symbol: "paintpalette", tint: .orange)
                     }
-
-                    NavigationLink {
-                        SyncAndIntegrationSettingsView()
-                    } label: {
-                        SettingsDestinationLabel(
-                            title: "同步与联动",
-                            subtitle: syncCoordinator.isConfigured ? syncCoordinator.statusMessage : "尚未配置跨设备同步",
-                            symbol: "arrow.triangle.2.circlepath",
-                            tint: AppTheme.recorded
-                        )
+                    NavigationLink { SyncAndIntegrationSettingsView() } label: {
+                        SettingsDestinationLabel(title: "同步与联动", subtitle: syncCoordinator.isConfigured ? "已配置" : "未配置", symbol: "arrow.triangle.2.circlepath", tint: AppTheme.recorded)
                     }
-                }
-
-                Section("常用记录与提醒") {
-                    NavigationLink { FavoriteFoodsView() } label: {
-                        SettingsDestinationLabel(title: "常用餐食", subtitle: "固定名称、照片与每份营养", symbol: AppSymbol.meal, tint: .orange)
-                    }
-                    NavigationLink { ExerciseLibraryView() } label: {
-                        SettingsDestinationLabel(title: "我的动作库", subtitle: "自定义动作与默认组数", symbol: AppSymbol.workout, tint: .teal)
-                    }
-                    NavigationLink { ReminderSettingsView() } label: {
-                        SettingsDestinationLabel(title: "漏记提醒", subtitle: "提醒时间、记录类别与训练日", symbol: "bell", tint: .orange)
-                    }
-                }
-
-                Section("应用") {
-                    NavigationLink("外观与个性化") { PersonalizationSettingsView() }
-                    NavigationLink {
-                        PrivacyAndDataSettingsView()
-                    } label: {
-                        SettingsDestinationLabel(
-                            title: "隐私、数据与帮助",
-                            subtitle: "隐私说明、使用引导与示例数据",
-                            symbol: "lock.shield",
-                            tint: .blue
-                        )
+                    NavigationLink { PrivacyAndDataSettingsView() } label: {
+                        SettingsDestinationLabel(title: "隐私、数据与帮助", symbol: "lock.shield", tint: .blue)
                     }
                 }
             }
@@ -92,7 +41,7 @@ struct SettingsView: View {
 
 private struct SettingsDestinationLabel: View {
     let title: String
-    let subtitle: String
+    var subtitle: String = ""
     let symbol: String
     let tint: Color
 
@@ -101,10 +50,9 @@ private struct SettingsDestinationLabel: View {
             IconBadge(symbol: symbol, tint: tint)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.body.weight(.medium))
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                if !subtitle.isEmpty {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
         }
         .padding(.vertical, 7)
@@ -136,6 +84,13 @@ private struct ProfileSettingsView: View {
                 SettingsNumberRow(title: "每周体重变化", value: $settings.weeklyWeightTarget, unit: "kg", focused: $focused)
             }
 
+            Section("每日营养目标") {
+                SettingsNumberRow(title: "每日热量", value: $settings.calorieGoal, unit: "kcal", focused: $focused)
+                SettingsNumberRow(title: "蛋白质", value: $settings.proteinGoal, unit: "g", focused: $focused)
+                SettingsNumberRow(title: "碳水", value: $settings.carbsGoal, unit: "g", focused: $focused)
+                SettingsNumberRow(title: "脂肪", value: $settings.fatGoal, unit: "g", focused: $focused)
+            }
+
             Section {
                 Button("套用“\(settings.fitnessGoal.rawValue)”建议模板", systemImage: "wand.and.stars") {
                     settings.applyGoalTemplate(settings.fitnessGoal)
@@ -145,29 +100,68 @@ private struct ProfileSettingsView: View {
                 Text("模板只作为起点。请根据连续 2–3 周的体重趋势调整目标。")
             }
         }
-        .navigationTitle("身体与目标")
+        .navigationTitle("个人与目标")
         .navigationBarTitleDisplayMode(.inline)
         .keyboardDoneButton()
     }
 }
 
-private struct DailyGoalSettingsView: View {
+private struct RecordingSettingsView: View {
+    var body: some View {
+        Form {
+            Section("常用记录") {
+                NavigationLink { FavoriteFoodsView() } label: {
+                    SettingsDestinationLabel(title: "常用餐食", symbol: AppSymbol.meal, tint: .orange)
+                }
+                NavigationLink { ExerciseLibraryView() } label: {
+                    SettingsDestinationLabel(title: "我的动作库", symbol: AppSymbol.workout, tint: .teal)
+                }
+            }
+            Section {
+                NavigationLink { ReminderSettingsView() } label: {
+                    SettingsDestinationLabel(title: "漏记提醒", symbol: "bell", tint: .orange)
+                }
+            }
+        }
+        .navigationTitle("记录与提醒").navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct CoachSettingsView: View {
     @Environment(AppSettings.self) private var settings
+    @State private var showsProfile = false
     @FocusState private var focused: Bool
 
     var body: some View {
         @Bindable var settings = settings
         Form {
-            Section("营养") {
-                SettingsNumberRow(title: "每日热量", value: $settings.calorieGoal, unit: "kcal", focused: $focused)
-                SettingsNumberRow(title: "蛋白质", value: $settings.proteinGoal, unit: "g", focused: $focused)
-                SettingsNumberRow(title: "碳水", value: $settings.carbsGoal, unit: "g", focused: $focused)
-                SettingsNumberRow(title: "脂肪", value: $settings.fatGoal, unit: "g", focused: $focused)
+            Section("教练") {
+                Button { showsProfile = true } label: {
+                    HStack(spacing: 12) {
+                        CoachAvatarView(data: settings.coachAvatarData, size: 36)
+                        Text(settings.coachName).foregroundStyle(.primary)
+                        Spacer()
+                        Text("名称与头像").foregroundStyle(.secondary).font(.subheadline)
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+                TextField("长期偏好，例如训练安排、忌口", text: $settings.customInstructions, axis: .vertical)
+                    .lineLimit(3...6).focused($focused)
+            }
+            Section {
+                Toggle("允许 AI 修改记录", isOn: $settings.aiCanWrite)
+            } footer: {
+                Text(settings.aiCanWrite ? "按你的明确要求更改记录。" : "只读模式，仅分析和回答。")
+            }
+            Section {
+                NavigationLink { AISettingsView() } label: {
+                    SettingsDestinationLabel(title: "接口与模型", subtitle: "\(settings.provider.rawValue) · \(settings.model)", symbol: "network", tint: AppTheme.accent)
+                }
             }
         }
-        .navigationTitle("每日目标")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("教练与 AI").navigationBarTitleDisplayMode(.inline)
         .keyboardDoneButton()
+        .sheet(isPresented: $showsProfile) { CoachProfileView(name: settings.coachName, avatarData: settings.coachAvatarData) }
     }
 }
 
@@ -185,7 +179,8 @@ private struct AISettingsView: View {
     var body: some View {
         @Bindable var settings = settings
         Form {
-            Section("保存的接口") {
+            Section {
+                DisclosureGroup("保存与切换接口") {
                 Picker("选择配置", selection:$selectedProfile) {
                     Text("当前配置").tag("")
                     ForEach(settings.savedAPIProfiles) { Text($0.name).tag($0.id) }
@@ -201,6 +196,7 @@ private struct AISettingsView: View {
                 }
                 Text("接口配置保存在本机，密钥单独保存在钥匙串。删除配置不会删除健康记录或密钥。")
                     .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("服务") {
                 Picker("服务商", selection: $settings.provider) {
@@ -262,17 +258,13 @@ private struct AISettingsView: View {
             Section {
                 Toggle("支持图片输入", isOn: $settings.supportsVision)
                 Stepper("单次最多照片：\(settings.maxPhotos) 张", value: $settings.maxPhotos, in: 1...12)
-                Toggle("允许 AI 新增、修改和删除记录", isOn: $settings.aiCanWrite)
             } header: {
-                Text("能力与权限")
-            } footer: {
-                Text(settings.aiCanWrite
-                     ? "AI 仅会按你的明确要求更改数据；删除时必须准确匹配现有记录。"
-                     : "AI 只能读取摘要并回答，不会修改任何记录。")
+                Text("图片输入")
             }
 
             if settings.provider != .builtin {
-            Section("接口兼容性") {
+            Section {
+                DisclosureGroup("高级接口参数") {
                 Picker("输出 Token 参数",selection:$settings.tokenParameter) {
                     Text("max_tokens").tag("max_tokens")
                     Text("max_completion_tokens").tag("max_completion_tokens")
@@ -286,9 +278,11 @@ private struct AISettingsView: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled().lineLimit(3...8)
                 Text("兼容 OpenAI Chat Completions。改地址后需重新保存密钥；扩展参数不要填写密钥，也不能覆盖模型与消息。")
                     .font(.caption).foregroundStyle(.secondary)
+                }
             }
             }
-            Section("回答偏好") {
+            Section {
+                DisclosureGroup("生成参数") {
                 if settings.provider != .builtin {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -302,12 +296,10 @@ private struct AISettingsView: View {
                 }
                 }
                 Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 256...(settings.provider == .builtin ? 4096 : 65536), step: 256)
-                TextField("长期偏好，例如训练安排、忌口", text: $settings.customInstructions, axis: .vertical)
-                    .lineLimit(3...7)
-                    .focused($focused)
+                }
             }
         }
-        .navigationTitle("AI 助手")
+        .navigationTitle("接口与模型")
         .navigationBarTitleDisplayMode(.inline)
         .keyboardDoneButton()
         .sheet(isPresented: $showsAPIKeyEditor, onDismiss: refreshKeyState) {

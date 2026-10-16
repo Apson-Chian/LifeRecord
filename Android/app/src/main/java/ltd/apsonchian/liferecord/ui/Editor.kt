@@ -15,6 +15,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalContext
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
@@ -54,7 +56,7 @@ import java.time.format.DateTimeFormatter
 @Composable fun TextFieldRow(label: String, value: String, change: (String) -> Unit, number: Boolean = false, lines: Int = 1) {
     Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Text(label,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        BasicTextField(value,change,Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).defaultMinSize(minHeight=44.dp).padding(12.dp),
+        BasicTextField(value,change,Modifier.fillMaxWidth().semantics {contentDescription=label}.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).defaultMinSize(minHeight=44.dp).padding(12.dp),
             textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions=KeyboardOptions(keyboardType=if(number && !label.contains("负数")) KeyboardType.Decimal else KeyboardType.Text),singleLine=lines==1,minLines=lines)
     }
@@ -108,10 +110,8 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
     var showFavorites by remember { mutableStateOf(false) }
     var showExercises by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) { uris ->
-        scope.launch { runCatching { vm.readPhotos(uris) }.onSuccess { images = it }.onFailure { error = it.message.orEmpty() } }
-    }
     val s by vm.snapshot.collectAsState()
+    val catalog by vm.bodyPartChoices.collectAsState()
     val build: () -> Record = {
         val edited = r.copy(); edited.json.put("date", if(date == r.date.localText()) r.date else date.timestamp())
         listOf("name","note","portion","bodyPart").forEach { edited.json.put(it, fields[it].orEmpty().trim()) }
@@ -131,7 +131,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { SoftButton(onClick = { ai = !ai }) { Text("AI 识别 / 修改") }; if(r.type == RecordType.MEAL) TextButton(onClick = { showFavorites = true }) { Text("常用餐食") } }
                 if(ai) {
                     TextFieldRow("描述食物、份量或修改要求", input, { input = it }, lines = 3)
-                    SoftButton(onClick = { picker.launch(ActivityResultContracts.PickVisualMedia.ImageOnly.let { androidx.activity.result.PickVisualMediaRequest(it) }) }) { Text(if(images.isEmpty()) "选择食物 / 营养表照片" else "重新选择 · 已选 ${images.size} 张") }
+                    PhotoInput(vm,images,enabled=!aiBusy,change={images=it},notify={error=it}) {open -> SoftButton(onClick=open) {Text(if(images.isEmpty()) "添加食物 / 营养表照片" else "继续添加 · 已选 ${images.size} 张")} }
                     if(images.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { images.forEach { PhotoBytes(it, Modifier.size(70.dp)) } }
                     AppButton(enabled = !aiBusy && (input.isNotBlank() || images.isNotEmpty()), onClick = {
                         aiBusy = true; scope.launch {
@@ -159,8 +159,8 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         }
         if(r.type == RecordType.WORKOUT) {
             Text("训练部位", style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { (parts + selectedParts).distinct().forEach { part -> FilterChip(selected = part in selectedParts, onClick = { selectedParts = if(part in selectedParts) selectedParts - part else selectedParts + part }, label = { Text(part) }) } }
-            Row(verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(customPart, { customPart = it }, Modifier.weight(1f), label = { Text("自定义部位") }, singleLine = true); TextButton(onClick = { if(customPart.trim().isNotEmpty()) { selectedParts = (selectedParts + customPart.trim()).distinct(); customPart = "" } }) { Text("添加") } }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { (catalog + selectedParts).distinct().forEach { part -> FilterChip(selected = part in selectedParts, onClick = { selectedParts = if(part in selectedParts) selectedParts - part else selectedParts + part }, label = { Text(part) }) } }
+            Row(verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(customPart, { customPart = it }, Modifier.weight(1f), label = { Text("自定义部位") }, singleLine = true); TextButton(onClick = { runCatching {val name=customPart.trim();require(WorkoutParts.valid(name)) {"部位名称无效"};if(name !in catalog) vm.addBodyPart(name);selectedParts=(selectedParts+name).distinct();customPart=""}.onFailure {error=it.message.orEmpty()} }) { Text("添加") } }
             DateTimeField("结束时间", end, { end = it }, optional = true)
             TextButton(onClick = { showExercises = !showExercises }) {
                 Text("具体动作与组数（可选）", modifier = Modifier.weight(1f))

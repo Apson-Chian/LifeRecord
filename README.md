@@ -1,6 +1,6 @@
 # LifeRecord（生活记录）
 
-当前分支 `codex/default-ai-service` 提供服务端默认 AI，用户连接独立账号后无需填写 AI Key，也可选择并保存自己的接口。[默认版测试网页](https://apsonchian.ltd/liferecord-default/) · [部署、额度与验证说明](Docs/default-ai-service.md)。主网站继续使用 main 的 API 设置版本。
+当前分支 `codex/default-ai-service` 提供服务器默认 AI，用户连接独立账号后无需填写 AI Key，也可选择自己的接口。安卓已同步主线 UI 与训练部位模块：[默认 AI 版 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.3/LifeRecord-Android-1.4.0-default-beta.3.apk) · [普通版 Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3) · [更新与验证](Docs/android-release-1.4-beta3.md)。[默认版测试网页](https://apsonchian.ltd/liferecord-default/) · [默认服务与额度](Docs/default-ai-service.md)。
 
 API 设置更新：预设仅保留 DeepSeek 和 GLM，三端支持新增、保存与切换多个自定义配置。[配置说明与本机 Dots 设置步骤](Docs/api-settings.md)。
 
@@ -39,7 +39,7 @@ LifeRecord/
 | iOS | Xcode 打开 `iOS/LifeRecord.xcodeproj` | [运行、功能与平台配置](iOS/README.md) |
 | Web / 后端 | 部署 `Web/` 与 `Backend/` | 下方说明与现有服务配置 |
 
-安卓 1.3.0 使用实际 iOS 页面校准的大标题、圆环、分组设置、教练输入与趋势卡片，并用 Compose 实现浮动玻璃导航，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。界面变化、系统效果支持与剩余差异见[安卓与 iOS 对齐记录](Docs/android-ios-parity.md)。
+安卓客户端使用实际 iOS 页面校准的大标题、圆环、分组设置、教练输入与趋势卡片，并用 Compose 实现浮动玻璃导航，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。界面变化、系统效果支持与剩余差异见[安卓与 iOS 对齐记录](Docs/android-ios-parity.md)。
 
 ## 快速构建
 

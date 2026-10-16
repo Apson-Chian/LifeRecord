@@ -78,7 +78,7 @@ import java.time.format.DateTimeFormatter
                             if(type == RecordType.WORKOUT) { json.put("date", minOf(this.date, now())); json.put("endDate", minOf(this.date + 3600, now())) }
                         } }, notify, { editor = it.copy() },
                             { draft -> coachDraft = draft; tab = 2 }, { photos -> mealHistory = photos })
-                        1 -> Trends(vm, snapshot, { detail = it }, { draft -> tab = 2; coachDraft = draft }, notify)
+                        1 -> Trends(vm, snapshot, { detail = it }, { draft -> tab = 2; coachDraft = draft }, notify, {editor=it.copy()})
                         2 -> Box(Modifier.fillMaxSize().padding(bottom = if(keyboardVisible) 0.dp else glassPageBottomPadding() - 16.dp)) {
                             Coach(vm, notify, coachDraft) { coachDraft = "" }
                         }
@@ -203,7 +203,6 @@ import java.time.format.DateTimeFormatter
         } }
         item { Panel {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { IconBadge(Glyph.Workout,Color(0xFF31B8C4),36.dp);Spacer(Modifier.width(10.dp));Text("健身记录", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)); TextButton(onClick = { add(RecordType.WORKOUT) }) { Text("补记") } }
-            Text("留一点时间，给更好的自己",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(date == LocalDate.now()) {
                 val active = activeWorkout
                 AppButton(onClick = { runCatching {

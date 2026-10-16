@@ -10,14 +10,16 @@ import java.util.concurrent.TimeUnit
 import android.util.Base64
 
 class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(100, TimeUnit.SECONDS).build(), private val baseURL: () -> String = { BASE }) {
-    private fun execute(url: String, secret: String, body: JSONObject?, header: String = "Authorization", bearer: Boolean = true, officialDeepSeek: Boolean = false): ByteArray {
+    private fun execute(url: String, secret: String, body: JSONObject?, header: String = "Authorization", bearer: Boolean = true, officialDeepSeek: Boolean = false, onCall: ((Call) -> Unit)? = null): ByteArray {
         require(url.startsWith("https://")) { "接口地址需要使用 HTTPS" }
         require(secret.isNotBlank()) { "请先配置密钥" }
         require(secret.all { it.code in 33..126 }) { "密钥不能包含空格、换行或中文，请重新粘贴" }
         val request = Request.Builder().url(url).header(header, if(bearer) "Bearer $secret" else secret).apply {
             if(body != null) post(body.toString().toRequestBody("application/json".toMediaType()))
         }.build()
-        return client.newBuilder().followRedirects(false).followSslRedirects(false).callTimeout(100, TimeUnit.SECONDS).build().newCall(request).execute().use { response ->
+        val call=client.newBuilder().followRedirects(false).followSslRedirects(false).callTimeout(100, TimeUnit.SECONDS).build().newCall(request)
+        onCall?.invoke(call)
+        return call.execute().use { response ->
             val bytes = response.body?.bytes() ?: error("服务端返回空数据")
             if(!response.isSuccessful) {
                 if(officialDeepSeek) AIAuthentication.deepSeekFailure(response.code)?.let { error(it) }
@@ -33,8 +35,8 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
         require(id.matches(Regex("[0-9a-f]{32}"))) { "图片编号无效" }
         return execute("${baseURL().trimEnd('/')}/images/$id", key, null)
     }
-    fun complete(config: JSONObject, key: String, system: String, messages: List<JSONObject>, images: List<ByteArray> = emptyList(), json: Boolean = false): String {
-        if(config.optString("provider") == "默认 AI 服务") return defaultComplete(config,key,system,messages,images)
+    fun complete(config: JSONObject, key: String, system: String, messages: List<JSONObject>, images: List<ByteArray> = emptyList(), json: Boolean = false, onCall: ((Call) -> Unit)? = null): String {
+        if(config.optString("provider") == "默认 AI 服务") return defaultComplete(config,key,system,messages,images,onCall)
         require(config.optString("model").isNotBlank()) { "请填写模型名" }
         require(images.isEmpty() || config.optBoolean("vision")) { "当前接口未启用图片能力" }
         require(images.size <= config.optInt("maxPhotos", 6)) { "图片超出设置中的数量限制" }
@@ -59,10 +61,10 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
         if(json && config.optBoolean("jsonMode", true) && images.isEmpty()) body.put("response_format", JSONObject().put("type", "json_object"))
         val endpoint = config.getString("endpoint").trim()
         val credential = AIAuthentication.credential(endpoint, config.optString("auth", "Bearer"), config.optString("header", "Authorization"), key)
-        val bytes = execute(endpoint, credential.key, body, credential.header, credential.bearer, AIAuthentication.officialDeepSeek(endpoint))
+        val bytes = execute(endpoint, credential.key, body, credential.header, credential.bearer, AIAuthentication.officialDeepSeek(endpoint), onCall)
         val result = JSONObject(bytes.toString(Charsets.UTF_8)); return result.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.takeIf { it.isNotBlank() } ?: error("没有收到模型最终回复，请检查模型与生成参数")
     }
-    private fun defaultComplete(config:JSONObject,key:String,system:String,messages:List<JSONObject>,images:List<ByteArray>):String {
+    private fun defaultComplete(config:JSONObject,key:String,system:String,messages:List<JSONObject>,images:List<ByteArray>,onCall:((Call)->Unit)?):String {
         require(images.size <= config.optInt("maxPhotos",6)) { "图片超出设置中的数量限制" }
         require(images.isEmpty() || config.optBoolean("vision",true)) { "当前设置未启用图片能力" }
         val list=JSONArray().put(JSONObject().put("role","system").put("content",system+"\n"+config.optString("instructions")))
@@ -76,7 +78,7 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
             list.put(m)
         }
         val body=JSONObject().put("messages",list).put("maxTokens",config.optInt("maxTokens",4096))
-        val bytes=execute("${baseURL().trimEnd('/')}/ai/chat",key,body)
+        val bytes=execute("${baseURL().trimEnd('/')}/ai/chat",key,body,onCall=onCall)
         return JSONObject(bytes.toString(Charsets.UTF_8)).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
     }
     companion object { const val BASE = "https://apsonchian.ltd/liferecord-api" }
@@ -121,8 +123,9 @@ object AgentActions {
                 } else {
                     val r = old?.copy() ?: Record.create(type)
                     if(mode == "add") {
-                        require(a.has("date") || type == RecordType.EXERCISE) { "新增记录需要明确时间" }
                         if(type == RecordType.WORKOUT) require(a.has("endDate") && !a.isNull("endDate")) { "新增训练需要起止时间" }
+                        if(type == RecordType.MEAL) require(a.optString("name").isNotBlank() && a.has("calories") && !a.isNull("calories")) { "新增餐食需要名称和热量" }
+                        if(type == RecordType.BODY) require(a.has("weight") && !a.isNull("weight")) { "新增身体测量需要体重" }
                         if(type == RecordType.MEAL) { r.json.put("inputText", userText); r.json.put("sourceConversationID", conversationId); r.json.put("source", "AI 估算") }
                     }
                     val allowed = when(type) {
@@ -144,13 +147,13 @@ object AgentActions {
         }; return result
     }
     const val PROMPT = """你是生活记录健身教练，结合本机记录用中文回答。所有记录时间使用本地时区 ISO8601。输出 JSON {"answer":"回答","actions":[]}。
-只有用户明确要求新增、修改、删除或修改目标时生成 actions。训练计划不当作已完成训练。图片只分析，记录需要用户明确要求。
+只有用户明确要求新增、修改、删除或修改目标时生成 actions。用户描述已经吃下的食物并要求添加到餐食时，结合上下文必须返回 add_meal；上一轮描述食物、本轮要求记录也属于记录请求。营养值未知时可按份量估算，note 说明依据和不确定性；不知道吃了什么时先询问。明显属于实际摄入的餐食/饮料照片且没有要求“只分析/不要记录”时返回 add_meal；配料表、包装、菜单不代表已摄入。训练计划不当作已完成训练。
 操作 type：add_meal/update_meal/delete_meal、add_weight/update_weight/delete_weight、add_workout/update_workout/delete_workout、add_exercise_template/update_exercise_template/delete_exercise_template、update_goals。
-修改/删除必须使用上下文中准确 recordID，歧义先询问；修改只输出改变的字段，不能清空未提及字段。date/endDate 仅在修改时间时输出。新增记录需要 date，新增训练还需要明确 endDate，缺失先询问。
+修改/删除必须使用上下文中准确 recordID，歧义先询问；修改只输出改变的字段，不能清空未提及字段。date/endDate 仅在修改时间时输出。新增记录给出 date，用户没说明时间时使用当前本地时间；昨天或餐次要保留对应日期。新增训练需要明确起止时间，缺失先询问。
 餐食字段 mealKind(早餐/午餐/晚餐/加餐)、name、calories、protein、carbs、fat、fiber、note。身体字段 weight、bodyFat、waist、note，清空可用 clearBodyFat/clearWaist。
 训练字段 bodyParts 数组、exercises:[{name,bodyPart,sets:[{reps,weight,durationSeconds}]}]、note。未知逐组数值为 null，不编造。动作库 name、bodyPart，清空用 clearBodyPart。
 目标字段 displayName、fitnessGoal(增肌/减脂/维持)、height、baselineWeight、targetWeight、weeklyWeightTarget、calorieGoal、proteinGoal、carbsGoal、fatGoal。
-优先使用常用餐食的固定营养。不得声称已执行，App 会在复核保存后显示回执。"""
+优先使用常用餐食的固定营养。咨询、计划吃、否认吃过或要求不要记录时不新增。不得声称已执行或已保存，App 会在验证并实际保存后显示回执。"""
 }
 
 fun apiScope(config: JSONObject): String = "ai." + config.optString("provider") + "." + java.security.MessageDigest.getInstance("SHA-256").digest(config.optString("endpoint").trim().toByteArray()).joinToString("") { "%02x".format(it) }

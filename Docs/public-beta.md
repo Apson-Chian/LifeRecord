@@ -27,7 +27,7 @@ python3 /opt/liferecord-sync/manage_users.py revoke USER_ID
 
 ## 自定义设置
 
-两端支持 HTTPS Chat Completions 地址、自定义模型、Bearer / api-key / 自定义认证头、图片开关、1–12 张照片、256–65536 输出 Token、`max_tokens` / `max_completion_tokens`、Temperature 0–2 或不发送、可关闭 JSON response_format、额外请求参数 JSON（例如 top_p）、长期偏好与 AI 写入权限。扩展参数不能覆盖模型、消息、stream 与生成设置；不要在其中填密钥。AI 默认只读，开启写入后仍须复核草稿。
+两端支持 HTTPS Chat Completions 地址、自定义模型、Bearer / api-key / 自定义认证头、图片开关、1–12 张照片、256–65536 输出 Token、`max_tokens` / `max_completion_tokens`、Temperature 0–2 或不发送、可关闭 JSON response_format、额外请求参数 JSON（例如 top_p）、长期偏好与 AI 写入权限。扩展参数不能覆盖模型、消息、stream 与生成设置；不要在其中填密钥。AI 默认只读。iOS 可直接在教练输入框上方开启写入，按明确要求保存有效操作后显示数据库回执；关闭权限时会明确提示“未保存”。安卓在设置中开启写入后，仍需核对草稿并点击“确认并保存”才实际写入。
 
 每个预设服务商可保留自己的配置。支持系统/浅色/深色主题、四种强调色，以及已有的称呼、每日目标、提醒、常用餐食和动作库。iOS LifeTrack 共享默认关闭。网页提供主题选择与隐私说明。
 
@@ -58,4 +58,4 @@ python3 Tests/android-sync.py
 node Tests/web-smoke.cjs
 ```
 
-APK 是调试测试包，非商店签名发布。iOS 工程可通过 Xcode 构建；对外通过 TestFlight 分发仍需要组织者自己的 Apple Developer 签名、上传和测试邀请。不要把开发者真机数据、同步密钥、服务端环境文件或 tester 凭证文件打入源码包或公开下载目录。
+初始 1.4 测试 APK 是调试构建；后续 [1.4.0-beta.2](android-release-1.4-beta2.md) 使用未启用调试的 Release 构建并在 GitHub Releases 分发，沿用旧测试签名，仍非应用商店生产发布。iOS 工程可通过 Xcode 构建；对外通过 TestFlight 分发仍需要组织者自己的 Apple Developer 签名、上传和测试邀请。不要把开发者真机数据、同步密钥、服务端环境文件或 tester 凭证文件打入源码包或公开下载目录。

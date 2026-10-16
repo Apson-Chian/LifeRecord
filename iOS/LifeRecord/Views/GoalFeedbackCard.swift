@@ -4,89 +4,94 @@ struct GoalFeedbackCard: View {
     let summary: GoalFeedback.Summary
     let goals: GoalFeedback.Goals
     @EnvironmentObject private var router: AppRouter
+    @State private var showsDetails = false
 
     var body: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 10) {
                     IconBadge(symbol: "target", tint: AppTheme.accent)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("目标反馈").font(.headline)
-                        Text("\(summary.start.formatted(.dateTime.month().day())) — \(summary.end.formatted(.dateTime.month().day()))")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    Text("目标反馈").font(.headline)
                     Spacer()
-                }
-                Text(summary.headline).font(.title3.weight(.semibold))
-                if let weight = summary.trendWeight, let date = summary.latestMeasurement {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("\(weight.formatted(.number.precision(.fractionLength(1)))) kg").font(.title2.weight(.semibold)).monospacedDigit()
-                        Spacer()
-                        Text(summary.distance == nil ? "请核对目标" : "目标 \(goals.targetWeight.formatted(.number.precision(.fractionLength(1)))) kg").font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Text("最近趋势体重 · \(date.formatted(.dateTime.month().day())) · 由真实测量每日中位数平滑计算")
+                    Text("\(summary.start.formatted(.dateTime.month().day()))—\(summary.end.formatted(.dateTime.month().day()))")
                         .font(.caption).foregroundStyle(.secondary)
-                    if let week = summary.weeklyProgress {
-                        Text("本周进度 · \(week.start.formatted(.dateTime.month().day())) — \(week.end.formatted(.dateTime.month().day()))")
-                            .font(.subheadline.weight(.medium))
-                        ProgressView(value: week.fraction).tint(AppTheme.accent)
-                            .accessibilityLabel("本周体重变化相对于每周目标的进度")
-                            .accessibilityValue("\(Int(week.fraction * 100))%")
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(summary.trendWeight.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "—")
+                        .font(.system(.largeTitle, design: .rounded).weight(.semibold)).monospacedDigit()
+                    Text("kg").foregroundStyle(.secondary)
+                    Spacer()
+                    Text("趋势体重").font(.subheadline).foregroundStyle(.secondary)
+                }
+                Text(summary.headline).font(.subheadline.weight(.medium))
+                if let period = summary.periodProgress {
+                    VStack(spacing: 8) {
                         HStack {
-                            Text("本周 \(Int(week.fraction * 100))%")
+                            Text("阶段变化 \(signed(period.change)) kg")
                             Spacer()
-                            if let distance = summary.distance { Text("距目标 \(distance.formatted(.number.precision(.fractionLength(1)))) kg") }
-                        }.font(.caption).foregroundStyle(.secondary)
-                        Text("趋势变化 \(week.change >= 0 ? "+" : "")\(week.change.formatted(.number.precision(.fractionLength(2)))) kg / 每周目标 \(goals.weeklyWeightChange.formatted(.number.precision(.fractionLength(2)))) kg")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Text("每周一重新计算，以本周首次测量（\(week.baselineDate.formatted(.dateTime.month().day()))）的趋势体重为基准；一周结束后再回看，体重进度不等同于增肌或减脂成果。")
-                            .font(.caption2).foregroundStyle(.secondary)
-                    } else if let distance = summary.distance {
-                        Text("与目标相差 \(distance.formatted(.number.precision(.fractionLength(1)))) kg")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                        if summary.progress != nil && abs(goals.weeklyWeightChange) > 0 {
-                            Text("本周测量还不足，积累记录后再看每周进度。")
-                                .font(.caption).foregroundStyle(.secondary)
+                            Text("参考 \(signed(period.targetChange)) kg").foregroundStyle(.secondary)
+                        }.font(.caption).monospacedDigit()
+                        ProgressView(value: period.fraction).tint(AppTheme.accent)
+                            .accessibilityLabel("所选历史时段的体重变化相对于阶段目标")
+                            .accessibilityValue("\(Int(period.fraction * 100))%")
+                    }
+                }
+                HStack(spacing: 10) {
+                    metric("饮食记录", value: "\(summary.mealDays)", unit: "天")
+                    metric("身体测量", value: "\(summary.measurementDays)", unit: "天")
+                    metric("完成训练", value: "\(summary.completedWorkouts)", unit: "次")
+                }
+                DisclosureGroup("记录与解读", isExpanded: $showsDetails) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if let date = summary.latestMeasurement { row("最近测量", date.formatted(.dateTime.month().day())) }
+                        if let distance = summary.distance { row("距目标体重", "\(distance.formatted(.number.precision(.fractionLength(1)))) kg") }
+                        if let period = summary.periodProgress {
+                            Text("比较 \(period.baselineDate.formatted(.dateTime.month().day())) 至最近测量的趋势体重；参考值按设定的每周目标和实际测量跨度换算。")
                         }
+                        if let change = summary.weeklyChange { row("平均每周变化", "\(signed(change)) kg") }
+                        row("热量在目标 ±10% 内", goals.calories.isFinite && goals.calories > 0 ? "\(summary.calorieGoalDays) / \(summary.mealDays) 个记录日" : "请核对目标")
+                        row("蛋白质达到目标", goals.protein.isFinite && goals.protein > 0 ? "\(summary.proteinGoalDays) / \(summary.mealDays) 个记录日" : "请核对目标")
+                        if let calories = summary.averageCalories, let protein = summary.averageProtein {
+                            row("记录日均热量", "\(calories.formatted(.number.precision(.fractionLength(0)))) kcal")
+                            row("记录日均蛋白质", "\(protein.formatted(.number.precision(.fractionLength(0)))) g")
+                        }
+                        Text("仅统计真实有效记录，缺失日期不按零计算。体重变化不等同于增肌或减脂成果。")
+                        Divider()
+                        ForEach(summary.actions, id: \.self) { action in Text(action) }
                     }
-                    if let change = summary.weeklyChange {
-                        Text("区间趋势折算 \(change >= 0 ? "+" : "")\(change.formatted(.number.precision(.fractionLength(2)))) kg/周 · 设定 \(goals.weeklyWeightChange.formatted(.number.precision(.fractionLength(2)))) kg/周")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    .font(.caption).foregroundStyle(.secondary).padding(.top, 12)
                 }
-                VStack(spacing: 10) {
-                    row("饮食记录覆盖", "\(summary.mealDays) / \(summary.days) 天")
-                    row("热量在设定目标 ±10% 内", goals.calories.isFinite && goals.calories > 0 ? "\(summary.calorieGoalDays) / \(summary.mealDays) 个记录日" : "请核对目标")
-                    row("蛋白质达到设定目标", goals.protein.isFinite && goals.protein > 0 ? "\(summary.proteinGoalDays) / \(summary.mealDays) 个记录日" : "请核对目标")
-                    if let calories = summary.averageCalories, let protein = summary.averageProtein {
-                        row("已记录日均热量 / 蛋白质", "\(calories.formatted(.number.precision(.fractionLength(0)))) kcal / \(protein.formatted(.number.precision(.fractionLength(0)))) g")
-                    }
-                    row("身体测量 / 完成训练", "\(summary.measurementDays) 天 / \(summary.completedWorkouts) 次")
-                }
-                Text("只统计真实、非未来且数值有效的记录；有记录不代表记全。缺失日期不按零计算，今日结果仍可能变化。")
-                    .font(.caption).foregroundStyle(.secondary)
-                Divider()
-                Text("下一步").font(.subheadline.weight(.semibold))
-                ForEach(Array(summary.actions.enumerated()), id: \.offset) { index, action in
-                    HStack(alignment: .top, spacing: 9) {
-                        Text("\(index + 1)").font(.caption.weight(.semibold)).foregroundStyle(AppTheme.accent)
-                            .frame(width: 22, height: 22).background(AppTheme.accent.opacity(0.1), in: Circle()).accessibilityHidden(true)
-                        Text(action).font(.subheadline).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+                .font(.subheadline).tint(AppTheme.accent)
                 Button {
-                    router.openCoach(draft: "请依据我的设定目标与以下本机统计，帮我复盘执行情况并给出下一周 2–3 条具体行动。先指出记录不足，不把体重变化直接当成脂肪或肌肉变化，也不要自动改动目标。\n\(summary.context)")
-                } label: { Label("和教练制定下一周计划", systemImage: AppSymbol.coach).frame(maxWidth: .infinity) }
+                    router.openCoach(draft: "请依据以下截至今天的历史记录，帮我回顾这段时间的身体、饮食和训练变化。先说明记录不足，再给出简短解读，不把体重变化当作脂肪或肌肉变化，不自动调整目标。\n\(summary.context)")
+                } label: { Label("和教练复盘", systemImage: AppSymbol.coach).frame(maxWidth: .infinity) }
                 .buttonStyle(AppButtonStyle(prominent: false))
             }
         }
     }
 
+    private func metric(_ title: String, value: String, unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value).font(.title3.weight(.semibold)).monospacedDigit()
+                Text(unit).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+        .background(AppTheme.accent.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func signed(_ value: Double) -> String {
+        "\(value >= 0 ? "+" : "")\(value.formatted(.number.precision(.fractionLength(2))))"
+    }
+
     private func row(_ title: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).foregroundStyle(.secondary)
+            Text(title)
             Spacer(minLength: 8)
             Text(value).monospacedDigit().multilineTextAlignment(.trailing)
-        }.font(.caption)
+        }
     }
 }

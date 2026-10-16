@@ -18,6 +18,7 @@ check ai-authentication LifeRecord/Services/AIAuthentication.swift
 check body-trend LifeRecord/Services/BodyTrend.swift
 check favorite-food-storage LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check meal-photo-cache LifeRecord/Services/MealPhotoStore.swift
+check coach-meal-actions LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift LifeRecord/Services/CoachActions.swift
 check meal-provenance LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check record-insights LifeRecord/Services/BodyTrend.swift LifeRecord/Services/RecordWeek.swift LifeRecord/Services/RecordQuality.swift LifeRecord/Services/GoalFeedback.swift
 check reminder-plan LifeRecord/Services/ReminderPlan.swift
@@ -26,3 +27,4 @@ check workout-details LifeRecord/Services/WorkoutDetails.swift
 check workout-part-review LifeRecord/Services/WorkoutDetails.swift LifeRecord/Services/WorkoutPartReview.swift
 check workout-storage LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check workout-summary LifeRecord/Services/WorkoutSummary.swift
+check workout-calendar LifeRecord/Services/WorkoutDetails.swift LifeRecord/Services/WorkoutCalendar.swift

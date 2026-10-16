@@ -67,7 +67,7 @@ object Validation {
             RecordType.WORKOUT -> {
                 number(j, "endDate", r.date, 4102444800.0, true)
                 val bodyParts = j.optJSONArray("bodyParts")?.strings().orEmpty()
-                require(bodyParts.size <= 30 && bodyParts.distinct().size == bodyParts.size && bodyParts.all { it.isNotBlank() && it.length <= 30 && it == it.trim() && it != "未分类" }) { "请检查训练部位" }
+                require(bodyParts.size <= 30 && bodyParts.distinct().size == bodyParts.size && bodyParts.all(WorkoutParts::valid)) { "请检查训练部位" }
                 val exercises = j.optJSONArray("exercises")?.objects().orEmpty()
                 require(exercises.size <= 50) { "最多 50 个动作" }
                 exercises.forEach { ex ->

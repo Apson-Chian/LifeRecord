@@ -11,11 +11,12 @@ enum GoalFeedback {
         var calories: Double
         var protein: Double
     }
-    struct WeeklyProgress {
+    struct PeriodProgress {
         var start: Date
         var end: Date
         var baselineDate: Date
         var change: Double
+        var targetChange: Double
         var fraction: Double
     }
     struct Summary {
@@ -37,7 +38,7 @@ enum GoalFeedback {
         var qualityIssueCount: Int
         var headline: String
         var actions: [String]
-        var weeklyProgress: WeeklyProgress? = nil
+        var periodProgress: PeriodProgress? = nil
 
         var context: String {
             let calories = averageCalories.map { String(format: "%.0f", $0) } ?? "无记录"
@@ -82,17 +83,17 @@ enum GoalFeedback {
         let progress: Double? = goals.mode != .maintain && weightConfigurationValid && abs(targetDelta) >= 0.2
             ? current.map { min(1, max(0, ($0.trend - goals.baselineWeight) / targetDelta)) } : nil
         let stale = current.map { (calendar.dateComponents([.day], from: $0.date, to: today).day ?? 0) > 7 } ?? true
-        let weekStart = RecordWeek.start(containing: now, calendar: calendar)
-        // Only compare measurements within this week, so last week's progress never carries over.
-        let weekBaseline = series.first { $0.date >= weekStart }
-        var weeklyProgress: WeeklyProgress?
+        // Review the selected historical range; the reference goal covers only the measured span.
+        let baseline = recent.first
+        var periodProgress: PeriodProgress?
         if goals.mode != .maintain, weightConfigurationValid, abs(goals.weeklyWeightChange) > 0,
-           let baseline = weekBaseline, let current, current.date >= weekStart, current.date > baseline.date {
+           let baseline, let current, !stale, current.date > baseline.date {
             let change = current.trend - baseline.trend
-            weeklyProgress = WeeklyProgress(start: weekStart,
-                                            end: calendar.date(byAdding: .day, value: 6, to: weekStart)!,
-                                            baselineDate: baseline.date, change: change,
-                                            fraction: min(1, max(0, change / goals.weeklyWeightChange)))
+            let measuredDays = calendar.dateComponents([.day], from: baseline.date, to: current.date).day ?? 0
+            let targetChange = goals.weeklyWeightChange * Double(measuredDays) / 7
+            periodProgress = PeriodProgress(start: start, end: today, baselineDate: baseline.date,
+                                            change: change, targetChange: targetChange,
+                                            fraction: min(1, max(0, change / targetChange)))
         }
         var headline = "先积累真实记录"
         if current != nil {
@@ -141,6 +142,6 @@ enum GoalFeedback {
                        averageCalories: nutrition.isEmpty ? nil : nutrition.reduce(0) { $0 + $1.calories } / Double(nutrition.count),
                        averageProtein: nutrition.isEmpty ? nil : nutrition.reduce(0) { $0 + $1.protein } / Double(nutrition.count),
                        measurementDays: recent.count, latestMeasurement: current?.date, trendWeight: current?.trend, progress: progress,
-                       distance: distance, weeklyChange: weekly, completedWorkouts: completed, qualityIssueCount: qualityIssues.count, headline: headline, actions: Array(actions.prefix(3)), weeklyProgress: weeklyProgress)
+                       distance: distance, weeklyChange: weekly, completedWorkouts: completed, qualityIssueCount: qualityIssues.count, headline: headline, actions: Array(actions.prefix(3)), periodProgress: periodProgress)
     }
 }
