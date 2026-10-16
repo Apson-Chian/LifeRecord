@@ -16,6 +16,11 @@ struct FavoriteFoodStorageTests {
         assert(loaded.name == "早餐牛奶" && loaded.portion == "1盒 250 ml")
         assert(loaded.calories == 145 && loaded.protein == 8 && loaded.photoData == photo)
         assert(loaded.nutritionSummary.contains("145") && loaded.nutritionSummary.contains("250 ml"))
+        let bread = FavoriteFood(name: "面包", portion: "2片", calories: 180, protein: 6, carbs: 30, fat: 4, fiber: 3)
+        let combined = MealDraft(favorites: [loaded, bread])
+        assert(combined.name == "早餐牛奶、面包")
+        assert(combined.calories == 325 && combined.protein == 14 && combined.carbs == 42 && combined.fat == 11 && combined.fiber == 3)
+        assert(combined.note.contains("250 ml") && combined.note.contains("2片"))
         let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("favorite-migration-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }

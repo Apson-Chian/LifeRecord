@@ -129,3 +129,5 @@ JSON 导出包含真实记录、目标、删除标记、照片服务器编号、
 “趋势 → 训练内容与明细 → 按部位”提供 AI 分类、专用对话修改、时间轴和记录选择、全局部位改名及动作库入口。“设置 → 记录与提醒 → 管理训练部位”可新增、移除、恢复历史部位，并预览修复明确描述的手臂细分。AI 对话修改先预览，点击应用才保存；旧预览遇到记录变化会失效。
 
 [发布与验证说明](../Docs/android-release-1.4-beta3.md)。上游 API Key 不会打入默认服务版 APK，始终由服务器代理持有。
+
+默认 AI 服务版也已同步本版 UI 与功能：[默认版 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.3/LifeRecord-Android-1.4.0-default-beta.3.apk)。上游密钥留在服务器，需要先连接自己的同步账号。

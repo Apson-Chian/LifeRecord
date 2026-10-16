@@ -82,3 +82,4 @@ Release 未启用应用调试，v2/v3 签名通过。专用 API 35 模拟器验�
 默认版 APK SHA-256：`b2d398206bfc3c09d657d0c1314aa24b3b626c88bdcbdfb41dc52dba7c7d36fc`。
 
 源码与安装包分开发行，使用服务器已提供的默认 AI 代理，没有读取服务器实际配置、调用计费 AI 或重新部署服务器。详见 [默认服务验证](../Docs/default-ai-service.md)。
+普通版和默认版覆盖安装及冷启动已在专用 API 35 模拟器验证：旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3，均成功，无崩溃。共享 JSON 协议及同步编辑回归通过。默认版已单独完成 50 项 JVM、26 项设备检查及服务器代理脱敏测试，源码及结果见 [默认服务分支](https://github.com/Apson-Chian/LifeRecord/blob/codex/default-ai-service/Docs/default-ai-service.md)。

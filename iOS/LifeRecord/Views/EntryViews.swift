@@ -23,6 +23,8 @@ struct AddMealView: View {
     @State private var isSaving = false
     @State private var showsCamera = false
     @State private var showsFavorites = false
+    @State private var selectedFoodIDs: Set<UUID> = []
+    @State private var favoritePhotos: [Data] = []
     @State private var isRequestingCamera = false
     @State private var errorMessage: String?
     @State private var wasAIAnalyzed = false
@@ -70,7 +72,7 @@ struct AddMealView: View {
                             selectionBehavior: .ordered,
                             matching: .images
                         ) {
-                            Label("从相册选择", systemImage: "photo.stack")
+                            Label(imageData.isEmpty ? "从相册多选" : "继续添加照片", systemImage: "photo.stack")
                                 .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                         .disabled(isAnalyzing || isLoadingPhotos || isRequestingCamera || imageData.count >= settings.maxPhotos)
@@ -149,15 +151,20 @@ struct AddMealView: View {
             }
             .sheet(isPresented: $showsFavorites) {
                 NavigationStack {
-                    FavoriteFoodsView(onSelect: { food in
-                        draft = MealDraft(name: food.name, calories: food.calories, protein: food.protein,
-                                          carbs: food.carbs, fat: food.fat, fiber: food.fiber,
-                                          note: [food.portion, food.note].filter { !$0.isEmpty }.joined(separator: " · "))
-                        imageData = food.photoData.map { [$0] } ?? []
+                    FavoriteFoodsView(onSelect: { foods in
+                        draft = MealDraft(favorites: foods)
+                        selectedFoodIDs = Set(foods.map(\.id))
+                        var combined = imageData.filter { !favoritePhotos.contains($0) }
+                        favoritePhotos = foods.compactMap(\.photoData)
+                        for photo in favoritePhotos where !combined.contains(photo) { combined.append(photo) }
+                        imageData = Array(combined.prefix(settings.maxPhotos))
+                        if combined.count > settings.maxPhotos {
+                            errorMessage = "营养已全部填入；照片最多保留 \(settings.maxPhotos) 张。"
+                        }
                         wasAIAnalyzed = false
                         analyzedInput = ""
                         description = ""
-                    })
+                    }, initialSelection: selectedFoodIDs)
                 }
             }
         }

@@ -8,7 +8,10 @@ struct FavoriteFoodsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \FavoriteFood.name) private var foods: [FavoriteFood]
-    var onSelect: ((FavoriteFood) -> Void)? = nil
+    var onSelect: (([FavoriteFood]) -> Void)? = nil
+    var initialSelection: Set<UUID> = []
+    @State private var selectedIDs: Set<UUID> = []
+    private var selectedFoods: [FavoriteFood] { foods.filter { selectedIDs.contains($0.id) } }
 
     @State private var isAdding = false
     @State private var editing: FavoriteFood?
@@ -30,7 +33,10 @@ struct FavoriteFoodsView: View {
                     Section {
                         ForEach(foods) { food in
                             Button {
-                                if let onSelect { onSelect(food); dismiss() }
+                                if onSelect != nil {
+                                    if selectedIDs.contains(food.id) { selectedIDs.remove(food.id) }
+                                    else { selectedIDs.insert(food.id) }
+                                }
                                 else { editing = food }
                             } label: {
                                 HStack(spacing: 12) {
@@ -47,8 +53,9 @@ struct FavoriteFoodsView: View {
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    Image(systemName: onSelect == nil ? "chevron.right" : "plus.circle")
-                                        .foregroundStyle(.tertiary)
+                                    Image(systemName: onSelect == nil ? "chevron.right" : (selectedIDs.contains(food.id) ? "checkmark.circle.fill" : "circle"))
+                                        .foregroundStyle(selectedIDs.contains(food.id) ? Color.accentColor : Color.secondary)
+                                        .accessibilityLabel(selectedIDs.contains(food.id) ? "已选择" : "未选择")
                                 }
                             }
                             .buttonStyle(.plain)
@@ -70,7 +77,21 @@ struct FavoriteFoodsView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { Button("添加", systemImage: "plus") { isAdding = true } }
             if onSelect != nil {
-                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("填入 \(selectedFoods.count) 项") { onSelect?(selectedFoods); dismiss() }
+                        .disabled(selectedFoods.isEmpty)
+                }
+            }
+        }
+        .onAppear { selectedIDs = initialSelection }
+        .safeAreaInset(edge: .bottom) {
+            if onSelect != nil && !selectedFoods.isEmpty {
+                HStack {
+                    Text("已选 \(selectedFoods.count) 项 · 各 1 份")
+                    Spacer()
+                    Text("\(selectedFoods.reduce(0) { $0 + $1.calories }.formatted(.number.precision(.fractionLength(0...1)))) kcal")
+                }.font(.subheadline).padding().background(.bar)
             }
         }
         .sheet(isPresented: $isAdding) { FavoriteFoodEditor() }

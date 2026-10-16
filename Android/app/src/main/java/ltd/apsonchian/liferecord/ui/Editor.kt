@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -108,6 +109,11 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
     var ai by remember { mutableStateOf(false) }; var aiBusy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
     var customPart by remember { mutableStateOf("") }
     var showFavorites by remember { mutableStateOf(false) }
+    var selectedFoodIDs by remember { mutableStateOf(setOf<String>()) }
+    var favoritePhotos by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
+    val existingPhotoCount = (r.json.optJSONArray("photoIDs")?.length() ?: 0) +
+        (r.json.optJSONArray("localPhotoFiles")?.strings().orEmpty() - r.json.optJSONArray("uploadedPhotoFiles")?.strings().orEmpty().toSet()).size
+    val photoLimit = (12 - existingPhotoCount).coerceAtLeast(0)
     var showExercises by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val s by vm.snapshot.collectAsState()
@@ -129,10 +135,19 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         if(r.type in listOf(RecordType.MEAL, RecordType.FAVORITE)) {
             Panel {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { SoftButton(onClick = { ai = !ai }) { Text("AI 识别 / 修改") }; if(r.type == RecordType.MEAL) TextButton(onClick = { showFavorites = true }) { Text("常用餐食") } }
+                PhotoInput(vm,images,maxCount=photoLimit,enabled=!aiBusy,change={images=it},notify={error=it}) {open -> SoftButton(onClick=open) {Text(if(images.isEmpty()) "添加照片（可多选）" else "继续添加 · 已选 ${images.size} 张")} }
+                if(images.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    images.forEachIndexed { index, bytes ->
+                        Box {
+                            PhotoBytes(bytes, Modifier.size(84.dp))
+                            IconButton(onClick={images=images.filterIndexed {i,_ -> i!=index}}, modifier=Modifier.align(Alignment.TopEnd).size(44.dp).background(Color.Black.copy(alpha=.45f),RoundedCornerShape(22.dp))) {
+                                Icon(Icons.Default.Close,"移除第 ${index+1} 张照片", tint=Color.White)
+                            }
+                        }
+                    }
+                }
                 if(ai) {
                     TextFieldRow("描述食物、份量或修改要求", input, { input = it }, lines = 3)
-                    PhotoInput(vm,images,enabled=!aiBusy,change={images=it},notify={error=it}) {open -> SoftButton(onClick=open) {Text(if(images.isEmpty()) "添加食物 / 营养表照片" else "继续添加 · 已选 ${images.size} 张")} }
-                    if(images.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { images.forEach { PhotoBytes(it, Modifier.size(70.dp)) } }
                     AppButton(enabled = !aiBusy && (input.isNotBlank() || images.isNotEmpty()), onClick = {
                         aiBusy = true; scope.launch {
                             try {
@@ -178,11 +193,23 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         Spacer(Modifier.height(12.dp))
     }
     exEdit?.let { index -> if(index in exercises.indices) ExerciseEditor(exercises[index], { exEdit = null }) { ex -> exercises = exercises.mapIndexed { i,value -> if(i == index) ex else value }; exEdit = null } }
-    if(showFavorites) AlertDialog(onDismissRequest = { showFavorites = false }, title = { Text("常用餐食") }, text = {
-        Column(Modifier.verticalScroll(rememberScrollState())) { val foods = s.records.filter { it.type == RecordType.FAVORITE }; if(foods.isEmpty()) Text("在设置中添加常用餐食后，可直接填入固定营养。")
-            foods.forEach { food -> TextButton(onClick = { listOf("name","calories","protein","carbs","fat","fiber","note").forEach { fields[it] = food.json.opt(it)?.toString().orEmpty() }; showFavorites = false }) { Text(food.title + " · " + food.json.optString("portion", "1 份")) } }
+    if(showFavorites) FavoriteFoodPicker(s.records.filter { it.type == RecordType.FAVORITE }, selectedFoodIDs, { showFavorites=false }) { foods ->
+        showFavorites=false
+        scope.launch {
+            aiBusy=true
+            try {
+                val added=withContext(Dispatchers.IO) { foods.flatMap { it.json.optJSONArray("localPhotoFiles")?.strings().orEmpty() }.mapNotNull { runCatching { vm.app.photos.local(it) }.getOrNull() } }
+                val manual=images.filter { photo -> favoritePhotos.none { it.contentEquals(photo) } }
+                val combined=(manual+added).fold(emptyList<ByteArray>()) { all,photo -> if(all.any {it.contentEquals(photo)}) all else all+photo }
+                listOf("calories","protein","carbs","fat","fiber").forEach { key -> fields[key]=foods.sumOf {it.json.optDouble(key,0.0)}.toString() }
+                fields["name"]=foods.joinToString("、") {it.title}
+                fields["note"]=foods.joinToString("\n") {listOf(it.title,it.json.optString("portion","1 份"),it.json.optString("note")).filter {v -> v.isNotBlank()}.joinToString(" · ")}
+                selectedFoodIDs=foods.map {it.id}.toSet();favoritePhotos=added;images=combined.take(photoLimit)
+                error=if(combined.size>photoLimit) "营养已全部填入；照片最多再添加 $photoLimit 张。" else ""
+                r.json.put("source","手动");input="";showFavorites=false
+            } finally {aiBusy=false}
         }
-    }, confirmButton = { TextButton(onClick = { showFavorites = false }) { Text("关闭") } })
+    }
 }
 @Composable fun ExerciseEditor(original: JSONObject, dismiss: () -> Unit, save: (JSONObject) -> Unit) {
     var name by remember { mutableStateOf(original.optString("name")) }; var part by remember { mutableStateOf(original.optString("bodyPart", "未分类")) }
@@ -267,6 +294,31 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
                 }) { Text(if(saving) "保存中…" else "保存到相册",color=Color.White) }
             }
             if(notice.isNotBlank()) Text(notice,color=Color.White,modifier=Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp))
+        }
+    }
+}
+
+
+@Composable fun FavoriteFoodPicker(foods: List<Record>, initialSelection: Set<String> = emptySet(), dismiss: () -> Unit, select: (List<Record>) -> Unit) {
+    var selected by remember { mutableStateOf(initialSelection) }
+    val chosen=foods.filter {it.id in selected}
+    FullForm("选择常用餐食",dismiss,actions={
+        TextButton(enabled=chosen.isNotEmpty(),onClick={select(chosen)}) {Text("填入 ${chosen.size} 项")}
+    }) {
+        if(foods.isEmpty()) Empty("还没有常用餐食","在设置中保存固定份量和营养。")
+        else {
+            Text("已选 ${chosen.size} 项 · 各 1 份 · ${format(chosen.sumOf {it.json.optDouble("calories",0.0)})} kcal",style=MaterialTheme.typography.bodyMedium)
+            foods.forEach {food ->
+                Surface(shape=RoundedCornerShape(16.dp),color=MaterialTheme.colorScheme.surface) {
+                    Row(Modifier.fillMaxWidth().toggleable(value=food.id in selected,role=androidx.compose.ui.semantics.Role.Checkbox,onValueChange={checked -> selected=if(checked) selected+food.id else selected-food.id}).padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(food.title,style=MaterialTheme.typography.titleMedium)
+                            Text("${food.json.optString("portion","1 份")} · ${format(food.json.optDouble("calories",0.0))} kcal",color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Checkbox(checked=food.id in selected,onCheckedChange=null)
+                    }
+                }
+            }
         }
     }
 }

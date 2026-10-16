@@ -336,9 +336,9 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
         saveChats(conversations.value.filterNot { it.getString("id") == id })
         photos.forEach { runCatching { app.photos.deleteChat(it) } }
         selectedConversation.value = conversations.value.firstOrNull()?.getString("id") ?: ""; if(proposal.value?.conversation == id) proposal.value = null }
-    private fun append(id: String, role: String, content: String, photos: List<String> = emptyList()) {
+    private fun append(id: String, role: String, content: String, photos: List<String> = emptyList(), displayText: String = content) {
         saveChats(conversations.value.map { chat -> if(chat.getString("id") == id) chat.copy().apply {
-            put("messages", JSONArray(getJSONArray("messages").objects() + JSONObject().put("role", role).put("content", content).put("localPhotoFiles", JSONArray(photos))))
+            put("messages", JSONArray(getJSONArray("messages").objects() + JSONObject().put("role", role).put("content", content).put("displayText", displayText).put("localPhotoFiles", JSONArray(photos))))
             if(role == "user" && getString("title") == "新的对话") put("title", content.take(20))
         } else chat })
     }
@@ -350,7 +350,7 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
         require(images.isEmpty() || c.optBoolean("vision")) { "当前接口未启用图片能力" }
         require(images.size<=c.optInt("maxPhotos",6)) { "图片超出设置中的数量限制" }
         val localPhotos = mutableListOf<String>()
-        try { images.forEach { localPhotos += app.photos.saveChat(it) }; append(id, "user", user, localPhotos) }
+        try { images.forEach { localPhotos += app.photos.saveChat(it) }; append(id, "user", user, localPhotos, text.trim()) }
         catch(e: Exception) { localPhotos.forEach { app.photos.deleteChat(it) }; throw e }
         activeCoachTasks.value=activeCoachTasks.value+id;aiBusy.value=true;proposal.value=null
         val task=viewModelScope.launch(start=CoroutineStart.LAZY) {

@@ -172,10 +172,8 @@ import ltd.apsonchian.liferecord.data.*
     }
     if(showProfile) CoachProfile(vm,{showProfile=false},notify)
     }
-    if(favorites) FullForm("常用餐食",{favorites=false}) {
-        val foods=snapshot.records.filter { it.type==RecordType.FAVORITE }
-        if(foods.isEmpty()) Empty("还没有常用餐食","在设置中保存固定份量和营养，下次直接选择名称。")
-        foods.forEach { food -> TextButton(onClick={text=food.title;favorites=false}) { Text("${food.title} · ${food.json.optString("portion","1 份")}") } }
+    if(favorites) FavoriteFoodPicker(snapshot.records.filter {it.type==RecordType.FAVORITE},dismiss={favorites=false}) {foods ->
+        text=foods.joinToString("、") {it.title};favorites=false
     }
     deleteId?.let { id -> AlertDialog(onDismissRequest={deleteId=null},title={Text("删除此对话？")},text={Text("对话仅保存在本机，删除不会删除健康记录。")},confirmButton={TextButton(onClick={vm.deleteConversation(id);deleteId=null}) { Text("删除") }},dismissButton={TextButton(onClick={deleteId=null}) { Text("取消") }}) }
 }
@@ -204,8 +202,9 @@ import ltd.apsonchian.liferecord.data.*
                             }
                         }
                     }
-                    androidx.compose.foundation.text.selection.SelectionContainer {
-                        if(user) Text(m.getString("content"),color=Color.White,style=MaterialTheme.typography.bodyLarge) else MarkdownText(m.getString("content"))
+                    val visibleText=m.optString("displayText",m.getString("content")).let { if(files.isNotEmpty() && !m.has("displayText") && it=="请分析图片") "" else it }
+                    if(visibleText.isNotBlank()) androidx.compose.foundation.text.selection.SelectionContainer {
+                        if(user) Text(visibleText,color=Color.White,style=MaterialTheme.typography.bodyLarge) else MarkdownText(visibleText)
                     }
                 }
             }

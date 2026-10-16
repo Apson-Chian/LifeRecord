@@ -33,12 +33,14 @@ import ltd.apsonchian.liferecord.AppViewModel
     val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) {success ->
         capture?.let {raw -> val uri=Uri.parse(raw);if(success) add(listOf(uri),true) else runCatching {vm.app.photos.discardCapture(uri)} };capture=null
     }
-    val picker=rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) {if(it.isNotEmpty()) add(it)}
+    val remaining=(maxCount.coerceIn(0,12)-photos.size).coerceAtLeast(0)
+    val singlePicker=rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) {if(it!=null) add(listOf(it))}
+    val picker=rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(remaining.coerceIn(2,12))) {if(it.isNotEmpty()) add(it)}
     Box {
-        button {if(enabled && !reading) menu=true}
+        button {if(enabled && !reading) {if(remaining>0) menu=true else notify("已达到照片数量上限")}}
         DropdownMenu(menu,{menu=false}) {
             DropdownMenuItem(text={Text("拍照")},onClick={menu=false;runCatching {val uri=vm.app.photos.captureUri();capture=uri.toString();camera.launch(uri)}.onFailure {capture?.let {runCatching {vm.app.photos.discardCapture(Uri.parse(it))}};capture=null;notify("无法打开系统相机")}})
-            DropdownMenuItem(text={Text("从相册选择")},onClick={menu=false;picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))})
+            DropdownMenuItem(text={Text("从相册选择")},onClick={menu=false;if(remaining==1) singlePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) else picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))})
         }
     }
 }

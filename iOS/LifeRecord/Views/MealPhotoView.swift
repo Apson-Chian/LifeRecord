@@ -189,7 +189,7 @@ struct MealPhotoViewer: View {
     }
 }
 
-private struct ZoomableMealPhoto: UIViewRepresentable {
+struct ZoomableMealPhoto: UIViewRepresentable {
     let image: UIImage
     var onZoomChange: ((Bool) -> Void)?
     func makeUIView(context: Context) -> PhotoZoomScrollView { PhotoZoomScrollView() }
@@ -199,7 +199,7 @@ private struct ZoomableMealPhoto: UIViewRepresentable {
     }
 }
 
-private final class PhotoZoomScrollView: UIScrollView, UIScrollViewDelegate {
+final class PhotoZoomScrollView: UIScrollView, UIScrollViewDelegate {
     var onZoomChange: ((Bool) -> Void)?
     private let photo = UIImageView()
     private var previousSize = CGSize.zero
@@ -261,5 +261,32 @@ private final class PhotoZoomScrollView: UIScrollView, UIScrollViewDelegate {
             zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
                             width: size.width, height: size.height), animated: animated)
         }
+    }
+}
+
+
+struct LocalPhotoViewer: View {
+    @Environment(\.dismiss) private var dismiss
+    let images: [Data]
+    @State private var selection: Int
+    init(images: [Data], initialIndex: Int) {
+        self.images = images
+        _selection = State(initialValue: initialIndex)
+    }
+    var body: some View {
+        NavigationStack {
+            TabView(selection: $selection) {
+                ForEach(images.indices, id: \.self) { index in
+                    if abs(index - selection) <= 1, let image = UIImage(data: images[index]) {
+                        ZoomableMealPhoto(image: image).tag(index)
+                    } else { Color.black.tag(index) }
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .background(.black)
+            .navigationTitle("\(selection + 1) / \(images.count)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("关闭", systemImage: "xmark") { dismiss() } } }
+        }.preferredColorScheme(.dark)
     }
 }

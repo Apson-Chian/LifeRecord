@@ -179,22 +179,48 @@ class AppFlowTest {
         compose.onAllNodesWithText("新的对话").onLast().performClick()
         model { assertEquals(ids.last(),it.selectedConversation.value) }
     }
+    @Test fun multipleFavoritesFillCombinedMealAndPhotos() {
+        val bitmap=android.graphics.Bitmap.createBitmap(12,8,android.graphics.Bitmap.Config.ARGB_8888).apply {eraseColor(android.graphics.Color.GREEN)}
+        val bytes=java.io.ByteArrayOutputStream().use {bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it);it.toByteArray()};bitmap.recycle()
+        val photo=app.photos.save(bytes)
+        try {
+            val milk=Record.create(RecordType.FAVORITE).apply {json.put("name","QA 牛奶").put("portion","250 ml").put("calories",145).put("protein",8).put("carbs",12).put("fat",7).put("fiber",0).put("localPhotoFiles",org.json.JSONArray().put(photo))}
+            val bread=Record.create(RecordType.FAVORITE).apply {json.put("name","QA 面包").put("portion","2片").put("calories",180).put("protein",6).put("carbs",30).put("fat",4).put("fiber",3)}
+            model {it.save(milk);it.save(bread)}
+            compose.onNodeWithContentDescription("添加记录").performClick();compose.onAllNodesWithText("记一餐").onLast().performClick()
+            compose.onNodeWithText("常用餐食").performClick()
+            compose.onNodeWithText("QA 牛奶").performClick();compose.onNodeWithText("QA 面包").performClick()
+            compose.onNodeWithText("填入 2 项").performClick()
+            compose.waitUntil(5000) {compose.onAllNodesWithText("继续添加 · 已选 1 张").fetchSemanticsNodes().isNotEmpty()}
+            // Reopen, deselect and reselect without duplicating nutrition or photos.
+            compose.onNodeWithText("常用餐食").performClick();compose.onNodeWithText("QA 面包").performClick();compose.onNodeWithText("填入 1 项").assertExists()
+            compose.onNodeWithText("QA 面包").performClick();compose.onNodeWithText("填入 2 项").performClick()
+            compose.onNodeWithText("保存").performClick();compose.waitForIdle()
+            val meal=app.store.load().records.single {it.type==RecordType.MEAL}
+            assertEquals("QA 牛奶、QA 面包",meal.title);assertEquals(325.0,meal.json.getDouble("calories"),0.01)
+            assertEquals(14.0,meal.json.getDouble("protein"),0.01);assertEquals(3.0,meal.json.getDouble("fiber"),0.01)
+            assertEquals(1,meal.json.getJSONArray("localPhotoFiles").length())
+            capture("multi-favorite-meal")
+            meal.json.getJSONArray("localPhotoFiles").strings().forEach {app.photos.deleteLocal(it)}
+        } finally {app.photos.deleteLocal(photo)}
+    }
     @Test fun chatPhotoDraftSurvivesTabsAndSentPhotoSurvivesRestart() {
         val bitmap=android.graphics.Bitmap.createBitmap(12,8,android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.BLUE) }
         val bytes=java.io.ByteArrayOutputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it);it.toByteArray() };bitmap.recycle()
-        model { it.draftPhotos.value=listOf(bytes);it.config.value=providerConfig("自定义").put("model","") }
-        compose.onNodeWithTag("tab-2").performClick();compose.onNodeWithText("已选 1 张照片").assertExists()
-        compose.onNodeWithTag("tab-0").performClick();compose.onNodeWithTag("tab-2").performClick();compose.onNodeWithText("已选 1 张照片").assertExists()
+        model { it.draftPhotos.value=listOf(bytes,bytes);it.config.value=providerConfig("自定义").put("model","") }
+        compose.onNodeWithTag("tab-2").performClick();compose.onNodeWithText("已选 2 张照片").assertExists()
+        compose.onNodeWithTag("tab-0").performClick();compose.onNodeWithTag("tab-2").performClick();compose.onNodeWithText("已选 2 张照片").assertExists()
         compose.onNode(hasSetTextAction()).performTextReplacement("photo persistence QA")
         compose.onNodeWithContentDescription("发送").performClick();hideKeyboard()
         compose.waitUntil(5000) { org.json.JSONArray(app.store.get("conversations","[]")).objects().firstOrNull()?.getJSONArray("messages")?.length()==2 }
         val chat=org.json.JSONArray(app.store.get("conversations")).getJSONObject(0)
         val name=chat.getJSONArray("messages").getJSONObject(0).getJSONArray("localPhotoFiles").getString(0)
-        assertArrayEquals(bytes,app.photos.chat(name))
+        val other=chat.getJSONArray("messages").getJSONObject(0).getJSONArray("localPhotoFiles").getString(1)
+        assertArrayEquals(bytes,app.photos.chat(name));assertArrayEquals(bytes,app.photos.chat(other))
         scenario.close();scenario=ActivityScenario.launch(MainActivity::class.java)
         compose.onNodeWithTag("tab-2").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("照片").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithContentDescription("照片").performClick()
+        compose.onAllNodesWithContentDescription("照片").onFirst().performClick()
         compose.onNodeWithText("保存到相册").assertExists()
         compose.onNodeWithTag("photo-viewer").performTouchInput { doubleClick(center) }
         compose.onNodeWithTag("photo-viewer").performTouchInput { swipeDown(startY=height*.35f,endY=height*.65f,durationMillis=250) }
@@ -204,6 +230,7 @@ class AppFlowTest {
         compose.onNodeWithContentDescription("关闭照片").assertDoesNotExist()
         model { it.deleteConversation(chat.getString("id")) }
         assertThrows(java.io.FileNotFoundException::class.java) { app.photos.chat(name) }
+        assertThrows(java.io.FileNotFoundException::class.java) { app.photos.chat(other) }
     }
     @Test fun savedWeeklyReportOpensInsideTrendsAndRetainsPosition() {
         scenario.close()
