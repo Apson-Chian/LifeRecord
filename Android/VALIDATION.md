@@ -72,3 +72,5 @@ Debug 与 Release 构建成功；两者 Lint 均为 0 错误、16 警告。共�
 2026-10-16。Debug / Release 构建成功，48 项 JVM 和 26 项 API 35 设备测试通过，无失败、错误或跳过；两种构建 Lint 均为 0 错误、16 警告。新增的 6 项算法测试及 3 项设备/存储检查覆盖名称变更保留训练组、严格 AI 分类和复核、过期预览、35 条手臂修复及目录与记录的事务回滚。已人工检查按部位、部位管理和 AI 修改预览截图，使用合成数据与模拟 AI。
 
 普通版 `dist/LifeRecord-Android-1.4.0-beta.3.apk`：versionCode 7，Release 非调试，v2/v3 签名通过并沿用原证书。SHA-256：`366fd09d76e3bf7567f9aede466ee2274b9ba72f7459813a90af988cb6096414`。完整变更及下载见 [发布记录](../Docs/android-release-1.4-beta3.md)。
+
+普通版和默认版覆盖安装及冷启动已在专用 API 35 模拟器验证：旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3，均成功，无崩溃。共享 JSON 协议及同步编辑回归通过。默认版已单独完成 50 项 JVM、26 项设备检查及服务器代理脱敏测试，源码及结果见 [默认服务分支](https://github.com/Apson-Chian/LifeRecord/blob/codex/default-ai-service/Docs/default-ai-service.md)。
