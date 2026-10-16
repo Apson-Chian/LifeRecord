@@ -44,6 +44,7 @@ import kotlin.math.abs
     var quality by rememberSaveable { mutableStateOf(false) }
     var showReport by rememberSaveable { mutableStateOf(false) }
     var showCalendar by rememberSaveable { mutableStateOf(false) }
+    var workoutDetails by rememberSaveable {mutableStateOf(false)}
     var at by remember { mutableDoubleStateOf(now()) }
     LaunchedEffect(Unit) { while(true) { delay(60_000); at=now() } }
     val acknowledged by vm.acknowledgedQuality.collectAsState()
@@ -58,6 +59,7 @@ import kotlin.math.abs
     val feedback=GoalFeedback.summarize(s.records,s.profile,range,at,acknowledged)
     val pending=RecordQuality.issues(s.records,at).filter { it.id !in acknowledged }
     if(showCalendar) { WorkoutCalendarPage(s.records,{showCalendar=false},edit); return }
+    if(workoutDetails) {WorkoutDetails(vm,workouts,{workoutDetails=false},edit,notify);return}
     if(details) { RecordDataDetails(s,s.records.filter { !it.demo && it.date.day()>=start },{details=false},detail); return }
     measurement?.let { field -> MeasurementDetail(real,field,start,{measurement=null},detail); return }
     if(quality) { QualityReview(vm,s,{quality=false},detail,notify); return }
@@ -74,7 +76,7 @@ import kotlin.math.abs
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 IconBadge(Glyph.Workout,teal)
                 Text("训练节奏",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
-                IconButton(onClick={details=true},modifier=Modifier.size(32.dp)) {AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp),"查看训练详情")}
+                IconButton(onClick={workoutDetails=true},modifier=Modifier.size(32.dp)) {AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp),"查看训练详情")}
             }
             val complete=workouts.filter { !it.json.isNull("endDate") && it.json.optDouble("endDate") in it.date..at }
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.SpaceBetween) {
@@ -93,7 +95,7 @@ import kotlin.math.abs
                 Column(Modifier.weight(1f)) {Text("训练日历",style=MaterialTheme.typography.titleMedium,color=teal);Text("按月查看训练量与训练内容",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                 AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp))
             }
-            Row(Modifier.fillMaxWidth().clickable {details=true}.heightIn(min=30.dp),verticalAlignment=Alignment.CenterVertically) {Text("训练内容与明细",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.SemiBold),color=teal);AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp))}
+            Row(Modifier.fillMaxWidth().clickable {workoutDetails=true}.heightIn(min=30.dp),verticalAlignment=Alignment.CenterVertically) {Text("训练内容与明细",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.SemiBold),color=teal);AppIcon(Glyph.Chevron,teal,Modifier.size(15.dp))}
         } }
         item { Panel {
             ChartHeading("体重趋势",Glyph.Weight,MaterialTheme.colorScheme.primary,"weight-detail") {measurement="weight"}

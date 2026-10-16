@@ -77,7 +77,7 @@ class Store(context: Context, databaseName: String = "liferecord.db") : SQLiteOp
         } }
         return Snapshot(records,JSONObject(get("profile",defaultProfile().toString())),org.json.JSONArray(get("deletions","[]")).objects())
     }
-    @Synchronized fun commit(s:Snapshot) {
+    @Synchronized fun commit(s:Snapshot, values:Map<String,String> = emptyMap()) {
         val db=writableDatabase;db.beginTransaction()
         try {
             db.delete("records",null,null)
@@ -87,6 +87,7 @@ class Store(context: Context, databaseName: String = "liferecord.db") : SQLiteOp
                 writeDocument(db,"record:${r.type.name}:${r.id}",r.json)
             }
             writeDocument(db,"profile",s.profile);writeDocument(db,"deletions",org.json.JSONArray(s.deletions))
+            values.forEach {(key,value)->writeDocument(db,key,parseValue(value))}
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
     }

@@ -1,6 +1,6 @@
 # LifeRecord（生活记录）
 
-安卓安装：[1.4.0-beta.2 Release 下载](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.2) · [更新与验证](Docs/android-release-1.4-beta2.md)。在 Assets 下载 APK，可覆盖安装旧测试版。
+安卓安装：[1.4.0-beta.3 Release 下载](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3) · [更新与验证](Docs/android-release-1.4-beta3.md)。在 Assets 下载 APK，可覆盖安装旧测试版。
 
 API 设置更新：预设仅保留 DeepSeek 和 GLM，三端支持新增、保存与切换多个自定义配置。[配置说明与本机 Dots 设置步骤](Docs/api-settings.md)。
 

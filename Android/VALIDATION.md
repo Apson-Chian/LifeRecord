@@ -66,3 +66,9 @@ Debug 与 Release 构建成功；两者 Lint 均为 0 错误、16 警告。共�
 发行文件 `dist/LifeRecord-Android-1.4.0-beta.2.apk`：versionCode 6，未启用应用调试，v2/v3 签名校验通过，证书与此前所有提供的测试包一致。专用模拟器先安装原 1.4.0-beta，再用 `adb install -r` 覆盖安装本版，均成功；Release 包冷启动正常。APK SHA-256：`305dabcddff58d1047bb1850b8bd9ebf7a8906e89a060dc3655474af2ec6b854`。
 
 [Release 与验证详情](../Docs/android-release-1.4-beta2.md)。API 26–32 的旧设备和真实计费 AI 未做本轮运行验证；没有修改 iOS、Web、后端或用户数据。
+
+## 1.4.0-beta.3：专用训练部位模块
+
+2026-10-16。Debug / Release 构建成功，48 项 JVM 和 26 项 API 35 设备测试通过，无失败、错误或跳过；两种构建 Lint 均为 0 错误、16 警告。新增的 6 项算法测试及 3 项设备/存储检查覆盖名称变更保留训练组、严格 AI 分类和复核、过期预览、35 条手臂修复及目录与记录的事务回滚。已人工检查按部位、部位管理和 AI 修改预览截图，使用合成数据与模拟 AI。
+
+普通版 `dist/LifeRecord-Android-1.4.0-beta.3.apk`：versionCode 7，Release 非调试，v2/v3 签名通过并沿用原证书。SHA-256：`366fd09d76e3bf7567f9aede466ee2274b9ba72f7459813a90af988cb6096414`。完整变更及下载见 [发布记录](../Docs/android-release-1.4-beta3.md)。

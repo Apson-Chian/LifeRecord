@@ -111,6 +111,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
     var showExercises by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val s by vm.snapshot.collectAsState()
+    val catalog by vm.bodyPartChoices.collectAsState()
     val build: () -> Record = {
         val edited = r.copy(); edited.json.put("date", if(date == r.date.localText()) r.date else date.timestamp())
         listOf("name","note","portion","bodyPart").forEach { edited.json.put(it, fields[it].orEmpty().trim()) }
@@ -158,8 +159,8 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         }
         if(r.type == RecordType.WORKOUT) {
             Text("训练部位", style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { (parts + selectedParts).distinct().forEach { part -> FilterChip(selected = part in selectedParts, onClick = { selectedParts = if(part in selectedParts) selectedParts - part else selectedParts + part }, label = { Text(part) }) } }
-            Row(verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(customPart, { customPart = it }, Modifier.weight(1f), label = { Text("自定义部位") }, singleLine = true); TextButton(onClick = { if(customPart.trim().isNotEmpty()) { selectedParts = (selectedParts + customPart.trim()).distinct(); customPart = "" } }) { Text("添加") } }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { (catalog + selectedParts).distinct().forEach { part -> FilterChip(selected = part in selectedParts, onClick = { selectedParts = if(part in selectedParts) selectedParts - part else selectedParts + part }, label = { Text(part) }) } }
+            Row(verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(customPart, { customPart = it }, Modifier.weight(1f), label = { Text("自定义部位") }, singleLine = true); TextButton(onClick = { runCatching {val name=customPart.trim();require(WorkoutParts.valid(name)) {"部位名称无效"};if(name !in catalog) vm.addBodyPart(name);selectedParts=(selectedParts+name).distinct();customPart=""}.onFailure {error=it.message.orEmpty()} }) { Text("添加") } }
             DateTimeField("结束时间", end, { end = it }, optional = true)
             TextButton(onClick = { showExercises = !showExercises }) {
                 Text("具体动作与组数（可选）", modifier = Modifier.weight(1f))

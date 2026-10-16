@@ -1,4 +1,4 @@
-1.4.0-beta.2：对齐当前 iOS 的训练月历、教练名称与头像、输入栏写入开关、停止生成和拍照。安装包见 [GitHub Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.2)。[公开测试说明](../Docs/public-beta.md)。
+1.4.0-beta.3：补齐训练部位专用分类、对话复核、全局改名和历史修复，保留 iOS 对齐体验。安装包见 [GitHub Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3)。[公开测试说明](../Docs/public-beta.md)。
 
 # LifeRecord Android
 
@@ -41,7 +41,7 @@
 
 首页顺序、蓝紫主题、蛋白质/碳水/餐次配色、添加菜单、记录日历、餐次分组、照片入口、训练结束后编辑、默认收起的动作组数，以及「问 AI」先填草稿的操作已对齐 iOS。切换标签保留日期、滚动位置、趋势范围、搜索和未发送文字。详细变化与 GitHub 参考见[对齐记录](../Docs/android-ios-parity.md)。
 
-在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.2) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.2.apk`，在安卓文件管理器中打开，按系统提示允许该来源安装应用，再点安装。新版沿用此前 1.0–1.4 测试包的签名，可直接覆盖安装，不需要卸载；源码更新后也可以用 Android Studio 运行到手机。iOS 的认证修复需要重新构建并安装 iOS App。
+在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.3.apk`，在安卓文件管理器中打开，按系统提示允许该来源安装应用，再点安装。新版沿用此前 1.0–1.4 测试包的签名，可直接覆盖安装，不需要卸载；源码更新后也可以用 Android Studio 运行到手机。iOS 的认证修复需要重新构建并安装 iOS App。
 
 DeepSeek 官方接口固定使用 Bearer 认证，保存和发送都会处理常见粘贴格式；401/402 的处理与密钥重新配置方式见[仓库说明](../README.md#deepseek-配置与-401-修复)。
 
@@ -74,7 +74,7 @@ JSON 导出包含真实记录、目标、删除标记、照片服务器编号、
 - 玻璃使用 Android RenderEffect/AGSL 近似苹果原生 Liquid Glass；圆环已有渐变和阴影，光照没有复刻苹果完整渲染。
 - 系统相机、照片选择、日期时间、返回和键盘遵循安卓平台。相机仅获得本次临时照片 URI 的授权，拍照完成或取消后清理临时文件。
 - 常用餐食照片、聊天附件、质量确认和周报留在本机，不参与跨设备同步或 JSON 导出；历史聊天照片不会自动附加到后续 AI 请求。
-- 训练部位和动作库支持手动选择，也可在教练中明确要求修改；训练详情内的专用 AI 部位分类/部位管理页面尚未移植。
+- 训练部位专用分类、对话复核、部位目录管理和历史修复已在 1.4.0-beta.3 提供；目录偏好只保存在本机，训练标签通过原有协议同步。
 - 安卓已去除 LifeTrack 联动，iOS 保留原有功能。
 
 `./gradlew :app:connectedDebugAndroidTest` 可在连接的模拟器或手机上检查数据库、密钥与主要记录流程。请使用专门的测试设备。
@@ -121,3 +121,9 @@ JSON 导出包含真实记录、目标、删除标记、照片服务器编号、
 教练名称与头像仅存本机，头像压缩后保留，所有对话使用同一资料；输入栏的写入开关默认关闭。开启后按请求验证并实际保存 AI 操作，再显示应用生成的回执。停止会取消对应网络请求，保留已发送的问题与照片，不执行该次写入。拍照与相册可用于教练和餐食识别。
 
 [Release 发布说明与验证](../Docs/android-release-1.4-beta2.md)。发行附件是 Release 构建，未启用应用调试，沿用旧测试证书以支持覆盖升级；仍是预发布测试版本。APK、证书私钥和本机测试数据不进入源码仓库。
+
+## 1.4.0-beta.3：训练部位专用流程
+
+“趋势 → 训练内容与明细 → 按部位”提供 AI 分类、专用对话修改、时间轴和记录选择、全局部位改名及动作库入口。“设置 → 记录与提醒 → 管理训练部位”可新增、移除、恢复历史部位，并预览修复明确描述的手臂细分。AI 对话修改先预览，点击应用才保存；旧预览遇到记录变化会失效。
+
+[发布与验证说明](../Docs/android-release-1.4-beta3.md)。上游 API Key 不会打入默认服务版 APK，始终由服务器代理持有。

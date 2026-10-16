@@ -74,6 +74,8 @@ import android.net.Uri
                 DestinationRow("常用餐食","",Glyph.Meal,Carbs) {page="favorites"}
                 GroupDivider()
                 DestinationRow("我的动作库","",Glyph.Workout,Color(0xFF31B8C4)) {page="exercises"}
+                GroupDivider()
+                DestinationRow("管理训练部位","",Glyph.Workout,Color(0xFF31B8C4)) {page="parts"}
             }
             SettingsGroup("提醒") { DestinationRow("漏记提醒","",Glyph.Bell,Carbs) {page="reminders"} }
         }
@@ -97,6 +99,7 @@ import android.net.Uri
         "sync" -> SyncSettings(vm,{page=""},notify)
         "favorites" -> Library(vm,RecordType.FAVORITE,{page="recording"},notify)
         "exercises" -> Library(vm,RecordType.EXERCISE,{page="recording"},notify)
+        "parts" -> WorkoutPartManager(vm,{page="recording"},notify)
         "reminders" -> Reminders(vm,{page="recording"},notify)
     }
     if(reset) AlertDialog(onDismissRequest={reset=false},title={Text("清除全部本机数据？")},text={Text("请先导出需要保留的记录。这会清除记录、对话、照片、接口偏好和密钥，云端记录保留。")},confirmButton={TextButton(onClick={runCatching {vm.resetLocalData();reset=false;notify("本机数据已清除")}.onFailure {notify(it.message.orEmpty())}}) {Text("清除")}},dismissButton={TextButton(onClick={reset=false}) {Text("取消")}})

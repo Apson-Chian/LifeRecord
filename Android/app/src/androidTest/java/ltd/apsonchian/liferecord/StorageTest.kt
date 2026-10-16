@@ -10,6 +10,17 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class StorageTest {
+    @Test fun catalogAndRecordUpdateRollBackTogetherWhenAnyDocumentIsInvalid() {
+        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val name="catalog-atomic-${java.util.UUID.randomUUID()}.db"
+        try {Store(app,name).use {store->
+            val before=Snapshot(emptyList(),defaultProfile(),emptyList());store.commit(before,mapOf("workout.bodyPartCatalog" to "[\"背部\"]"))
+            val r=Record.create(RecordType.BODY)
+            val tooDeep="[".repeat(20)+"0"+"]".repeat(20)
+            assertThrows(IllegalArgumentException::class.java) {store.commit(before.copy(records=listOf(r)),mapOf("workout.bodyPartCatalog" to tooDeep))}
+            assertTrue(store.load().records.isEmpty());assertEquals("[\"背部\"]",store.get("workout.bodyPartCatalog"))
+        }} finally {app.deleteDatabase(name)}
+    }
     @Test fun privateCameraUriAcceptsPhotoAndDoesNotExposeMealOrDatabaseDirectories() {
         val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
         val uri=app.photos.captureUri()

@@ -1,5 +1,6 @@
 package ltd.apsonchian.liferecord
 
+import androidx.activity.compose.setContent
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -26,8 +27,10 @@ class AppFlowTest {
     private var aiConfig = ""
     private var appearance = "system"
     private var accent = "purple"
+    private var partCatalog = ""
     @Before fun setup() {
         app = ApplicationProvider.getApplicationContext()
+        partCatalog=app.store.get("workout.bodyPartCatalog");app.store.set("workout.bodyPartCatalog",org.json.JSONArray(parts).toString())
         appearance=app.store.get("appearance","system");accent=app.store.get("accent","purple")
         app.store.set("appearance","system");app.store.set("accent","purple")
         identity=app.store.get("coach.identity","{}");aiConfig=app.store.get("aiConfig")
@@ -46,6 +49,7 @@ class AppFlowTest {
         app.store.set("recordQuality.acknowledged",acknowledgements);app.store.set("weeklyReport",report)
         app.store.set("coach.identity",identity);app.store.set("aiConfig",aiConfig.ifBlank {providerConfig("DeepSeek").toString()})
         app.store.set("appearance",appearance);app.store.set("accent",accent)
+        app.store.set("workout.bodyPartCatalog",partCatalog.ifBlank {org.json.JSONArray(parts).toString()})
     }
     @Test fun manualMealSaveAndDeleteUsesSamePersistentRecord() {
         compose.onNodeWithContentDescription("添加记录").performClick()
@@ -409,6 +413,56 @@ class AppFlowTest {
         val messages=org.json.JSONArray(app.store.get("conversations")).getJSONObject(0).getJSONArray("messages").objects()
         assertEquals("帮我记录午餐",messages.first().getString("content"));assertTrue(messages.last().toString(),messages.last().getString("content").startsWith("已停止生成"));assertTrue(app.store.load().records.isEmpty())
         assertTrue(vm.activeCoachTasks.value.isEmpty())
+    }
+
+    private fun partFixture()=Record.create(RecordType.WORKOUT,now()-7200).apply {
+        json.put("endDate",date+3600);json.put("bodyParts",org.json.JSONArray().put("手臂"));json.put("note","二头、三头")
+        json.put("exercises",org.json.JSONArray().put(org.json.JSONObject().put("name","弯举").put("bodyPart","手臂").put("sets",org.json.JSONArray().put(org.json.JSONObject().put("weight",20).put("reps",8)))))
+    }
+    @Test fun dedicatedPartManagerRenamesAllDataAndRemovalPreservesHistory() {
+        val r=partFixture();val template=Record.create(RecordType.EXERCISE).apply {json.put("name","弯举");json.put("bodyPart","手臂")}
+        model {it.save(r);it.save(template);it.savePartChoices(parts+"手臂")}
+        compose.onNodeWithTag("tab-1").performClick()
+        compose.onNodeWithContentDescription("查看训练详情").performClick()
+        compose.onNodeWithText("按部位").performClick()
+        capture("workout-parts-beta3")
+        compose.onNodeWithText("管理训练部位").performClick()
+        compose.onNodeWithTag("rename-part-手臂").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("部位名称").performTextReplacement("上肢")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.onNodeWithText("保存").performClick()
+        compose.waitForIdle()
+        val saved=app.store.load().records.single {it.id==r.id}
+        assertEquals(listOf("上肢"),WorkoutParts.of(saved));assertEquals(20,saved.json.getJSONArray("exercises").getJSONObject(0).getJSONArray("sets").getJSONObject(0).getInt("weight"))
+        assertEquals("上肢",app.store.load().records.single {it.id==template.id}.json.getString("bodyPart"))
+        compose.onNodeWithTag("remove-part-上肢").performScrollTo().performClick()
+        assertEquals(listOf("上肢"),WorkoutParts.of(app.store.load().records.single {it.id==r.id}))
+        assertFalse(org.json.JSONArray(app.store.get("workout.bodyPartCatalog")).strings().contains("上肢"))
+        capture("workout-part-manager-beta3")
+    }
+    @Test fun partAssistantGeneratesPreviewWithoutWritingThenAppliesOnlyConfirmedLabels() {
+        val r=partFixture();model {it.save(r)}
+        val reply=org.json.JSONObject().put("answer","请核对这次手臂训练的细分部位").put("changes",org.json.JSONArray().put(org.json.JSONObject().put("id",r.id).put("bodyParts",org.json.JSONArray().put("二头").put("三头"))))
+        val client=okhttp3.OkHttpClient.Builder().addInterceptor {chain ->
+            val envelope=org.json.JSONObject().put("choices",org.json.JSONArray().put(org.json.JSONObject().put("message",org.json.JSONObject().put("content",reply.toString()))))
+            okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK").body(okhttp3.ResponseBody.create(null,envelope.toString())).build()
+        }.build()
+        val vm=AppViewModel(app,ltd.apsonchian.liferecord.service.Network(client))
+        val config=providerConfig("自定义").put("model","local-test").put("endpoint","https://parts-local-test.invalid/chat/completions").put("canWrite",true)
+        val keyScope=ltd.apsonchian.liferecord.service.apiScope(config);app.secrets.save(keyScope,"local-test-key");vm.config.value=config
+        try {
+            scenario.onActivity {activity ->activity.setContent {ltd.apsonchian.liferecord.ui.LifeTheme {ltd.apsonchian.liferecord.ui.WorkoutPartAssistant(vm,setOf(r.id),"手臂",{},{})}}}
+            compose.onNodeWithContentDescription("例如：把这条手臂训练改为二头、三头、小臂").performTextReplacement("把这次训练细分为二头和三头")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.onNodeWithText("发送").performScrollTo().performClick()
+            compose.waitUntil(5000) {compose.onAllNodesWithText("修改预览").fetchSemanticsNodes().isNotEmpty()}
+            assertEquals(listOf("手臂"),WorkoutParts.of(app.store.load().records.single()))
+            compose.onNodeWithText("应用 1 条修改").performScrollTo()
+            capture("workout-part-preview-beta3")
+            compose.onNodeWithText("应用 1 条修改").performClick()
+            compose.waitUntil(5000) {WorkoutParts.of(app.store.load().records.single())==listOf("二头","三头")}
+            assertEquals(r.date,app.store.load().records.single().date,0.0)
+        } finally {app.secrets.save(keyScope,"")}
     }
 
     private fun capture(name:String) {
