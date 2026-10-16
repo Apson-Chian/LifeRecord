@@ -11,6 +11,20 @@ final class CoachTaskCenter: ObservableObject {
     typealias ID = UUID
 
     private var workTasks: [ID: Task<Void, Never>] = [:]
+    private var expiredConversationIDs: Set<ID> = []
+    private let background: any CoachBackgroundExecuting
+
+    init(background: (any CoachBackgroundExecuting)? = nil) {
+        self.background = background ?? CoachBackgroundExecution()
+    }
+
+    func wasBackgroundInterrupted(_ id: ID) -> Bool { expiredConversationIDs.contains(id) }
+
+    private func expire(_ id: ID) {
+        expiredConversationIDs.insert(id)
+        workTasks[id]?.cancel()
+        background.end(id)
+    }
 
     var isGenerating: Bool {
         !generatingConversationIDs.isEmpty
@@ -36,6 +50,7 @@ final class CoachTaskCenter: ObservableObject {
     ) -> Bool {
         guard workTasks[conversationID] == nil else { return false }
 
+        expiredConversationIDs.remove(conversationID)
         generatingConversationIDs.insert(conversationID)
         activeQuestions[conversationID] = question
         statusMessages[conversationID] = nil
@@ -44,20 +59,27 @@ final class CoachTaskCenter: ObservableObject {
             guard let self else { return }
             do {
                 try await operation()
+                try Task.checkCancellation()
                 if statusMessages[conversationID] == nil {
                     statusMessages[conversationID] = "回答已完成"
                 }
                 AIAnswerNotificationCenter.shared.notifyAnswerReady(conversationID: conversationID)
-            } catch is CancellationError {
-                statusMessages[conversationID] = "已停止生成"
             } catch {
-                statusMessages[conversationID] = "回答失败：\(error.localizedDescription)"
+                if expiredConversationIDs.contains(conversationID) {
+                    statusMessages[conversationID] = "后台运行已中断，可重新生成"
+                } else if Task.isCancelled || error is CancellationError {
+                    statusMessages[conversationID] = "已停止生成"
+                } else {
+                    statusMessages[conversationID] = "回答失败：\(error.localizedDescription)"
+                }
             }
+            background.end(conversationID)
 
             generatingConversationIDs.remove(conversationID)
             activeQuestions[conversationID] = nil
             workTasks[conversationID] = nil
         }
+        background.begin(conversationID) { [weak self] in self?.expire(conversationID) }
         return true
     }
 

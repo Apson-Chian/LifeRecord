@@ -223,6 +223,11 @@ final class CoachConversation {
     }
 }
 
+enum CoachGenerationState: String {
+    case none = "", pending, applying, completed, failed, interrupted, stopped, needsReview
+    var canRetry: Bool { self == .failed || self == .interrupted }
+}
+
 @Model
 final class CoachMessage {
     @Attribute(.unique) var id: UUID
@@ -230,6 +235,29 @@ final class CoachMessage {
     var role: String
     var content: String
     var conversation: CoachConversation?
+    var generationStateRaw: String = ""
+    var generationFailure: String = ""
+    var generationState: CoachGenerationState {
+        get { CoachGenerationState(rawValue: generationStateRaw) ?? .none }
+        set { generationStateRaw = newValue.rawValue }
+    }
+
+    /// A vanished in-memory task must not leave a conversation permanently generating.
+    @discardableResult
+    func recoverInterruptedGeneration(isRunning: Bool) -> Bool {
+        guard !isRunning else { return false }
+        switch generationState {
+        case .pending:
+            generationState = .interrupted
+            generationFailure = "上次生成被中断，问题和已附图片已保留。"
+        case .applying:
+            generationState = .needsReview
+            generationFailure = "上次处理回答时中断，请先核对记录，再决定是否重新提问。"
+        default: return false
+        }
+        return true
+    }
+
     // Optional storage preserves existing conversations during lightweight migration.
     @Attribute(.externalStorage) var imageData: Data? = nil
 
