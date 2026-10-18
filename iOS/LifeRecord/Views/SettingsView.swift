@@ -400,7 +400,7 @@ struct SyncKeyEditorView: View {
                     .disabled(isSaving || trimmedKey.isEmpty)
                 }
             }
-            .confirmationDialog("移除同步密钥？", isPresented: $showsDeleteConfirmation, titleVisibility: .visible) {
+            .alert("移除同步密钥？", isPresented: $showsDeleteConfirmation) {
                 Button("移除", role: .destructive) { removeKey() }
                 Button("取消", role: .cancel) { }
             } message: {
@@ -537,7 +537,7 @@ struct APIKeyEditorView: View {
                     .disabled(isSaving || trimmedKey.isEmpty)
                 }
             }
-            .confirmationDialog("删除 API Key？", isPresented: $showsDeleteConfirmation, titleVisibility: .visible) {
+            .alert("删除 API Key？", isPresented: $showsDeleteConfirmation) {
                 Button("删除", role: .destructive) { deleteKey() }
                 Button("取消", role: .cancel) { }
             } message: {

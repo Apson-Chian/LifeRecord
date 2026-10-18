@@ -170,7 +170,7 @@ struct WorkoutEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button(isClassifying ? "归类中…" : "保存") { save() }.disabled((finished && end < start) || isClassifying) }
             }
-            .confirmationDialog("删除这次训练？", isPresented: $confirmDelete, titleVisibility: .visible) {
+            .alert("删除这次训练？", isPresented: $confirmDelete) {
                 Button("删除", role: .destructive) {
                     if let entry {
                         context.insert(SyncTombstone(recordID: entry.id, recordType: "workout"))
@@ -178,6 +178,7 @@ struct WorkoutEditor: View {
                         persist()
                     }
                 }
+                Button("取消", role: .cancel) {}
             }
             .alert("保存失败", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("好") {} } message: { Text(error ?? "") }
         }

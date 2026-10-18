@@ -225,7 +225,7 @@ struct CoachView: View {
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
             }
-            .confirmationDialog("清空当前对话？", isPresented: $confirmsClear, titleVisibility: .visible) {
+            .alert("清空当前对话？", isPresented: $confirmsClear) {
                 Button("清空", role: .destructive) {
                     messages.forEach(modelContext.delete)
                     activeConversation?.updatedAt = .now

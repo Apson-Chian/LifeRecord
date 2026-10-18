@@ -35,8 +35,9 @@ struct AddMealView: View {
 
     init(defaultDate: Date) {
         self.defaultDate = defaultDate
-        _date = State(initialValue: defaultDate)
-        let hour = Calendar.current.component(.hour, from: defaultDate)
+        let initialDate = RecordEntryDate.initial(on: defaultDate)
+        _date = State(initialValue: initialDate)
+        let hour = Calendar.current.component(.hour, from: initialDate)
         _kind = State(initialValue: hour < 10 ? .breakfast : (hour < 15 ? .lunch : (hour < 21 ? .dinner : .snack)))
     }
 
@@ -424,7 +425,7 @@ struct AddWeightView: View {
         self.defaultDate = defaultDate
         self.lastWeight = lastWeight
         self.editing = editing
-        _date = State(initialValue: editing?.date ?? defaultDate)
+        _date = State(initialValue: editing?.date ?? RecordEntryDate.initial(on: defaultDate))
         _weight = State(initialValue: editing?.weight ?? lastWeight ?? 70)
         _bodyFatText = State(initialValue: editing?.bodyFat.map { String($0) } ?? "")
         _note = State(initialValue: editing?.note ?? "")

@@ -466,7 +466,7 @@ private struct PrivacyAndDataSettingsView: View {
                 .foregroundStyle(.red)
             }
         }
-        .confirmationDialog("清除全部本机数据？请先导出需要保留的记录。",isPresented:$showsReset,titleVisibility:.visible) {
+        .alert("清除全部本机数据？请先导出需要保留的记录。",isPresented:$showsReset) {
             Button("清除",role:.destructive) {
                 do {
                     guard !syncCoordinator.isSyncing && !coachTasks.isGenerating else { throw SyncServiceError.server("请等待同步与 AI 任务结束") }
