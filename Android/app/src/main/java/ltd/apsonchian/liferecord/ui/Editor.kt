@@ -96,7 +96,20 @@ import java.time.format.DateTimeFormatter
 fun Double.localText(): String = Instant.ofEpochMilli((this*1000).toLong()).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
 fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()/1000.0
 @Composable fun RecordEditor(vm: AppViewModel, record: Record, dismiss: () -> Unit, notify: (String) -> Unit) {
-    val r = remember(record.id) { record.copy() }
+    val r = remember(record.id) {
+        record.copy().apply {
+            if(type in listOf(RecordType.MEAL, RecordType.BODY) && vm.snapshot.value.records.none { it.id == id }) {
+                val time = LocalTime.now()
+                json.put("date", date.day().epochAt(time))
+                if(type == RecordType.MEAL) json.put("kind", when {
+                    time.hour < 10 -> "早餐"
+                    time.hour < 15 -> "午餐"
+                    time.hour < 21 -> "晚餐"
+                    else -> "加餐"
+                })
+            }
+        }
+    }
     val fields = remember { mutableStateMapOf<String,String>().apply { listOf("name","calories","protein","carbs","fat","fiber","weight","bodyFat","waist","note","portion","bodyPart").forEach { put(it, if(r.json.isNull(it)) "" else r.json.opt(it)?.toString().orEmpty()) } } }
     var date by remember { mutableStateOf(r.date.localText()) }
     var end by remember { mutableStateOf(if(r.json.isNull("endDate")) "" else r.json.optDouble("endDate").localText()) }
@@ -250,7 +263,12 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         Insights.quality(r).forEach { Text(it,color=MaterialTheme.colorScheme.error) }
         SoftButton(onClick={delete=true},modifier=Modifier.fillMaxWidth()) { Text("删除这条记录",color=MaterialTheme.colorScheme.error) }
     }
-    if(delete) AlertDialog(onDismissRequest={delete=false},title={Text("删除${r.type.label}？")},text={Text("启用同步后，删除会同步到你的其他设备。")},confirmButton={TextButton(onClick={runCatching { vm.delete(r); dismiss(); notify("记录已删除") }.onFailure { notify(it.message.orEmpty()) }}) { Text("删除") }},dismissButton={TextButton(onClick={delete=false}) { Text("保留") }})
+    if(delete) DeleteConfirmationDialog(
+        title = "删除${r.type.label}？",
+        message = "启用同步后，删除会同步到你的其他设备。",
+        onDismiss = { delete = false },
+        onConfirm = { runCatching { vm.delete(r); delete = false; dismiss(); notify("记录已删除") }.onFailure { notify(it.message.orEmpty()) } }
+    )
 }
 @Composable fun PhotoBytes(bytes: ByteArray, modifier: Modifier = Modifier, contentScale: androidx.compose.ui.layout.ContentScale = androidx.compose.ui.layout.ContentScale.Crop) {
     val bitmap = remember(bytes) { BitmapFactory.decodeByteArray(bytes,0,bytes.size)?.asImageBitmap() }

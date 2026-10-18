@@ -102,8 +102,20 @@ import android.net.Uri
         "parts" -> WorkoutPartManager(vm,{page="recording"},notify)
         "reminders" -> Reminders(vm,{page="recording"},notify)
     }
-    if(reset) AlertDialog(onDismissRequest={reset=false},title={Text("清除全部本机数据？")},text={Text("请先导出需要保留的记录。这会清除记录、对话、照片、接口偏好和密钥，云端记录保留。")},confirmButton={TextButton(onClick={runCatching {vm.resetLocalData();reset=false;notify("本机数据已清除")}.onFailure {notify(it.message.orEmpty())}}) {Text("清除")}},dismissButton={TextButton(onClick={reset=false}) {Text("取消")}})
-    if(clear) AlertDialog(onDismissRequest={clear=false},title={Text("清除示例数据？")},text={Text("你自己记录和同步的内容会保留。")},confirmButton={TextButton(onClick={vm.clearDemo();clear=false;notify("示例数据已清除")}) { Text("清除") }},dismissButton={TextButton(onClick={clear=false}) { Text("取消") }})
+    if(reset) DeleteConfirmationDialog(
+        title = "清除全部本机数据？",
+        message = "请先导出需要保留的记录。这会清除记录、对话、照片、接口偏好和密钥，云端记录保留。",
+        onDismiss = { reset = false },
+        onConfirm = { runCatching { vm.resetLocalData(); reset = false; notify("本机数据已清除") }.onFailure { notify(it.message.orEmpty()) } },
+        confirmLabel = "清除"
+    )
+    if(clear) DeleteConfirmationDialog(
+        title = "清除示例数据？",
+        message = "你自己记录和同步的内容会保留。",
+        onDismiss = { clear = false },
+        onConfirm = { vm.clearDemo(); clear = false; notify("示例数据已清除") },
+        confirmLabel = "清除"
+    )
 }
 @Composable private fun SettingsGroup(title:String,content:@Composable ColumnScope.()->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {

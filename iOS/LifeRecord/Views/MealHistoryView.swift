@@ -208,7 +208,7 @@ struct MealDetailView: View {
         .fullScreenCover(item: $selectedPhoto) { photo in
             MealPhotoViewer(imageIDs: meal.photoIDs, initialID: photo.id)
         }
-        .confirmationDialog("确定删除这条饮食记录？", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+        .alert("确定删除这条饮食记录？", isPresented: $isConfirmingDelete) {
             Button("删除", role: .destructive, action: deleteMeal)
             Button("取消", role: .cancel) {}
         } message: {

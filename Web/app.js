@@ -12,6 +12,10 @@ const $ = selector => document.querySelector(selector);
 const pad = value => String(value).padStart(2, "0");
 const dateKey = date => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 const parseDate = value => { const [y, m, d] = value.split("-").map(Number); return new Date(y, m - 1, d, 12); };
+const newRecordDate = (value, now = new Date()) => {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+};
 const epochForDateKey = value => parseDate(value).getTime() / 1000;
 const recordDateKey = item => dateKey(new Date(item.date * 1000));
 const nowSeconds = () => Date.now() / 1000;
@@ -403,7 +407,7 @@ function openMealDialog(meal = null) {
   const form = $("#mealForm"); form.reset();
   $("#mealFormTitle").textContent = meal ? "编辑餐食" : "记一餐";
   $("#mealFormEyebrow").textContent = meal ? "修改原记录 · 保留已有照片" : "新增记录";
-  const date = meal ? new Date(meal.date * 1000) : parseDate(selectedDate);
+  const date = meal ? new Date(meal.date * 1000) : newRecordDate(selectedDate);
   form.elements.date.value = `${dateKey(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   editingDateInput = form.elements.date.value;
   retainedPhotoIDs = [...(meal?.photoIDs || [])];

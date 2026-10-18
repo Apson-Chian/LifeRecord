@@ -108,7 +108,7 @@ function editBodyRecord(original = null) {
   bodyEdit = original ? structuredClone(original) : null;
   const form = $('#weightForm'); form.reset();
   $('#weightFormTitle').textContent = original ? '编辑身体数据' : '记录身体数据';
-  form.elements.date.value=localDateTime(original?.date ?? epochForDateKey(selectedDate));
+  form.elements.date.value=localDateTime(original?.date ?? newRecordDate(selectedDate).getTime() / 1000);
   for (const key of ['weight','bodyFat','waist','note']) form.elements[key].value=original?.[key]??'';
   $('#weightDialog').showModal();
 }

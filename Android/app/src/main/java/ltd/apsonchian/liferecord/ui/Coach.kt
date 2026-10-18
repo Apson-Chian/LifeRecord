@@ -175,7 +175,12 @@ import ltd.apsonchian.liferecord.data.*
     if(favorites) FavoriteFoodPicker(snapshot.records.filter {it.type==RecordType.FAVORITE},dismiss={favorites=false}) {foods ->
         text=foods.joinToString("、") {it.title};favorites=false
     }
-    deleteId?.let { id -> AlertDialog(onDismissRequest={deleteId=null},title={Text("删除此对话？")},text={Text("对话仅保存在本机，删除不会删除健康记录。")},confirmButton={TextButton(onClick={vm.deleteConversation(id);deleteId=null}) { Text("删除") }},dismissButton={TextButton(onClick={deleteId=null}) { Text("取消") }}) }
+    deleteId?.let { id -> DeleteConfirmationDialog(
+        title = "删除此对话？",
+        message = "对话仅保存在本机，删除不会删除健康记录。",
+        onDismiss = { deleteId = null },
+        onConfirm = { vm.deleteConversation(id); deleteId = null }
+    ) }
 }
 @Composable private fun ChatMessage(vm:AppViewModel,m:org.json.JSONObject) {
     val user=m.getString("role")=="user"
