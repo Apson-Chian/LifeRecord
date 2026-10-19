@@ -45,6 +45,7 @@ import kotlin.math.abs
     var showReport by rememberSaveable { mutableStateOf(false) }
     var showCalendar by rememberSaveable { mutableStateOf(false) }
     var workoutDetails by rememberSaveable {mutableStateOf(false)}
+    var calorieDetails by rememberSaveable { mutableStateOf(false) }
     var at by remember { mutableDoubleStateOf(now()) }
     LaunchedEffect(Unit) { while(true) { delay(60_000); at=now() } }
     val acknowledged by vm.acknowledgedQuality.collectAsState()
@@ -58,6 +59,13 @@ import kotlin.math.abs
     val workouts=records.filter { it.type==RecordType.WORKOUT }.sortedByDescending { it.date }
     val feedback=GoalFeedback.summarize(s.records,s.profile,range,at,acknowledged)
     val pending=RecordQuality.issues(s.records,at).filter { it.id !in acknowledged }
+    val caloriePoints=meals.groupBy { it.date.day() }.map { (day,entries) -> DayBar(day,Insights.total(entries,"calories"),"当日餐食总量 · ${entries.size} 餐") }.sortedBy { it.day }
+    val calorieStart=if(range==0) minOf(caloriePoints.firstOrNull()?.day ?: today,today.minusDays(6)) else start
+    if(calorieDetails) { SubPage("每日热量",{calorieDetails=false}) {
+        Panel { DailyBarChart(caloriePoints,calorieStart,today,"kcal",goal=s.profile.optDouble("calorieGoal"),tag="calorie-detail-chart") }
+        Text("有记录的日期才计入；空白日期表示未记录。今日仍可能变化。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        meals.sortedByDescending { it.date }.forEach { r -> RecordRow(r) { detail(r) } }
+    }; return }
     if(showCalendar) { WorkoutCalendarPage(s.records,{showCalendar=false},edit); return }
     if(workoutDetails) {WorkoutDetails(vm,workouts,{workoutDetails=false},edit,notify);return}
     if(details) { RecordDataDetails(s,s.records.filter { !it.demo && it.date.day()>=start },{details=false},detail); return }
@@ -81,14 +89,16 @@ import kotlin.math.abs
             val complete=workouts.filter { !it.json.isNull("endDate") && it.json.optDouble("endDate") in it.date..at }
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.SpaceBetween) {
                 Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(4.dp)) {Text(format(complete.sumOf { (it.json.optDouble("endDate")-it.date)/60 }),style=MaterialTheme.typography.headlineMedium);Text("分钟",Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                Column(horizontalAlignment=Alignment.End) {Text("${complete.size} 次训练",style=MaterialTheme.typography.titleMedium);Text("${workouts.map {it.date.day()}.distinct().size} 天有记录",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                Column(horizontalAlignment=Alignment.End) {Text("${complete.size} 次训练",style=MaterialTheme.typography.titleMedium);Text("${complete.map {it.date.day()}.distinct().size} 天有记录",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
             }
-            if(workouts.isEmpty()) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp)).background(teal.copy(alpha=.055f)).padding(14.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            if(complete.isEmpty()) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp)).background(teal.copy(alpha=.055f)).padding(14.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                 Text("从一次训练开始",style=MaterialTheme.typography.titleMedium);Text("在今日页开始训练，结束后这里会留下你的节奏。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            workouts.take(3).forEach {RecordRow(it,{detail(it)})}
-            val byPart=workouts.flatMap {it.json.optJSONArray("bodyParts")?.strings().orEmpty().ifEmpty {it.json.optJSONArray("exercises")?.objects()?.map {ex -> ex.optString("bodyPart","未分类")}?.distinct().orEmpty()}}.groupingBy {it}.eachCount()
-            if(byPart.isNotEmpty()) Text(byPart.entries.sortedByDescending {it.value}.joinToString(" · ") {"${it.key} ${it.value} 次"},style=MaterialTheme.typography.bodySmall)
+            if(complete.isNotEmpty()) {
+                val days=complete.groupBy { it.date.day() }.map { (day,entries) -> DayBar(day,entries.sumOf { (it.json.optDouble("endDate")-it.date)/60 },"${entries.size} 次训练") }.sortedBy { it.day }
+                DailyBarChart(days,if(range==0) minOf(days.first().day,today.minusDays(6)) else start,today,"分钟",teal,headline=false,tag="workout-chart",emptyMessage="当天无已完成训练记录")
+            }
+            if(workouts.any { it.json.isNull("endDate") }) Text("有训练进行中，结束后计入统计",style=MaterialTheme.typography.bodySmall,color=teal)
             HorizontalDivider(color=MaterialTheme.colorScheme.onSurface.copy(alpha=.08f))
             Row(Modifier.fillMaxWidth().clickable {showCalendar=true}.padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 AppIcon(Glyph.Calendar,teal,Modifier.size(24.dp))
@@ -109,9 +119,12 @@ import kotlin.math.abs
             if(fat.isEmpty()) Empty("暂无体脂记录","测量后即可查看数值和变化") else {TrendChart(fat,"%",Fat,inspectionControls=false);ChartFooter {measurement="bodyFat"}}
         } }
         item { Panel {
-            Text("近 14 天热量",style=MaterialTheme.typography.titleLarge)
-            val values=(13L downTo 0L).map { day -> val entries=Insights.daily(real.filter { it.type==RecordType.MEAL && RecordQuality.validNutrition(it) },today.minusDays(day)); if(entries.isEmpty()) null else Insights.total(entries,"calories") }
-            BarChart(values,s.profile.optDouble("calorieGoal")); Text("有记录的日期才计入；空白日期表示未记录。今日仍可能变化。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                Text("每日热量",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
+                IconButton(onClick={calorieDetails=true}) { AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.primary,Modifier.size(15.dp),"查看每日热量详情") }
+            }
+            DailyBarChart(caloriePoints,calorieStart,today,"kcal",goal=s.profile.optDouble("calorieGoal"),tag="calorie-chart")
+            Text("有记录的日期才计入；空白日期表示未记录。今日仍可能变化。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             val mealDays=meals.map { it.date.day() }.distinct().size
             Text("当前时段 · $mealDays 天记录饮食 · ${if(mealDays>0) format(Insights.total(meals,"calories")/mealDays) else "—"} kcal / 记录日",style=MaterialTheme.typography.bodyMedium)
         } }
@@ -190,7 +203,7 @@ import kotlin.math.abs
     }
 }
 @Composable private fun FeedbackRow(title:String,value:String) { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) { Text(title,modifier=Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant); Text(value,style=MaterialTheme.typography.bodySmall) } }
-private fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.util.Locale.ROOT,"%.2f",value)
+internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.util.Locale.ROOT,"%.2f",value)
 
 @Composable private fun ChartHeading(title:String,kind:Glyph,color:Color,tag:String,open:()->Unit) {
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -279,23 +292,18 @@ private fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.u
 
 @Composable private fun RecordDataDetails(s:Snapshot,records:List<Record>,dismiss:()->Unit,detail:(Record)->Unit) {
     var search by rememberSaveable { mutableStateOf("") };var filter by rememberSaveable { mutableStateOf<RecordType?>(null) }
+    var bodyOverview by rememberSaveable { mutableStateOf(false) }
+    var selectedDayText by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedDay=selectedDayText?.let(LocalDate::parse)
+    if(bodyOverview) {BodyOverviewPage(s.records,{bodyOverview=false},detail);return}
     SubPage("数据详情",dismiss) {
+        RecordOverview(s,records,selectedDay,{selectedDayText=it?.toString()},{bodyOverview=true})
         Text("连续记录 ${Insights.streak(s.records)} 天 · 当前时段 ${records.map { it.date.day() }.distinct().size} 个记录日",style=MaterialTheme.typography.titleMedium)
         Text("全部记录",style=MaterialTheme.typography.titleLarge)
         OutlinedTextField(search,{search=it},Modifier.fillMaxWidth(),label={Text("搜索名称、备注与部位")},singleLine=true)
         Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) { FilterChip(filter==null,{filter=null},label={Text("全部")}); listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT).forEach { t -> FilterChip(filter==t,{filter=t},label={Text(t.label)}) } }
-        val visible=records.filter { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) && (filter==null || it.type==filter) && (search.isBlank() || it.title.contains(search,true) || it.json.optString("note").contains(search,true) || it.json.optJSONArray("exercises")?.objects()?.any { ex -> ex.optString("name").contains(search,true) || ex.optString("bodyPart").contains(search,true) }==true) }.sortedByDescending { it.date }
+        val visible=(if(selectedDay==null) records else s.records.filter {!it.demo && it.date<=now()}).filter { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) && (filter==null || it.type==filter) && (selectedDay==null || it.date.day()==selectedDay) && (search.isBlank() || it.title.contains(search,true) || it.json.optString("note").contains(search,true) || it.json.optJSONArray("exercises")?.objects()?.any { ex -> ex.optString("name").contains(search,true) || ex.optString("bodyPart").contains(search,true) }==true) }.sortedByDescending { it.date }
         if(visible.isEmpty()) Empty("没有符合条件的记录","调整范围或搜索内容")
         visible.forEach { r -> Panel { RecordRow(r) { detail(r) } } }
-    }
-}
-
-@Composable fun BarChart(values:List<Double?>,goal:Double) {
-    val color=MaterialTheme.colorScheme.primary; val empty=MaterialTheme.colorScheme.surfaceVariant
-    Canvas(Modifier.fillMaxWidth().height(130.dp)) {
-        val max=maxOf(goal,values.filterNotNull().maxOrNull() ?: goal,1.0)*1.15
-        val width=size.width/values.size; val y=(size.height*(1-goal/max)).toFloat()
-        drawLine(Meals,Offset(0f,y),Offset(size.width,y),1.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(8f,8f)))
-        values.forEachIndexed { i,v -> val h=if(v==null) 3.dp.toPx() else (v/max*size.height).toFloat(); drawRoundRect(if(v==null) empty else color,Offset(i*width+width*.2f,size.height-h),androidx.compose.ui.geometry.Size(width*.6f,h),androidx.compose.ui.geometry.CornerRadius(4.dp.toPx())) }
     }
 }

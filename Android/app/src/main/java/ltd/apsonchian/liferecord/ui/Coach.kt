@@ -14,6 +14,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
@@ -54,16 +59,26 @@ import ltd.apsonchian.liferecord.data.*
     val scope=rememberCoroutineScope(); val list=rememberLazyListState()
     val keyboard=LocalSoftwareKeyboardController.current
     val inputFocus=remember {FocusRequester()}
+    val focus=LocalFocusManager.current
+    var inputFocused by remember { mutableStateOf(false) }
     val config by vm.config.collectAsState()
     val drawer=rememberDrawerState(DrawerValue.Closed)
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     val chat=chats.firstOrNull { it.getString("id")==selected }; val messages=chat?.getJSONArray("messages")?.objects().orEmpty()
+    val retryable=CoachGeneration.retryable(messages)?.optString("id")
     val hasProposal=proposal?.conversation==selected
     val bottomIndex=1+messages.size+(if(busy) 1 else 0)+(if(hasProposal) 1 else 0)
     LaunchedEffect(selected,messages.size,busy,proposal) {
         if(messages.isEmpty() && !busy && !hasProposal) return@LaunchedEffect
         withFrameNanos { }
         list.scrollToItem(bottomIndex)
+    }
+    val lifecycleOwner=LocalLifecycleOwner.current
+    val currentBottom by rememberUpdatedState(bottomIndex)
+    DisposableEffect(lifecycleOwner) {
+        val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_RESUME) scope.launch { list.scrollToItem(currentBottom) } }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     ModalNavigationDrawer(drawerState=drawer, drawerContent={
         ModalDrawerSheet(modifier=Modifier.widthIn(max=306.dp).fillMaxHeight(),drawerContainerColor=MaterialTheme.colorScheme.surface) {
@@ -86,7 +101,7 @@ import ltd.apsonchian.liferecord.data.*
                                 }
                             }
                             if(active) Icon(Icons.Default.Check,null,tint=MaterialTheme.colorScheme.primary,modifier=Modifier.size(18.dp))
-                            IconButton(onClick={deleteId=c.getString("id")},enabled=!busy) { Icon(Icons.Default.Delete,"删除对话") }
+                            IconButton(onClick={deleteId=c.getString("id")}) { Icon(Icons.Default.Delete,"删除对话") }
                         }
                     }
                 }
@@ -126,8 +141,8 @@ import ltd.apsonchian.liferecord.data.*
                     if(row.size==1) Spacer(Modifier.weight(1f))
                 }}
             } }
-            itemsIndexed(messages) { _, m -> ChatMessage(vm,m) }
-            if(busy) item { Panel {Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp); Text("正在生成，离开页面也会继续…",Modifier.weight(1f),style=MaterialTheme.typography.bodySmall);TextButton(onClick={vm.stopCoach(selected)}) {Text("停止")} }} }
+            itemsIndexed(messages) { _, m -> ChatMessage(vm,m,!busy && m.optString("id")==retryable) {runCatching {vm.retryCoach(m.getString("id"))}.onFailure {notify(it.message.orEmpty())}} }
+            if(busy) item { Panel {Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp); Text("正在生成，可稍后回来查看…",Modifier.weight(1f),style=MaterialTheme.typography.bodySmall);TextButton(onClick={vm.stopCoach(selected)}) {Text("停止")} }} }
             proposal?.takeIf { it.conversation==selected }?.let { p -> item { Panel {
                 Text("待复核的操作",style=MaterialTheme.typography.titleLarge)
                 p.actions.forEach { a -> Text(actionDescription(a,p.original),style=MaterialTheme.typography.bodyMedium) }
@@ -158,10 +173,13 @@ import ltd.apsonchian.liferecord.data.*
                             AppIcon(Glyph.Plus,MaterialTheme.colorScheme.onSurface,Modifier.size(21.dp),"添加照片")
                         }
                     }
-                    BasicTextField(text,{text=it},Modifier.weight(1f).focusRequester(inputFocus).defaultMinSize(minHeight=44.dp).padding(vertical=10.dp),textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),maxLines=5,
+                    BasicTextField(text,{text=it},Modifier.weight(1f).focusRequester(inputFocus).onFocusChanged { inputFocused=it.isFocused }.defaultMinSize(minHeight=44.dp).padding(vertical=10.dp),textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),maxLines=5,
                         keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={if(sendEnabled) send()}),decorationBox={inner ->
                             Box {if(text.isEmpty()) Text("问问题，或让我替你记录…",style=MaterialTheme.typography.bodyLarge,color=MaterialTheme.colorScheme.onSurfaceVariant);inner()}
                         })
+                    if(inputFocused) IconButton(onClick={focus.clearFocus();keyboard?.hide()},modifier=Modifier.size(44.dp).testTag("coach-hide-keyboard")) {
+                        Icon(Icons.Default.KeyboardArrowDown,"收起键盘",tint=MaterialTheme.colorScheme.primary)
+                    }
                     Box(Modifier.size(44.dp).clip(CircleShape).background(if(sendEnabled || busy) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha=.15f)).clickable(enabled=sendEnabled || busy,onClick={if(busy) vm.stopCoach(selected) else send()}),contentAlignment=Alignment.Center) {
                         if(busy) Icon(Icons.Default.Close,"停止生成",tint=Color.White,modifier=Modifier.size(24.dp)) else AppIcon(Glyph.Up,Color.White,Modifier.size(24.dp),"发送")
                     }
@@ -182,7 +200,7 @@ import ltd.apsonchian.liferecord.data.*
         onConfirm = { vm.deleteConversation(id); deleteId = null }
     ) }
 }
-@Composable private fun ChatMessage(vm:AppViewModel,m:org.json.JSONObject) {
+@Composable private fun ChatMessage(vm:AppViewModel,m:org.json.JSONObject,retryable:Boolean=false,retry:()->Unit={}) {
     val user=m.getString("role")=="user"
     val identity by vm.coachIdentity.collectAsState()
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -210,6 +228,10 @@ import ltd.apsonchian.liferecord.data.*
                     val visibleText=m.optString("displayText",m.getString("content")).let { if(files.isNotEmpty() && !m.has("displayText") && it=="请分析图片") "" else it }
                     if(visibleText.isNotBlank()) androidx.compose.foundation.text.selection.SelectionContainer {
                         if(user) Text(visibleText,color=Color.White,style=MaterialTheme.typography.bodyLarge) else MarkdownText(visibleText)
+                    }
+                    if(user && m.optString("generationState") in listOf("failed","stopped","needsReview")) {
+                        Text(m.optString("generationError").ifBlank { "上次生成未完成" },color=Color.White.copy(alpha=.85f),style=MaterialTheme.typography.bodySmall)
+                        if(retryable) TextButton(onClick=retry,colors=ButtonDefaults.textButtonColors(contentColor=Color.White),modifier=Modifier.testTag("coach-retry")) { Text("重新生成") }
                     }
                 }
             }

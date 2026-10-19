@@ -16,6 +16,7 @@ check() {
 check settings-privacy LifeRecord/Services/AppSettings.swift LifeRecord/Services/AIAuthentication.swift
 check ai-authentication LifeRecord/Services/AIAuthentication.swift
 check body-trend LifeRecord/Services/BodyTrend.swift
+check daily-chart-scale LifeRecord/Services/DailyChartScale.swift
 check favorite-food-storage LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check coach-task-center LifeRecord/Services/CoachBackgroundExecution.swift LifeRecord/Services/CoachTaskCenter.swift
 check coach-failure-description LifeRecord/Services/CoachFailureDescription.swift

@@ -212,7 +212,7 @@ class AppFlowTest {
         compose.onNodeWithTag("tab-0").performClick();compose.onNodeWithTag("tab-2").performClick();compose.onNodeWithText("已选 2 张照片").assertExists()
         compose.onNode(hasSetTextAction()).performTextReplacement("photo persistence QA")
         compose.onNodeWithContentDescription("发送").performClick();hideKeyboard()
-        compose.waitUntil(5000) { org.json.JSONArray(app.store.get("conversations","[]")).objects().firstOrNull()?.getJSONArray("messages")?.length()==2 }
+        compose.waitUntil(5000) { org.json.JSONArray(app.store.get("conversations","[]")).objects().firstOrNull()?.getJSONArray("messages")?.objects()?.firstOrNull()?.optString("generationState")=="failed" }
         val chat=org.json.JSONArray(app.store.get("conversations")).getJSONObject(0)
         val name=chat.getJSONArray("messages").getJSONObject(0).getJSONArray("localPhotoFiles").getString(0)
         val other=chat.getJSONArray("messages").getJSONObject(0).getJSONArray("localPhotoFiles").getString(1)
@@ -438,7 +438,7 @@ class AppFlowTest {
             compose.waitUntil(5000) {!vm.aiBusy.value}
         } finally {release.countDown();app.secrets.save(keyScope,"")}
         val messages=org.json.JSONArray(app.store.get("conversations")).getJSONObject(0).getJSONArray("messages").objects()
-        assertEquals("帮我记录午餐",messages.first().getString("content"));assertTrue(messages.last().toString(),messages.last().getString("content").startsWith("已停止生成"));assertTrue(app.store.load().records.isEmpty())
+        assertEquals("帮我记录午餐",messages.first().getString("content"));assertEquals("stopped",messages.first().getString("generationState"));assertTrue(messages.first().getString("generationError").startsWith("已停止生成"));assertEquals(1,messages.count {it.getString("role")=="user"});assertTrue(app.store.load().records.isEmpty())
         assertTrue(vm.activeCoachTasks.value.isEmpty())
     }
 
