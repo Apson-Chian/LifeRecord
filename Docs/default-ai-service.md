@@ -58,3 +58,7 @@ iOS 工程包 SHA-256：`881d2c8d5d5eb0028e15246d555ff7b56f78ca3617f757a8b35a5a2
 Release 未启用应用调试，v2/v3 签名通过。专用 API 35 模拟器验证旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3 覆盖安装及冷启动，均成功，无崩溃。versionCode 同为 7，签名与旧测试版一致。
 
 默认版 APK SHA-256：`b2d398206bfc3c09d657d0c1314aa24b3b626c88bdcbdfb41dc52dba7c7d36fc`。
+
+## 2026-10-19：beta.4
+
+默认服务版同步普通版的趋势日期修复、训练柱状图、身体总览与记录日历、键盘收起和教练失败恢复。候选包 build 8，原签名遗失，发布暂为草稿；详情见签名说明。[更新、下载与验证](android-release-1.4-beta4.md)。

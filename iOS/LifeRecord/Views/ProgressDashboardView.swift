@@ -247,7 +247,7 @@ struct ProgressDashboardView: View {
 
     private var calorieChart: some View {
         InspectableTrendCard(title: "每日热量", unit: "kcal", tint: .orange,
-            points: dailyNutrition.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.calories, note: "当日餐食总量 · 蛋白质 \(Int($0.protein)) g · 碳水 \(Int($0.carbs)) g") }, goal: settings.calorieGoal, bars: true)
+            points: dailyNutrition.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.calories, note: "当日餐食总量 · 蛋白质 \(Int($0.protein)) g · 碳水 \(Int($0.carbs)) g") }, goal: settings.calorieGoal, bars: true, cutoff: cutoff)
     }
 
     private var macroCard: some View {
@@ -567,7 +567,8 @@ private struct InspectableTrendCard: View {
 
     private var selected: TrendPoint? {
         guard let selection else { return points.last }
-        return points.min { abs($0.date.timeIntervalSince(selection)) < abs($1.date.timeIntervalSince(selection)) }
+        if bars { return points.first { Calendar.current.isDate($0.date, inSameDayAs: selection) } ?? points.last }
+        return points.min { abs(chartScale.center(of: $0.date).timeIntervalSince(selection)) < abs(chartScale.center(of: $1.date).timeIntervalSince(selection)) }
     }
     private var domain: ClosedRange<Double> {
         let values = points.map(\.value)
@@ -575,9 +576,12 @@ private struct InspectableTrendCard: View {
         let pad = max((high - low) * 0.25, unit == "kg" || unit == "%" ? 0.8 : 1)
         return (bars ? 0 : max(0, low - pad))...(bars ? max(high, goal ?? 0) * 1.15 + 1 : high + pad)
     }
-    private var dates: ClosedRange<Date> {
-        let first = points.first?.date ?? .now, last = points.last?.date ?? .now
-        return first.addingTimeInterval(-43200)...last.addingTimeInterval(43200)
+    private var chartScale: DailyChartScale {
+        DailyChartScale(dates: points.map(\.date), start: cutoff, end: bars ? .now : nil)
+    }
+    private var hasSelectedData: Bool {
+        guard bars, let selection else { return true }
+        return points.contains { Calendar.current.isDate($0.date, inSameDayAs: selection) }
     }
 
     private var symbol: String {
@@ -603,7 +607,7 @@ private struct InspectableTrendCard: View {
                 }
                 if let selected {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(selected.value.formatted(.number.precision(.fractionLength(bars ? 0 : 1))))
+                        Text(hasSelectedData ? selected.value.formatted(.number.precision(.fractionLength(bars ? 0 : 1))) : "—")
                             .font(.system(.largeTitle, design: .rounded).weight(.semibold)).monospacedDigit()
                         Text(unit).foregroundStyle(.secondary)
                         Spacer()
@@ -612,26 +616,35 @@ private struct InspectableTrendCard: View {
                     Chart {
                         ForEach(points) { point in
                             if bars {
-                                BarMark(x: .value("日期", point.date, unit: .day), y: .value(unit, point.value))
-                                    .foregroundStyle(tint.opacity(point.id == selected.id ? 1 : 0.4)).cornerRadius(4)
+                                BarMark(xStart: .value("开始", chartScale.barRange(for: point.date).lowerBound), xEnd: .value("结束", chartScale.barRange(for: point.date).upperBound), y: .value(unit, point.value))
+                                    .foregroundStyle(tint.opacity(hasSelectedData && point.id == selected.id ? 1 : 0.4)).cornerRadius(4)
                             } else {
-                                AreaMark(x: .value("日期", point.date), yStart: .value("基线", domain.lowerBound), yEnd: .value(unit, point.value))
+                                AreaMark(x: .value("日期", chartScale.center(of: point.date)), yStart: .value("基线", domain.lowerBound), yEnd: .value(unit, point.value))
                                     .foregroundStyle(LinearGradient(colors: [tint.opacity(0.22), tint.opacity(0.02)], startPoint: .top, endPoint: .bottom))
                                     .interpolationMethod(.linear)
-                                LineMark(x: .value("日期", point.date), y: .value(unit, point.value))
+                                LineMark(x: .value("日期", chartScale.center(of: point.date)), y: .value(unit, point.value))
                                     .foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5)).interpolationMethod(.linear)
-                                PointMark(x: .value("日期", point.date), y: .value(unit, point.value))
+                                PointMark(x: .value("日期", chartScale.center(of: point.date)), y: .value(unit, point.value))
                                     .foregroundStyle(tint).symbolSize(point.id == selected.id ? 75 : 22)
                             }
                         }
                         if let goal, domain.contains(goal) {
                             RuleMark(y: .value("目标", goal)).foregroundStyle(.secondary.opacity(0.45)).lineStyle(StrokeStyle(dash: [4, 4]))
                         }
-                        RuleMark(x: .value("所选日期", selected.date)).foregroundStyle(tint.opacity(0.35)).lineStyle(StrokeStyle(dash: [3, 3]))
+                        RuleMark(x: .value("所选日期", chartScale.center(of: bars ? selection ?? selected.date : selected.date))).foregroundStyle(tint.opacity(0.35)).lineStyle(StrokeStyle(dash: [3, 3]))
                     }
-                    .chartXScale(domain: dates)
+                    .chartXScale(domain: chartScale.domain)
                     .chartYScale(domain: domain)
-                    .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisGridLine(); AxisTick(); AxisValueLabel(format: .dateTime.month().day()) } }
+                    .chartXAxis {
+                        AxisMarks(values: chartScale.ticks) { value in
+                            AxisGridLine(); AxisTick()
+                            AxisValueLabel {
+                                if let date = value.as(Date.self) {
+                                    Text(date.formatted(chartScale.crossesYear ? .dateTime.year(.twoDigits).month().day() : .dateTime.month().day()))
+                                }
+                            }
+                        }
+                    }
                     .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) }
                     .chartXSelection(value: $selection)
                     .chartOverlay { proxy in
@@ -640,6 +653,7 @@ private struct InspectableTrendCard: View {
                                 .onTapGesture { location in
                                     guard let frame = proxy.plotFrame else { return }
                                     let x = location.x - geometry[frame].origin.x
+                                    guard x >= 0, x <= geometry[frame].width else { return }
                                     selection = proxy.value(atX: x, as: Date.self)
                                 }
                         }
@@ -648,8 +662,9 @@ private struct InspectableTrendCard: View {
                     .accessibilityLabel("\(title)，横轴日期，纵轴\(unit)。点击查看数据，或进入数据详情。")
                     if selection != nil {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(selected.date.formatted(date: .abbreviated, time: .omitted)).font(.subheadline.weight(.medium))
-                            if !selected.note.isEmpty { Text(selected.note).font(.subheadline).foregroundStyle(.secondary) }
+                            Text((bars ? selection ?? selected.date : selected.date).formatted(date: .abbreviated, time: .omitted)).font(.subheadline.weight(.medium))
+                            if !hasSelectedData { Text("当天未记录餐食，不按零摄入计算。").font(.subheadline).foregroundStyle(.secondary) }
+                            else if !selected.note.isEmpty { Text(selected.note).font(.subheadline).foregroundStyle(.secondary) }
                             if let goal { Text("目标 \(goal.formatted()) \(unit)").font(.caption).foregroundStyle(.secondary) }
                             Button("收起详情") { selection = nil }.font(.caption)
                         }

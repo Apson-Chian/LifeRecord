@@ -10,8 +10,8 @@ android {
         applicationId = "ltd.apsonchian.liferecord"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.4.0-default-beta.3"
+        versionCode = 8
+        versionName = "1.4.0-default-beta.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }

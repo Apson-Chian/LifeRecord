@@ -16,7 +16,7 @@ struct WorkoutTrendCard: View {
     @State private var showsPartAssistant = false
     @State private var assistantFocusedPart: String?
     private let tint = Color.teal
-    private var completed: [WorkoutEntry] { workouts.filter { $0.endDate != nil && $0.date <= .now } }
+    private var completed: [WorkoutEntry] { workouts.filter { entry in entry.endDate.map { $0 >= entry.date && $0 <= .now } ?? false } }
     private var days: [Day] {
         Dictionary(grouping: completed) { Calendar.current.startOfDay(for: $0.date) }
             .map { Day(date: $0.key, minutes: $0.value.reduce(0) { $0 + $1.minutes }, count: $0.value.count) }
@@ -27,11 +27,11 @@ struct WorkoutTrendCard: View {
         guard let selectedDate else { return nil }
         return days.first { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
     }
-    private var domain: ClosedRange<Date> {
+    private var chartScale: DailyChartScale {
         let today = Calendar.current.startOfDay(for: .now)
         let minimum = Calendar.current.date(byAdding: .day, value: -6, to: today)!
         let first = min(cutoff ?? days.first?.date ?? minimum, minimum)
-        return first.addingTimeInterval(-43200)...today.addingTimeInterval(43200)
+        return DailyChartScale(dates: days.map(\.date), start: first, end: today)
     }
     var body: some View {
         GlassCard(tint: tint) {
@@ -58,18 +58,26 @@ struct WorkoutTrendCard: View {
                 }
                 if !days.isEmpty {
                     Chart(days) { day in
-                        BarMark(x: .value("日期", day.date, unit: .day), y: .value("分钟", day.minutes), width: .fixed(8))
+                        BarMark(x: .value("日期", chartScale.center(of: day.date)), y: .value("分钟", day.minutes), width: .fixed(8))
                             .foregroundStyle(LinearGradient(colors: [tint, tint.opacity(0.45)], startPoint: .top, endPoint: .bottom))
                             .cornerRadius(4)
                             .opacity(selectedDate == nil || selected?.id == day.id ? 1 : 0.3)
                         if day.minutes < 1 {
-                            PointMark(x: .value("日期", day.date), y: .value("分钟", day.minutes))
+                            PointMark(x: .value("日期", chartScale.center(of: day.date)), y: .value("分钟", day.minutes))
                                 .foregroundStyle(tint).symbolSize(18)
                         }
                     }
-                    .chartXScale(domain: domain)
+                    .chartXScale(domain: chartScale.domain)
                     .chartYScale(domain: 0...max(30, (days.map(\.minutes).max() ?? 0) * 1.2))
-                    .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisValueLabel(format: .dateTime.month().day()) } }
+                    .chartXAxis {
+                        AxisMarks(values: chartScale.ticks) { value in
+                            AxisValueLabel {
+                                if let date = value.as(Date.self) {
+                                    Text(date.formatted(chartScale.crossesYear ? .dateTime.year(.twoDigits).month().day() : .dateTime.month().day()))
+                                }
+                            }
+                        }
+                    }
                     .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 4])).foregroundStyle(.secondary.opacity(0.2)); AxisValueLabel() } }
                     .chartXSelection(value: $selectedDate)
                     .frame(height: 140)
@@ -159,7 +167,7 @@ struct WorkoutTrendCard: View {
     }
 
     private var bodyPartSummaries: some View {
-        let finished = workouts.filter { $0.endDate != nil && $0.date <= .now }
+        let finished = workouts.filter { entry in entry.endDate.map { $0 >= entry.date && $0 <= .now } ?? false }
         let parts = Array(Set(finished.flatMap(\.bodyParts))).sorted()
         let unclassified = workouts.filter { $0.bodyParts.isEmpty && (!$0.note.isEmpty || !$0.exercises.isEmpty) }
         return Group {

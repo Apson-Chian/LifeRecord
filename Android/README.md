@@ -4,6 +4,8 @@
 
 # LifeRecord Android
 
+Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的图表、数据详情和教练恢复体验。[更新与验证](../Docs/android-release-1.4-beta4.md)。发布签名核对中，安装包暂保留草稿。
+
 原生 Kotlin + Jetpack Compose 安卓客户端，最低 Android 8.0（API 26）。工程与原有 iOS、Web、后端并列，不包含 LifeTrack App Group、跳转或联动逻辑。
 
 返回[仓库总览](../README.md)，或查看独立的 [iOS 工程](../iOS/README.md)。以下 Gradle 命令在 `Android/` 目录执行。
