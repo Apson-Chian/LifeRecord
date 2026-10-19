@@ -251,6 +251,9 @@ struct AIClient {
         temperatureOverride: Double? = nil,
         compatibilityProbe: Bool = false
     ) async throws -> String {
+        if settings.provider == .builtin {
+            return try await defaultComplete(system:system, user:user, images:images, maxTokens:maxTokensOverride ?? settings.maxTokens)
+        }
         let override = apiKeyOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let storedKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider, endpoint: settings.endpoint) : override
         guard !storedKey.isEmpty else { throw AIClientError.missingKey }
@@ -332,6 +335,42 @@ struct AIClient {
             throw AIClientError.invalidResponse
         }
         return content
+    }
+
+    @MainActor
+    private func defaultComplete(system:String, user:String, images:[Data], maxTokens:Int) async throws -> String {
+        let key=KeychainStore.loadSyncKey().trimmingCharacters(in:.whitespacesAndNewlines)
+        guard !key.isEmpty else { throw AIClientError.server("请先连接你的独立账号，再使用默认 AI 服务") }
+        let base=settings.syncBaseURL.trimmingCharacters(in:.whitespacesAndNewlines)
+        try SyncCoordinator.bindIdentity(base:base, key:key)
+        guard images.count <= settings.maxPhotos else { throw AIClientError.tooManyImages(settings.maxPhotos) }
+        if !images.isEmpty && !settings.supportsVision { throw AIClientError.visionNotEnabled }
+        guard let url=URL(string:base.trimmingCharacters(in:CharacterSet(charactersIn:"/"))+"/ai/chat"), url.scheme=="https",url.host != nil,url.user==nil,url.password==nil,url.query==nil,url.fragment==nil else { throw AIClientError.invalidEndpoint }
+        var content:Any=user
+        if !images.isEmpty {
+            var parts:[[String:Any]]=[["type":"text","text":user]]
+            for original in images {
+                let data=Self.jpegImageData(forSending:original)
+                parts.append(["type":"image_url","image_url":["url":"data:image/jpeg;base64,"+data.base64EncodedString()]])
+            }
+            content=parts
+        }
+        let body:[String:Any]=["maxTokens":min(max(maxTokens,256),65536),"messages":[
+            ["role":"system","content":system+(settings.customInstructions.isEmpty ? "" : "\n用户自定义指令："+settings.customInstructions)],
+            ["role":"user","content":content]
+        ]]
+        var request=URLRequest(url:url);request.httpMethod="POST";request.timeoutInterval=90
+        request.setValue("application/json",forHTTPHeaderField:"Content-Type");request.setValue("Bearer "+key,forHTTPHeaderField:"Authorization")
+        request.httpBody=try JSONSerialization.data(withJSONObject:body)
+        let (data,response)=try await PrivateHTTPSession.aiSession.data(for:request)
+        guard KeychainStore.loadSyncKey()==key && settings.syncBaseURL.trimmingCharacters(in:.whitespacesAndNewlines)==base else { throw CancellationError() }
+        guard let http=response as? HTTPURLResponse else { throw AIClientError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let payload=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any]
+            throw AIClientError.server(payload?["error"] as? String ?? "默认 AI 服务暂时不可用")
+        }
+        guard let text=Self.responseText(from:data), !text.isEmpty else { throw AIClientError.invalidResponse }
+        return text
     }
 
     private func cleanedJSON(_ value: String) -> String {

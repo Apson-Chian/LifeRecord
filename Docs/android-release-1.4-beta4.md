@@ -1,6 +1,6 @@
 # Android 1.4.0-beta.4：趋势日期修复与当前 iOS 体验对齐
 
-2026-10-19。普通版来自 `main`，默认 AI 版来自 `default-ai-service`。两种 APK 的 versionCode 均为 8。签名发布状态见下文。
+beta.4 发布时，普通版来自 `main`，默认 AI 版来自当时的独立测试分支。默认服务现已并入 `main`。两种 APK 的 versionCode 均为 8。签名发布状态见下文。
 
 ## 本次更新
 

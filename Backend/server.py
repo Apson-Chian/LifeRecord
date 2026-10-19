@@ -28,6 +28,7 @@ from contextvars import ContextVar
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import database
 import ai_transport
+import default_ai
 
 
 HOST = os.environ.get("LIFERECORD_HOST", "127.0.0.1")
@@ -436,7 +437,8 @@ def ai_plan(payload: dict) -> dict:
     instruction = payload.get("instruction", "")
     if not isinstance(instruction, str) or not 1 <= len(instruction.strip()) <= 8000:
         raise ValueError("请输入修改要求（最多 8000 字）")
-    endpoint, model, headers = ai_configuration(payload)
+    if payload.get("provider") != "default": ai_configuration(payload)
+    else: default_ai.configuration()
     snapshot = current_snapshot()
     context = {k: v for k, v in snapshot.items() if k not in ("deletions", "serverTime")}
     # Explicitly reject oversized context instead of silently hiding older records.
@@ -454,10 +456,8 @@ workout: date 为开始时间，endDate 为结束时间或 null，note 为备注
 settings 只能 update，字段为 displayName,fitnessGoal(增肌/减脂/维持),height,baselineWeight,targetWeight,weeklyWeightTarget,calorieGoal,proteinGoal,carbsGoal,fatGoal。
 一次最多100项。合理估算必须说明依据。不要擅自改用户未要求的数据。"""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": json.dumps({"currentTime": time.time(), "timezone": payload.get("timezone", "Asia/Shanghai"), "records": context, "instruction": instruction}, ensure_ascii=False)}]
-    body = ai_transport.generation_body(payload, model, messages)
     try:
-        raw = ai_transport.request_json(endpoint, body, headers)
-        text = raw["choices"][0]["message"]["content"].strip()
+        text = ai_response(payload, messages)
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         result = json.loads(text)
@@ -470,6 +470,14 @@ settings 只能 update，字段为 displayName,fitnessGoal(增肌/减脂/维持)
         return {"answer": result["answer"], "actions": preview}
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
         raise ValueError("AI 返回格式无效，请重试或换用其他模型") from error
+
+
+def ai_response(payload, messages):
+    if payload.get("provider") == "default":
+        return default_ai.complete(connect, _db_lock, _user.get(), payload, messages)
+    endpoint, model, headers = ai_configuration(payload)
+    raw = ai_transport.request_json(endpoint, ai_transport.generation_body(payload, model, messages), headers)
+    return raw["choices"][0]["message"]["content"].strip()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -566,21 +574,28 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, json.JSONDecodeError) as error:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
-        if path in ("/liferecord-api/admin", "/liferecord-api/ai/plan", "/liferecord-api/ai/config/check"):
+        if path in ("/liferecord-api/admin", "/liferecord-api/ai/plan", "/liferecord-api/ai/config/check", "/liferecord-api/ai/chat"):
             if not self._authorized():
                 self._json(HTTPStatus.UNAUTHORIZED, {"error": "同步密钥无效"})
                 return
             try:
                 payload = self._read_json()
                 if path.endswith("/ai/config/check"):
-                    endpoint, _, _ = ai_configuration(payload)
+                    if payload.get("provider") == "default":
+                        endpoint, _, _, _, _ = default_ai.configuration()
+                    else:
+                        endpoint, _, _ = ai_configuration(payload)
                     ai_transport.endpoint_details(endpoint)
                     result = {"ok": True, "message": "地址与参数检查通过；未调用计费 AI 接口，密钥与模型可用性需实际生成验证"}
+                elif path.endswith("/ai/chat"):
+                    # This endpoint is only for the server-backed default service.
+                    text = ai_response({**payload, "provider":"default"}, payload.get("messages"))
+                    result = {"choices":[{"message":{"role":"assistant","content":text}}]}
                 else:
                     result = ai_plan(payload) if path.endswith("/ai/plan") else apply_admin_actions(payload.get("actions"))
                 self._json(HTTPStatus.OK, result)
             except (ValueError, json.JSONDecodeError) as error:
-                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                self._json(error.status if isinstance(error,default_ai.ServiceError) else HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/liferecord-api/images":
             if not self._authorized():

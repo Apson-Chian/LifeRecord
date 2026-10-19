@@ -11,6 +11,28 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 
 class AuthenticationTest {
+    @Test fun defaultServiceUsesAccountCredentialAndSendsNoUpstreamConfiguration() {
+        var requested:Request?=null
+        val client=OkHttpClient.Builder().addInterceptor { chain ->
+            requested=chain.request()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body("{\"choices\":[{\"message\":{\"content\":\"OK\"}}]}".toResponseBody("application/json".toMediaType())).build()
+        }.build()
+        val config=providerConfig("默认 AI 服务").put("model","client-override").put("endpoint","https://override.test/chat").put("apiKey","fixture-forbidden").put("extraBody","{\"secret\":\"fixture-forbidden\"}")
+        assertEquals("OK",Network(client).complete(config,"fixture-account-key","test",listOf(JSONObject().put("role","user").put("content","hello"))))
+        assertEquals("https://apsonchian.ltd/liferecord-api/ai/chat",requested!!.url.toString())
+        assertEquals("Bearer fixture-account-key",requested!!.header("Authorization"))
+        val buffer=okio.Buffer();requested!!.body!!.writeTo(buffer);val body=JSONObject(buffer.readUtf8())
+        assertFalse(body.has("model"));assertFalse(body.has("apiKey"));assertFalse(body.has("endpoint"));assertTrue(body.has("messages"));assertEquals(setOf("messages","maxTokens"),body.keys().asSequence().toSet());assertFalse(body.toString().contains("fixture-forbidden"))
+    }
+    @Test fun defaultServiceRegistersCancellationBeforeSendingAnything() {
+        var resolved=false
+        val client=OkHttpClient.Builder().dns(object:Dns { override fun lookup(hostname:String):List<java.net.InetAddress> { resolved=true;error("Cancelled request must never resolve DNS") } }).build()
+        var call:Call?=null
+        assertThrows(java.io.IOException::class.java) {
+            Network(client).complete(providerConfig("默认 AI 服务"),"fixture-account-key","test",emptyList(),onCall={call=it;it.cancel()})
+        }
+        assertTrue(call!!.isCanceled());assertFalse(resolved)
+    }
     @Test fun hiddenPresetMigratesToEditableCustomConfiguration() {
         assertFalse(ltd.apsonchian.liferecord.service.providers.contains("Dots"))
         val old=providerConfig("Dots")

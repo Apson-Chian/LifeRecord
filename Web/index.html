@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f7f9">
   <meta name="description" content="LifeRecord 与 Android、iOS 双向同步的饮食、营养与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
-  <link rel="stylesheet" href="styles.css?v=20261013-api3">
+  <link rel="stylesheet" href="styles.css?v=20261013-default1">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
@@ -117,8 +117,9 @@
   <dialog id="settingsDialog" class="modal settings-modal" aria-labelledby="settingsTitle">
     <div class="modal-sheet">
       <div class="modal-top"><h2 id="settingsTitle">设置与账号</h2><button type="button" class="icon-button" data-close="settingsDialog" aria-label="关闭设置">×</button></div>
-      <section class="settings-section"><h3>API 设置</h3><p class="upload-hint">兼容 Chat Completions。配置保存在本浏览器，密钥仅在当前页面内存中使用。</p>
-        <div class="form-grid"><label>服务商<select id="aiProvider"><option value="deepseek">DeepSeek</option><option value="glm">智谱 GLM</option><option value="custom">自定义兼容接口</option></select></label><label>模型<input id="aiModel" placeholder="填写模型名称" maxlength="200"></label></div>
+      <section class="settings-section"><h3>AI 服务</h3><p id="aiCustomIntro" class="upload-hint">兼容 Chat Completions。配置保存在本浏览器，密钥仅在当前页面内存中使用。</p>
+        <p id="aiDefaultNotice" hidden>使用默认 AI 服务无需填写 API Key。请求和相关健康记录由云端处理；使用你的独立账号额度，也可切换到自己的接口。</p>
+        <div class="form-grid"><label>服务商<select id="aiProvider"><option value="default">默认 AI 服务</option><option value="deepseek">DeepSeek</option><option value="glm">智谱 GLM</option><option value="custom">自定义兼容接口</option></select></label><label>模型<input id="aiModel" placeholder="填写模型名称" maxlength="200"></label></div>
         <div class="form-grid"><label>已保存的接口<select id="aiSavedProfile"><option value="">选择配置</option></select></label><label>配置名称<input id="aiProfileName" maxlength="60" placeholder="例如：我的视觉接口"></label></div>
         <div class="actions"><button type="button" id="aiSaveProfile">另存为新配置</button><button type="button" id="aiUpdateProfile">更新所选配置</button><button type="button" id="aiDeleteProfile">删除所选配置</button></div>
         <label id="aiEndpointLabel">完整 API 地址<input id="aiEndpoint" type="url" placeholder="https://api.example.com/v1/chat/completions" autocomplete="off"></label>
@@ -126,7 +127,7 @@
         <label>API Key<input id="aiKey" type="password" autocomplete="off" placeholder="测试者填写自己的密钥"></label>
         <div class="form-grid"><label>最大输出 Token<input id="aiMaxTokens" type="number" min="256" max="65536" step="1" value="6000"></label><label>Token 参数<select id="aiTokenField"><option value="max_tokens">max_tokens</option><option value="max_completion_tokens">max_completion_tokens</option></select></label><label>Temperature<input id="aiTemperature" type="number" min="0" max="2" step="0.1" value="0.1"></label></div>
         <label class="checkbox-label"><input id="aiSendTemperature" type="checkbox" checked>发送 Temperature</label><label class="checkbox-label"><input id="aiJSONMode" type="checkbox">要求 JSON 格式（服务商须支持）</label>
-        <label>额外请求参数 JSON<textarea id="aiExtraParams" rows="3" maxlength="16000" placeholder='例如 {"top_p":0.9}'>{}</textarea></label><p class="upload-hint">不要在额外参数中填写密钥。自定义地址仅支持公网 HTTPS 443 端口，不跟随重定向。AI 将使用当前账号的同步记录生成修改预览。</p>
+        <label>额外请求参数 JSON<textarea id="aiExtraParams" rows="3" maxlength="16000" placeholder='例如 {"top_p":0.9}'>{}</textarea></label><p id="aiCustomHint" class="upload-hint">不要在额外参数中填写密钥。自定义地址仅支持公网 HTTPS 443 端口，不跟随重定向。AI 将使用当前账号的同步记录生成修改预览。</p>
         <button id="aiCheckConfig" class="secondary-button" type="button">检查地址与参数</button><p id="aiConfigStatus" role="status"></p>
       </section>
       <section class="settings-section"><h3>外观</h3><label>主题<select id="webTheme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></section>
@@ -221,9 +222,9 @@
     </div>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20261013-api3"></script>
-  <script src="admin.js?v=20261013-api3"></script>
-  <script src="settings.js?v=20261013-api3"></script>
-  <script src="workouts.js?v=20261013-api3"></script>
+  <script src="app.js?v=20261013-default1"></script>
+  <script src="admin.js?v=20261013-default1"></script>
+  <script src="settings.js?v=20261013-default1"></script>
+  <script src="workouts.js?v=20261013-default1"></script>
 </body>
 </html>

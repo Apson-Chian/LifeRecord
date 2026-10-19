@@ -36,6 +36,7 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
         return execute("${baseURL().trimEnd('/')}/images/$id", key, null)
     }
     fun complete(config: JSONObject, key: String, system: String, messages: List<JSONObject>, images: List<ByteArray> = emptyList(), json: Boolean = false, onCall: ((Call) -> Unit)? = null): String {
+        if(config.optString("provider") == "默认 AI 服务") return defaultComplete(config,key,system,messages,images,onCall)
         require(config.optString("model").isNotBlank()) { "请填写模型名" }
         require(images.isEmpty() || config.optBoolean("vision")) { "当前接口未启用图片能力" }
         require(images.size <= config.optInt("maxPhotos", 6)) { "图片超出设置中的数量限制" }
@@ -63,13 +64,30 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
         val bytes = execute(endpoint, credential.key, body, credential.header, credential.bearer, AIAuthentication.officialDeepSeek(endpoint), onCall)
         val result = JSONObject(bytes.toString(Charsets.UTF_8)); return result.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.takeIf { it.isNotBlank() } ?: error("没有收到模型最终回复，请检查模型与生成参数")
     }
+    private fun defaultComplete(config:JSONObject,key:String,system:String,messages:List<JSONObject>,images:List<ByteArray>,onCall:((Call)->Unit)?):String {
+        require(images.size <= config.optInt("maxPhotos",6)) { "图片超出设置中的数量限制" }
+        require(images.isEmpty() || config.optBoolean("vision",true)) { "当前设置未启用图片能力" }
+        val list=JSONArray().put(JSONObject().put("role","system").put("content",system+"\n"+config.optString("instructions")))
+        messages.takeLast(14).forEachIndexed { index,original ->
+            val m=JSONObject().put("role",original.getString("role")).put("content",original.getString("content"))
+            if(index==messages.takeLast(14).lastIndex && images.isNotEmpty()) {
+                val parts=JSONArray().put(JSONObject().put("type","text").put("text",m.getString("content")))
+                images.forEach { bytes -> parts.put(JSONObject().put("type","image_url").put("image_url",JSONObject().put("url","data:image/jpeg;base64,"+Base64.encodeToString(bytes,Base64.NO_WRAP)))) }
+                m.put("content",parts)
+            }
+            list.put(m)
+        }
+        val body=JSONObject().put("messages",list).put("maxTokens",config.optInt("maxTokens",4096))
+        val bytes=execute("${baseURL().trimEnd('/')}/ai/chat",key,body,onCall=onCall)
+        return JSONObject(bytes.toString(Charsets.UTF_8)).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+    }
     companion object { const val BASE = "https://apsonchian.ltd/liferecord-api" }
 }
-val providers = listOf("DeepSeek", "智谱 GLM", "自定义")
+val providers = listOf("默认 AI 服务", "DeepSeek", "智谱 GLM", "自定义")
 fun providerConfig(provider: String) = JSONObject().apply {
     put("provider", provider); put("auth", if(provider == "Dots") "api-key" else "Bearer"); put("header", "Authorization")
-    put("endpoint", when(provider) { "DeepSeek" -> "https://api.deepseek.com/chat/completions"; "Dots" -> "https://note3-prev-api.askdiandian.com/v1/chat/completions"; "智谱 GLM" -> "https://open.bigmodel.cn/api/paas/v4/chat/completions"; else -> "https://example.com/v1/chat/completions" })
-    put("model", when(provider) { "DeepSeek" -> "deepseek-flash"; "Dots" -> "dots3-note-prev"; "智谱 GLM" -> "glm-4.6v-flash"; else -> "" })
+    put("endpoint", when(provider) { "DeepSeek" -> "https://api.deepseek.com/chat/completions"; "智谱 GLM" -> "https://open.bigmodel.cn/api/paas/v4/chat/completions"; else -> "https://example.com/v1/chat/completions" })
+    put("model", when(provider) { "DeepSeek" -> "deepseek-flash"; "智谱 GLM" -> "glm-4.6v-flash"; else -> "" })
     put("vision", true); put("maxPhotos", 6); put("maxTokens", 4096); put("temperature", 0.2); put("instructions", ""); put("canWrite", false); put("sendTemperature", true); put("jsonMode", true); put("tokenParameter", "max_tokens"); put("extraBody", "{}")
 }
 fun migrateAIConfig(config: JSONObject): JSONObject = config.copy().apply {

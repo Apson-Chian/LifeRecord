@@ -126,6 +126,19 @@ const assert = require('assert/strict');
  assert.match(await page.locator('#adminPageLabel').innerText(),/2 \/ 3/);
  assert.equal(syncWrites,0,'Web refresh must not upload a full snapshot');
  await page.locator('.topbar [data-open-settings]').click();
+ assert.equal(await page.locator('#aiProvider').inputValue(),'default');
+ assert.equal(await page.locator('#aiDefaultNotice').isVisible(),true);
+ assert.equal(await page.locator('#aiKey').isVisible(),false);
+ assert.deepEqual(await page.evaluate(()=>readAPIConfig()),{provider:'default',maxTokens:6000});
+ for(const width of [320,390,768,1440]) {
+  await page.setViewportSize({width,height:844});
+  assert(await page.locator('#aiDefaultNotice').isVisible());
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ }
+ await page.setViewportSize({width:390,height:844});
+ const preview=path.join(__dirname,'../dist/default-ai-2026-10-13');fs.mkdirSync(preview,{recursive:true});
+ await page.screenshot({path:path.join(preview,'settings-mobile.png')});
+ await page.setViewportSize({width:1440,height:1100});
  await page.locator('#aiProvider').selectOption('custom');
  await page.locator('#aiEndpoint').fill('https://api.example.com/v1/chat/completions');
  await page.locator('#aiModel').fill('custom-model');
@@ -140,7 +153,7 @@ const assert = require('assert/strict');
  await page.locator('#aiProvider').selectOption('custom');
  assert.equal(await page.locator('#aiModel').inputValue(),'custom-model');
  assert.equal(await page.locator('#aiMaxTokens').inputValue(),'12000');
- assert.deepEqual(await page.locator('#aiProvider option').evaluateAll(items=>items.map(x=>x.value)),['deepseek','glm','custom']);
+ assert.deepEqual(await page.locator('#aiProvider option').evaluateAll(items=>items.map(x=>x.value)),['default','deepseek','glm','custom']);
  await page.locator('#aiProfileName').fill('视觉接口 A');await page.locator('#aiSaveProfile').click();
  const profileA=await page.locator('#aiSavedProfile').inputValue();
  await page.locator('#aiEndpoint').fill('https://third.example.com/v1/chat/completions');await page.locator('#aiEndpoint').dispatchEvent('change');

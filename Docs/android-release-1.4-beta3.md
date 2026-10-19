@@ -11,13 +11,13 @@
 
 全局改名在同一 SQLite 事务更新可选目录、全部历史训练的对应标签、动作里的部位及动作库；时间、备注和每组数值保持原样。移除仅影响以后选择，不删除历史。AI 复核只接受清单内准确 ID、无重复且合法的标签；整批应用前检查记录是否已变化、删除或离开当前分组，任一不符则整批不写入。分类分批获取结果，再校验全部结果并一次提交，避免部分成功后混合写入。
 
-普通版：[Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3)。默认服务版：[Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.3)，源码位于 `default-ai-service`。两种安装包沿用原测试签名，versionCode 同为 7，支持覆盖旧版和相互覆盖。默认服务版使用服务器代理，上游 API Key 仅存服务器环境配置，不放入 APK、源码或客户端响应；使用各人的同步账号密钥鉴权。已有安装保留原接口选择，可在“接口与模型”切换默认 AI 服务。
+普通版：[Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3)。默认服务版：[Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.3)，默认服务源码现已并入 `main`。两种安装包沿用原测试签名，versionCode 同为 7，支持覆盖旧版和相互覆盖。默认服务版使用服务器代理，上游 API Key 仅存服务器环境配置，不放入 APK、源码或客户端响应；使用各人的同步账号密钥鉴权。已有安装保留原接口选择，可在“接口与模型”切换默认 AI 服务。
 
 ## 验证与截图
 
 普通版 Debug / Release 构建成功，48 项 JVM 与 26 项 API 35 设备测试全部通过，无失败或跳过。Debug / Release Lint 均为 0 错误、16 警告。新增回归覆盖全局改名保留逐组数据、删除仅影响可选目录、AI 预览确认写入、过期预览整批拦截、35 条历史修复及目录和记录事务回滚。已检查以下三张真实运行截图，共享同步协议与编辑回归通过。专用模拟器验证旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3 的覆盖安装与冷启动，均成功，无崩溃。
 
-普通版 APK SHA-256：`366fd09d76e3bf7567f9aede466ee2274b9ba72f7459813a90af988cb6096414`。v2/v3 签名验证通过，Release 未启用应用调试；沿用原证书以兼容覆盖安装。默认服务版单独构建验证见 [默认服务说明](https://github.com/Apson-Chian/LifeRecord/blob/default-ai-service/Docs/default-ai-service.md)。
+普通版 APK SHA-256：`366fd09d76e3bf7567f9aede466ee2274b9ba72f7459813a90af988cb6096414`。v2/v3 签名验证通过，Release 未启用应用调试；沿用原证书以兼容覆盖安装。默认服务版单独构建验证见 [默认服务说明](https://github.com/Apson-Chian/LifeRecord/blob/main/Docs/default-ai-service.md)。
 
 截图：[按部位](../Android/screenshots/workout-parts.png) · [部位管理](../Android/screenshots/workout-part-manager.png) · [AI 修改预览](../Android/screenshots/workout-part-preview.png)。使用合成记录和模拟 AI，不含用户真实健康数据。
 

@@ -73,4 +73,13 @@ Debug 与 Release 构建成功；两者 Lint 均为 0 错误、16 警告。共�
 
 普通版 `dist/LifeRecord-Android-1.4.0-beta.3.apk`：versionCode 7，Release 非调试，v2/v3 签名通过并沿用原证书。SHA-256：`366fd09d76e3bf7567f9aede466ee2274b9ba72f7459813a90af988cb6096414`。完整变更及下载见 [发布记录](../Docs/android-release-1.4-beta3.md)。
 
-普通版和默认版覆盖安装及冷启动已在专用 API 35 模拟器验证：旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3，均成功，无崩溃。共享 JSON 协议及同步编辑回归通过。默认版已单独完成 50 项 JVM、26 项设备检查及服务器代理脱敏测试，源码及结果见 [默认服务分支](https://github.com/Apson-Chian/LifeRecord/blob/default-ai-service/Docs/default-ai-service.md)。
+## 默认 AI 服务分支 1.4.0-default-beta.3
+
+2026-10-16。默认版 Debug / Release 构建成功，50 项 JVM 和 26 项 API 35 设备测试全部通过，无失败、错误或跳过；两者 Lint 均为 0 错误、16 警告。新增代理回归检查仅使用账号鉴权、请求字段白名单以及取消后不进入 DNS/网络。`Tests/default-ai.py`、安卓/后端协议和同步编辑检查通过，15 个 Swift 回归程序与 iOS 模拟器构建通过。测试使用模拟上游与合成记录。
+
+Release 未启用应用调试，v2/v3 签名通过。专用 API 35 模拟器验证旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3 覆盖安装及冷启动，均成功，无崩溃。versionCode 同为 7，签名与旧测试版一致。
+
+默认版 APK SHA-256：`b2d398206bfc3c09d657d0c1314aa24b3b626c88bdcbdfb41dc52dba7c7d36fc`。
+
+源码与安装包分开发行，使用服务器已提供的默认 AI 代理，没有读取服务器实际配置、调用计费 AI 或重新部署服务器。详见 [默认服务验证](../Docs/default-ai-service.md)。
+普通版和默认版覆盖安装及冷启动已在专用 API 35 模拟器验证：旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3，均成功，无崩溃。共享 JSON 协议及同步编辑回归通过。默认版已单独完成 50 项 JVM、26 项设备检查及服务器代理脱敏测试，源码及结果见 [默认服务说明](https://github.com/Apson-Chian/LifeRecord/blob/main/Docs/default-ai-service.md)。

@@ -5,16 +5,17 @@ let apiPresets = {};
 try { apiPresets = JSON.parse(localStorage.getItem(API_PREFS_KEY) || '{}'); if (!apiPresets || Array.isArray(apiPresets) || typeof apiPresets !== 'object') apiPresets={}; } catch (_) {}
 // Convert an old hidden preset to an editable custom configuration.
 if (apiPresets.selected==='dots') {
-  apiPresets.custom={...apiDefaults,...apiPresets.dots,provider:'custom',endpoint:'https://note3-prev-api.askdiandian.com/v1/chat/completions',authMode:'api-key',jsonMode:false,extraParams:{chat_template_kwargs:{enable_thinking:false},...(apiPresets.dots?.extraParams||{})}};
-  apiPresets.selected='custom';delete apiPresets.dots;
+  apiPresets.custom={...apiDefaults,...apiPresets.dots,provider:'custom',endpoint:apiPresets.dots?.endpoint||'',authMode:'api-key',jsonMode:false,extraParams:{chat_template_kwargs:{enable_thinking:false},...(apiPresets.dots?.extraParams||{})}};
+  apiPresets.selected=apiPresets.custom.endpoint?'custom':'default';delete apiPresets.dots;
 }
-let activeProvider = ['deepseek','glm','custom'].includes(apiPresets.selected) ? apiPresets.selected : 'deepseek';
+let activeProvider = ['default','deepseek','glm','custom'].includes(apiPresets.selected) ? apiPresets.selected : 'default';
 let savedAPIProfiles = Array.isArray(apiPresets.saved) ? apiPresets.saved.filter(p=>p && typeof p.id==='string' && typeof p.name==='string' && p.config && typeof p.config==='object') : [];
 let apiSecrets = new Map();
 let previousAPIIdentity = '';
 const configInputs = ['aiModel','aiEndpoint','aiAuthMode','aiAuthHeader','aiMaxTokens','aiTokenField','aiTemperature','aiSendTemperature','aiJSONMode','aiExtraParams'];
 function currentAPIIdentity(provider=activeProvider) { return JSON.stringify([provider, provider==='custom'?$('#aiEndpoint').value.trim():provider,$('#aiAuthMode').value,$('#aiAuthHeader').value.trim()]); }
 function readAPIConfig() {
+  if(activeProvider==='default') return {provider:'default',maxTokens:6000};
   let extraParams;
   try { extraParams=JSON.parse($('#aiExtraParams').value||'{}'); } catch (_) { throw new Error('额外参数必须是有效 JSON，例如 {"top_p":0.9}'); }
   if (!extraParams || Array.isArray(extraParams) || typeof extraParams !== 'object') throw new Error('额外参数必须为 JSON 对象');
@@ -24,7 +25,7 @@ function readAPIConfig() {
 }
 function persistAPIConfig() {
   try {
-    const {apiKey,...config}=readAPIConfig();
+    const {apiKey='',...config}=readAPIConfig();
     apiSecrets.set(previousAPIIdentity,apiKey);
     const identity=currentAPIIdentity();
     if(identity!==previousAPIIdentity) {$('#aiKey').value=apiSecrets.get(identity)||'';previousAPIIdentity=identity;}
@@ -42,9 +43,17 @@ function loadAPIPreset() {
   previousAPIIdentity=currentAPIIdentity();$('#aiKey').value=apiSecrets.get(previousAPIIdentity)||'';updateAPIVisibility();
 }
 function updateAPIVisibility() {
-  $('#aiEndpointLabel').hidden=activeProvider!=='custom';$('#aiHeaderLabel').hidden=$('#aiAuthMode').value!=='custom';
+  const builtin=activeProvider==='default';
+  $('#aiDefaultNotice').hidden=!builtin;$('#aiCustomIntro').hidden=builtin;$('#aiCustomHint').hidden=builtin;
+  $('#aiProfileName').closest('label').hidden=builtin;$('#aiSaveProfile').parentElement.hidden=builtin;
+  for(const id of ['aiModel','aiKey','aiAuthMode','aiAuthHeader','aiMaxTokens','aiTokenField','aiTemperature','aiSendTemperature','aiJSONMode','aiExtraParams']) {
+    const label=$('#'+id).closest('label');if(label) label.hidden=builtin;
+  }
+  $('#aiCheckConfig').textContent=builtin?'检查默认服务':'检查地址与参数';
+  $('#aiEndpointLabel').hidden=activeProvider!=='custom';$('#aiHeaderLabel').hidden=builtin||$('#aiAuthMode').value!=='custom';
   $('#aiTemperature').disabled=!$('#aiSendTemperature').checked;
   const name=$('#aiProvider').selectedOptions[0]?.textContent||'';
+  if(builtin) {$('#aiConfigSummary').textContent='默认 AI 服务 · 无需 API Key';return;}
   $('#aiConfigSummary').textContent=`${name} · ${$('#aiModel').value.trim()||'请在设置中填写模型'} · 密钥仅本页使用`;
 }
 function clearAPISecrets() {apiSecrets.clear();$('#aiKey').value='';$('#aiConfigStatus').textContent='';}
@@ -89,7 +98,7 @@ $('#aiUpdateProfile').addEventListener('click',()=>saveNamedAPIProfile(true));
 $('#aiSavedProfile').addEventListener('change',()=>{
   const profile=savedAPIProfiles.find(p=>p.id===$('#aiSavedProfile').value);
   if(!profile) return renderSavedAPIProfiles();
-  persistAPIConfig();activeProvider=['deepseek','glm','custom'].includes(profile.config.provider)?profile.config.provider:'custom';
+  persistAPIConfig();activeProvider=['default','deepseek','glm','custom'].includes(profile.config.provider)?profile.config.provider:'custom';
   const {apiKey,...safeConfig}=profile.config;apiPresets[activeProvider]=safeConfig;
   loadAPIPreset();persistAPIConfig();$('#aiProfileName').value=profile.name;renderSavedAPIProfiles(profile.id);
 });

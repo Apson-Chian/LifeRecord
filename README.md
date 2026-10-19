@@ -4,7 +4,7 @@
 
 LifeRecord 是一款本地优先的饮食与健身记录应用，提供 iOS、Android 原生客户端和网页端。从一餐、一组训练到长期体重趋势，把日常记录整理成看得懂、能回顾的数据，适合增肌、减脂或维持体重时持续使用。
 
-[安卓下载](https://github.com/Apson-Chian/LifeRecord/releases) · [网页体验](https://apsonchian.ltd/liferecord/) · [iOS 工程](iOS/)
+[安卓下载](https://github.com/Apson-Chian/LifeRecord/releases) · [网页体验](https://apsonchian.ltd/liferecord-default/) · [iOS 工程](iOS/)
 
 ## 项目亮点
 
@@ -21,14 +21,14 @@ LifeRecord 是一款本地优先的饮食与健身记录应用，提供 iOS、An
 
 <table>
   <tr>
+    <th>今日记录</th>
     <th>训练节奏</th>
     <th>身体总览</th>
-    <th>设置</th>
   </tr>
   <tr>
+    <td><img src="iOS/screenshots/today.png" width="240" alt="iOS 今日页、营养目标与快捷记录入口"></td>
     <td><img src="iOS/screenshots/training.png" width="240" alt="iOS 训练节奏、每日训练时长与训练日历入口"></td>
     <td><img src="iOS/screenshots/body-overview.png" width="240" alt="iOS 身体总览、阶段体重变化和每日中位数与趋势曲线"></td>
-    <td><img src="iOS/screenshots/settings.png" width="240" alt="iOS 个人目标、记录提醒、教练、外观和同步设置"></td>
   </tr>
 </table>
 
@@ -55,11 +55,11 @@ Android 预览使用示例或合成记录。
 
 | 平台 | 使用方式 |
 | --- | --- |
-| Android 8.0+ | [标准版 beta.4](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.4) · [预设服务版 beta.4](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.4) |
+| Android 8.0+ | [下载 beta.4（含默认 AI 服务）](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.4) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
 | iOS 17+ | 使用 Xcode 构建 [iOS 工程](iOS/README.md)，目前尚未提供 TestFlight 下载 |
-| Web | [标准版网页](https://apsonchian.ltd/liferecord/) · [预设服务版网页](https://apsonchian.ltd/liferecord-default/) |
+| Web | [网页体验](https://apsonchian.ltd/liferecord-default/) |
 
-标准版可配置自己的模型接口；预设服务版连接独立同步账号后即可使用服务器提供的 AI 服务，也支持自定义接口。两版的核心记录功能一致。
+新安装默认使用服务器提供的 AI 服务，连接自己的独立同步账号即可使用，无需填写上游 API Key；也可以切换到自定义模型接口。已有安装保留用户原先选择的接口。
 
 首次使用可以直接从空白记录开始，填写自己的目标；照片识别和智能教练需要联网并配置服务。跨端同步需在各端填写同一账号的同步密钥，现有在线服务采用邀请制。[账号与同步说明](Docs/public-beta.md)
 
@@ -75,7 +75,7 @@ Android 预览使用示例或合成记录。
 | [Backend/](Backend/) | Python、SQLite；账号、记录同步与私有照片服务 |
 | [Tests/](Tests/) / [Docs/](Docs/) | 跨端回归检查、功能说明与统计口径 |
 
-`main` 为标准版，`default-ai-service` 提供预设服务版。两个原生工程可独立构建。
+项目统一在 `main` 维护，已包含默认 AI 服务。两个原生工程可独立构建。
 
 ## 本地运行
 

@@ -202,6 +202,10 @@ private struct AISettingsView: View {
                 Picker("服务商", selection: $settings.provider) {
                     ForEach(AIProvider.allCases) { Text($0.rawValue).tag($0) }
                 }
+                if settings.provider == .builtin {
+                    Text("无需填写 API Key。先在同步设置中连接你的独立账号；相关文字、记录与所选照片会由云端处理，也可切换自己的接口。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                } else {
                 TextField("接口地址", text: $settings.endpoint, axis: .vertical)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -232,6 +236,7 @@ private struct AISettingsView: View {
                     }
                 }
                 .foregroundStyle(.primary)
+                }
                 Button {
                     Task { await testConnection() }
                 } label: {
@@ -241,7 +246,7 @@ private struct AISettingsView: View {
                         if isTesting { ProgressView().controlSize(.small) }
                     }
                 }
-                .disabled(isTesting || !hasAPIKey)
+                .disabled(isTesting || (settings.provider == .builtin ? !KeychainStore.hasSyncKey : !hasAPIKey))
                 if let connectionMessage {
                     Text(connectionMessage)
                         .font(.caption)
@@ -257,6 +262,7 @@ private struct AISettingsView: View {
                 Text("图片输入")
             }
 
+            if settings.provider != .builtin {
             Section {
                 DisclosureGroup("高级接口参数") {
                 Picker("输出 Token 参数",selection:$settings.tokenParameter) {
@@ -274,8 +280,10 @@ private struct AISettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            }
             Section {
                 DisclosureGroup("生成参数") {
+                if settings.provider != .builtin {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("创造性")
@@ -286,7 +294,8 @@ private struct AISettingsView: View {
                     }
                     Slider(value: $settings.temperature, in: 0...2, step: 0.1)
                 }
-                Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 256...65536, step: 256)
+                }
+                Stepper("最长回复：\(settings.maxTokens) tokens", value: $settings.maxTokens, in: 256...(settings.provider == .builtin ? 4096 : 65536), step: 256)
                 }
             }
         }

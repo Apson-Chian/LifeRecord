@@ -17,18 +17,18 @@
 
 <table>
   <tr>
-    <th>训练节奏</th>
+    <th>今日记录</th>
     <th>身体总览</th>
     <th>目标反馈</th>
   </tr>
   <tr>
-    <td><img src="screenshots/training.png" width="240" alt="每日训练时长柱状图与训练明细入口"></td>
+    <td><img src="screenshots/today.png" width="240" alt="今日页、营养目标与快捷记录入口"></td>
     <td><img src="screenshots/body-overview.png" width="240" alt="身体测量汇总、阶段变化与平滑体重趋势"></td>
     <td><img src="screenshots/goal-feedback.png" width="240" alt="阶段体重目标反馈、饮食测量训练统计与复盘入口"></td>
   </tr>
 </table>
 
-以上为 iOS 真机截图。[设置界面](screenshots/settings.png)
+以上为 iOS 真机截图。[训练节奏](screenshots/training.png) · [设置界面](screenshots/settings.png)
 
 ## 运行
 

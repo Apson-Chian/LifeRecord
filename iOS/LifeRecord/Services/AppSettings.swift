@@ -31,16 +31,18 @@ enum AIAuthStyle: String, CaseIterable, Identifiable {
 }
 
 enum AIProvider: String, CaseIterable, Identifiable {
+    case builtin = "默认 AI 服务"
     case deepSeek = "DeepSeek"
     case dots = "Dots"
     case glm = "智谱 GLM"
     case custom = "自定义"
 
-    static var allCases: [AIProvider] { [.deepSeek, .glm, .custom] }
+    static var allCases: [AIProvider] { [.builtin, .deepSeek, .glm, .custom] }
     var id: String { rawValue }
 
     var keychainID: String {
         switch self {
+        case .builtin: "default"
         case .deepSeek: "deepseek"
         case .dots: "dots"
         case .glm: "glm"
@@ -50,8 +52,9 @@ enum AIProvider: String, CaseIterable, Identifiable {
 
     var endpoint: String {
         switch self {
+        case .builtin: ""
         case .deepSeek: "https://api.deepseek.com/chat/completions"
-        case .dots: "https://note3-prev-api.askdiandian.com/v1/chat/completions"
+        case .dots: ""
         case .glm: "https://open.bigmodel.cn/api/paas/v4/chat/completions"
         case .custom: "https://example.com/v1/chat/completions"
         }
@@ -59,8 +62,9 @@ enum AIProvider: String, CaseIterable, Identifiable {
 
     var model: String {
         switch self {
+        case .builtin: ""
         case .deepSeek: "deepseek-flash"
-        case .dots: "dots3-note-prev"
+        case .dots: ""
         case .glm: "glm-4.6v-flash"
         case .custom: "vision-model-name"
         }
@@ -237,7 +241,7 @@ final class AppSettings {
         let savedProfileTimestamp = defaults.double(forKey: Key.profileUpdatedAt)
         profileUpdatedAt = savedProfileTimestamp > 0 ? Date(timeIntervalSince1970: savedProfileTimestamp) : Date(timeIntervalSince1970:1)
 
-        let savedProvider = AIProvider(rawValue: defaults.string(forKey: Key.provider) ?? "") ?? .glm
+        let savedProvider = AIProvider(rawValue: defaults.string(forKey: Key.provider) ?? "") ?? .builtin
         let savedModel = defaults.string(forKey: Key.model)
         let savedEndpoint = defaults.string(forKey: Key.endpoint) ?? savedProvider.endpoint
         provider = savedProvider == .dots ? .custom : savedProvider
@@ -264,6 +268,7 @@ final class AppSettings {
         customInstructions = defaults.string(forKey: Key.customInstructions) ?? ""
         aiCanWrite = defaults.object(forKey: Key.aiCanWrite) as? Bool ?? false
         if savedProvider == .dots {
+            defaults.set(savedEndpoint,forKey:"ai.migratedLegacyEndpoint")
             defaults.set(AIProvider.custom.rawValue, forKey:Key.provider)
             jsonMode=false; imageDetail="medium";authStyle = .apiKey
             if extraBody == "{}" { extraBody="{\"chat_template_kwargs\":{\"enable_thinking\":false}}" }
@@ -277,7 +282,7 @@ final class AppSettings {
         displayName="";fitnessGoal = .maintain
         height=170;baselineWeight=70;targetWeight=70;weeklyWeightTarget=0
         calorieGoal=2000;proteinGoal=100;carbsGoal=250;fatGoal=60
-        provider = .deepSeek;endpoint=provider.endpoint;model=provider.model;authStyle = .bearer;customHeaderName="Authorization"
+        provider = .builtin;endpoint=provider.endpoint;model=provider.model;authStyle = .bearer;customHeaderName="Authorization"
         customInstructions="";aiCanWrite=false;supportsVision=true;maxPhotos=6;maxTokens=4096;temperature=0.2
         coachName = Self.defaultCoachName; coachAvatarData = nil
         savedAPIProfiles=[];imageDetail=""
@@ -285,6 +290,7 @@ final class AppSettings {
         shareWithLifeTrack=false;appearance="system";accentColor="purple"
         syncBaseURL="https://apsonchian.ltd/liferecord-api"
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("ai.profile.") { defaults.removeObject(forKey:key) }
+        defaults.removeObject(forKey:"ai.migratedLegacyEndpoint")
         profileUpdatedAt=Date(timeIntervalSince1970:1);save(1.0,Key.profileUpdatedAt)
         isApplyingSyncedProfile=false
     }
