@@ -17,6 +17,25 @@ LifeRecord 是一款本地优先的饮食与健身记录应用，提供 iOS、An
 
 ## 界面预览
 
+### iOS
+
+<table>
+  <tr>
+    <th>训练节奏</th>
+    <th>身体总览</th>
+    <th>设置</th>
+  </tr>
+  <tr>
+    <td><img src="iOS/screenshots/training.png" width="240" alt="iOS 训练节奏、每日训练时长与训练日历入口"></td>
+    <td><img src="iOS/screenshots/body-overview.png" width="240" alt="iOS 身体总览、阶段体重变化和每日中位数与趋势曲线"></td>
+    <td><img src="iOS/screenshots/settings.png" width="240" alt="iOS 个人目标、记录提醒、教练、外观和同步设置"></td>
+  </tr>
+</table>
+
+iOS 真机截图。[更多 iOS 界面](iOS/README.md#界面预览)
+
+### Android
+
 <table>
   <tr>
     <th>今日记录</th>
@@ -30,7 +49,7 @@ LifeRecord 是一款本地优先的饮食与健身记录应用，提供 iOS、An
   </tr>
 </table>
 
-预览来自 Android 客户端，使用示例或合成记录。
+Android 预览使用示例或合成记录。
 
 ## 下载与体验
 
