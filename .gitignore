@@ -15,6 +15,7 @@ Android/local.properties
 Android/**/build/
 *.jks
 *.keystore
+*.p12
 Android/dist/
 
 # Local test distributions and private invitation credentials

@@ -1,8 +1,8 @@
-1.4.0-beta.3：补齐训练部位专用分类、对话复核、全局改名和历史修复，保留 iOS 对齐体验。安装包见 [GitHub Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3)。[公开测试说明](../Docs/public-beta.md)。
+1.4.0-beta.4：修复趋势日期轴，补齐图表、身体总览、记录日历与教练恢复。安装包见 [GitHub Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.4)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
 
 # LifeRecord Android
 
-Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的图表、数据详情和教练恢复体验。[更新与验证](../Docs/android-release-1.4-beta4.md)。发布签名核对中，安装包暂保留草稿。
+Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的图表、数据详情和教练恢复体验。[更新与验证](../Docs/android-release-1.4-beta4.md)。两版 APK 已公开；beta.3 需先迁移再重装。
 
 原生 Kotlin + Jetpack Compose 安卓客户端，最低 Android 8.0（API 26）。工程与原有 iOS、Web、后端并列，不包含 LifeTrack App Group、跳转或联动逻辑。
 
@@ -20,7 +20,7 @@ Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的�
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 ```
 
-调试 APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。可直接通过 Android Studio 或 `adb install -r app/build/outputs/apk/debug/app-debug.apk` 安装。发布版需要配置自己的签名，本仓库不存放签名文件和密码。
+调试 APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。可直接通过 Android Studio 或 `adb install -r app/build/outputs/apk/debug/app-debug.apk` 安装。发布版使用固定持久签名，按[签名保管与签发步骤](../Docs/android-signing.md)执行；本仓库不存放私钥和密码。
 
 构建固定为 AGP 8.9.2、Gradle 8.11.1、Kotlin 2.1.20、Compose BOM 2025.04.01、JDK 17、SDK 35。Gradle Wrapper 带官方分发包 SHA-256 校验。SDK 路径写入本机 `local.properties`，已被 Git 忽略。
 
@@ -30,7 +30,7 @@ Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的�
 - 餐食：新增、编辑、删除、餐次、原始描述、营养、备注；选择多张图片交由 AI 识别，再复核保存；常用餐食填入；编辑时可用 AI 修改营养草稿。
 - 训练：开始/结束计时、跨午夜时长、补记、编辑、删除、独立部位、自定义部位、动作库及可选逐组次数/重量/时长。
 - 身体：体重、可选体脂/腰围、历史时间和备注。
-- 趋势：7 天/30 天/全部范围、体重/体脂每日中位数与指数平滑曲线、时段筛选及逐日查看、14 天热量、训练概览、完整目标反馈、版本化记录质量确认、全部历史记录搜索筛选、独立生成与保存的 AI 周报。
+- 趋势：7 天/30 天/全部范围、体重/体脂每日中位数与指数平滑曲线、时段筛选及逐日查看、按所选范围显示热量与训练柱状图、身体总览及 30 天日历、训练概览、完整目标反馈、版本化记录质量确认、全部历史记录搜索筛选、独立生成与保存的 AI 周报。
 - 教练：左侧多对话栏、iOS 同款教练头像、本机聊天照片留存、常用餐食入口、记录上下文、离开页面后继续生成；可提出餐食、测量、训练、动作库和目标操作。AI 写入默认关闭，在输入栏或设置中开启后，按明确要求执行；只有数据库实际提交成功才展示执行回执。无写入权限、无有效操作、数据已变化或任一操作无效时不写入；整批验证通过后一次提交。支持停止生成、不同对话分别生成，以及本机自定义名称和头像。
 - 私有同步：兼容现有 Unix 秒时间戳、UUID、营养/身体/训练字段、个人目标和删除标记。前台每 15 秒同步，返回前台立即同步，离线可用。响应按更新时间与**收到响应时**的最新本机数据合并。
 - 照片：系统相机或照片选择器，无需整个相册权限；按方向解码并压缩 JPEG。本机离线保存、配置同步后排队上传、远程照片按密钥隔离磁盘缓存、重试、完整图片缩放查看、下滑退出和保存到系统相册。
@@ -43,7 +43,7 @@ Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的�
 
 首页顺序、蓝紫主题、蛋白质/碳水/餐次配色、添加菜单、记录日历、餐次分组、照片入口、训练结束后编辑、默认收起的动作组数，以及「问 AI」先填草稿的操作已对齐 iOS。切换标签保留日期、滚动位置、趋势范围、搜索和未发送文字。详细变化与 GitHub 参考见[对齐记录](../Docs/android-ios-parity.md)。
 
-在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.3.apk`，在安卓文件管理器中打开，按系统提示允许该来源安装应用，再点安装。新版沿用此前 1.0–1.4 测试包的签名，可直接覆盖安装，不需要卸载；源码更新后也可以用 Android Studio 运行到手机。iOS 的认证修复需要重新构建并安装 iOS App。
+在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.4) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.4.apk`，在安卓文件管理器中打开并按系统提示安装。**beta.4 与 beta.3 签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
 
 DeepSeek 官方接口固定使用 Bearer 认证，保存和发送都会处理常见粘贴格式；401/402 的处理与密钥重新配置方式见[仓库说明](../README.md#deepseek-配置与-401-修复)。
 
