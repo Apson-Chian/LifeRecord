@@ -629,7 +629,7 @@ private struct InspectableTrendCard: View {
                             }
                         }
                         if let goal, domain.contains(goal) {
-                            RuleMark(y: .value("目标", goal)).foregroundStyle(.secondary.opacity(0.45)).lineStyle(StrokeStyle(dash: [4, 4]))
+                            RuleMark(y: .value("目标", goal)).foregroundStyle(bars ? Color.blue.opacity(0.25) : Color.secondary.opacity(0.45)).lineStyle(StrokeStyle(dash: [4, 4]))
                         }
                         RuleMark(x: .value("所选日期", chartScale.center(of: bars ? selection ?? selected.date : selected.date))).foregroundStyle(tint.opacity(0.35)).lineStyle(StrokeStyle(dash: [3, 3]))
                     }
