@@ -1,8 +1,8 @@
 # LifeRecord（生活记录）
 
-Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的图表、数据详情和教练恢复体验。[更新与验证](Docs/android-release-1.4-beta4.md)。发布签名核对中，安装包暂保留草稿。
+Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的图表、数据详情和教练恢复体验。[更新与验证](Docs/android-release-1.4-beta4.md)。两版 APK 已公开。**beta.4 更换签名，不能覆盖 beta.3；迁移前请阅读[安装说明](Docs/android-release-1.4-beta4.md#签名与发布状态)。**
 
-当前分支 `codex/default-ai-service` 提供服务器默认 AI，用户连接独立账号后无需填写 AI Key，也可选择自己的接口。安卓已同步主线 UI 与训练部位模块：[默认 AI 版 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.3/LifeRecord-Android-1.4.0-default-beta.3.apk) · [普通版 Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.3) · [更新与验证](Docs/android-release-1.4-beta3.md)。[默认版测试网页](https://apsonchian.ltd/liferecord-default/) · [默认服务与额度](Docs/default-ai-service.md)。
+当前分支 `codex/default-ai-service` 提供服务器默认 AI，用户连接独立账号后无需填写 AI Key，也可选择自己的接口。安卓已同步主线 UI 与训练部位模块：[默认 AI 版 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.4/LifeRecord-Android-1.4.0-default-beta.4.apk) · [普通版 Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.4) · [更新与验证](Docs/android-release-1.4-beta4.md)。[默认版测试网页](https://apsonchian.ltd/liferecord-default/) · [默认服务与额度](Docs/default-ai-service.md)。
 
 API 设置更新：预设仅保留 DeepSeek 和 GLM，三端支持新增、保存与切换多个自定义配置。[配置说明与本机 Dots 设置步骤](Docs/api-settings.md)。
 

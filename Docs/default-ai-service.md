@@ -4,7 +4,7 @@
 
 - 主网站（main）：https://apsonchian.ltd/liferecord/
 - 独立默认版本：https://apsonchian.ltd/liferecord-default/
-- Android 当前版 1.4.0-default-beta.3（build 7）：[直接下载 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.3/LifeRecord-Android-1.4.0-default-beta.3.apk) · [Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.3)
+- Android 当前版 1.4.0-default-beta.4（build 8）：[直接下载 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.4/LifeRecord-Android-1.4.0-default-beta.4.apk) · [Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.4)。beta.4 新签名不能覆盖 beta.3，安装前先阅读[迁移说明](android-release-1.4-beta4.md#签名与发布状态)。
 - 原 2026-10-13 默认版（build 6）保留在独立测试网站，当前版以 GitHub Release 为准。
 - iOS 1.4（build 6）工程：本机 `dist/default-ai-2026-10-13/LifeRecord-iOS-1.4-default-beta.zip`。尚未上传 TestFlight。
 
@@ -61,4 +61,4 @@ Release 未启用应用调试，v2/v3 签名通过。专用 API 35 模拟器验�
 
 ## 2026-10-19：beta.4
 
-默认服务版同步普通版的趋势日期修复、训练柱状图、身体总览与记录日历、键盘收起和教练失败恢复。候选包 build 8，原签名遗失，发布暂为草稿；详情见签名说明。[更新、下载与验证](android-release-1.4-beta4.md)。
+默认服务版同步普通版的趋势日期修复、训练柱状图、身体总览与记录日历、键盘收起和教练失败恢复。build 8 已公开预发布；使用新签名，beta.3 不能直接覆盖，需先保留数据再卸载重装。私钥已持久加密保存并备份，后续使用固定证书；详情见签名说明。[更新、下载与验证](android-release-1.4-beta4.md)。
