@@ -123,7 +123,12 @@ import kotlin.math.abs
                 Text("每日热量",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
                 IconButton(onClick={calorieDetails=true}) { AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.primary,Modifier.size(15.dp),"查看每日热量详情") }
             }
-            DailyBarChart(caloriePoints,calorieStart,today,"kcal",goal=s.profile.optDouble("calorieGoal"),tag="calorie-chart")
+            val caloriesByDay=caloriePoints.associate { it.day to it.value }
+            val calorieAxis=DayChartAxis(calorieStart,today)
+            val values=(0 until calorieAxis.count).map { caloriesByDay[calorieStart.plusDays(it)] }
+            BarChart(values,s.profile.optDouble("calorieGoal"),Modifier.testTag("calorie-chart").semantics {
+                contentDescription="横轴日期 ${calorieAxis.first} 至 ${calorieAxis.last}，纵轴 kcal。有记录的日期才计入，空白日期表示未记录。"
+            })
             Text("有记录的日期才计入；空白日期表示未记录。今日仍可能变化。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             val mealDays=meals.map { it.date.day() }.distinct().size
             Text("当前时段 · $mealDays 天记录饮食 · ${if(mealDays>0) format(Insights.total(meals,"calories")/mealDays) else "—"} kcal / 记录日",style=MaterialTheme.typography.bodyMedium)
@@ -148,6 +153,26 @@ import kotlin.math.abs
         } }
     }
 
+}
+
+@Composable private fun BarChart(values:List<Double?>,goal:Double,modifier:Modifier=Modifier) {
+    val color=MaterialTheme.colorScheme.primary
+    val empty=MaterialTheme.colorScheme.surfaceVariant
+    val target=goal.takeIf { it.isFinite() && it>0 } ?: 0.0
+    val valid=values.map { it?.takeIf { value -> value.isFinite() && value>=0 } }
+    Canvas(modifier.fillMaxWidth().height(130.dp)) {
+        if(valid.isEmpty()) return@Canvas
+        val maximum=maxOf(target,valid.filterNotNull().maxOrNull() ?: 0.0,1.0)*1.15
+        val width=size.width/valid.size
+        if(target>0) {
+            val y=(size.height*(1-target/maximum)).toFloat()
+            drawLine(Meals,Offset(0f,y),Offset(size.width,y),1.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(8f,8f)))
+        }
+        valid.forEachIndexed { index,value ->
+            val height=if(value==null) 3.dp.toPx() else (value/maximum*size.height).toFloat()
+            drawRoundRect(if(value==null) empty else color,Offset(index*width+width*.2f,size.height-height),androidx.compose.ui.geometry.Size(width*.6f,height),androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
+        }
+    }
 }
 
 @Composable private fun FeedbackCard(summary:GoalFeedback.Summary,goals:org.json.JSONObject,coach:()->Unit) {
