@@ -64,5 +64,5 @@ xcodebuild -project iOS/LifeRecord.xcodeproj -scheme LifeRecord \
 ```
 
 - [身体趋势统计口径](../Docs/body-trends.md)
-- [当前版本更新说明](../Docs/android-release-1.4-beta4.md)
+- [当前版本更新说明](../Docs/android-release-1.4-beta5.md)
 - [共享回归检查](../Tests/README.md)

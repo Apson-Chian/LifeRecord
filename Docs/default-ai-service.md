@@ -4,7 +4,7 @@
 
 - 含默认服务的网页：https://apsonchian.ltd/liferecord-default/
 - 原有网页入口：https://apsonchian.ltd/liferecord/
-- Android 当前版 1.4.0-default-beta.4（build 8）：[直接下载 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.4/LifeRecord-Android-1.4.0-default-beta.4.apk) · [Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.4)。beta.4 新签名不能覆盖 beta.3，安装前先阅读[迁移说明](android-release-1.4-beta4.md#签名与发布状态)。
+- Android 当前版 1.4.0-beta.5（build 9）：[直接下载 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-v1.4.0-beta.5/LifeRecord-Android-1.4.0-beta.5.apk) · [Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.5)。可直接覆盖 beta.4 的两个版本；beta.3 及更早版本先阅读[迁移说明](android-release-1.4-beta4.md#签名与发布状态)。
 - 原 2026-10-13 默认版（build 6）保留在独立测试网站，当前版以 GitHub Release 为准。
 - iOS 1.4（build 6）工程：本机 `dist/default-ai-2026-10-13/LifeRecord-iOS-1.4-default-beta.zip`。尚未上传 TestFlight。
 

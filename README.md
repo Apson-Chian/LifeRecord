@@ -55,7 +55,7 @@ Android 预览使用示例或合成记录。
 
 | 平台 | 使用方式 |
 | --- | --- |
-| Android 8.0+ | [下载 beta.4（含默认 AI 服务）](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.4) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
+| Android 8.0+ | [下载 beta.5](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.5) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
 | iOS 17+ | 使用 Xcode 构建 [iOS 工程](iOS/README.md)，目前尚未提供 TestFlight 下载 |
 | Web | [网页体验](https://apsonchian.ltd/liferecord-default/) |
 
@@ -63,7 +63,7 @@ Android 预览使用示例或合成记录。
 
 首次使用可以直接从空白记录开始，填写自己的目标；照片识别和智能教练需要联网并配置服务。跨端同步需在各端填写同一账号的同步密钥，现有在线服务采用邀请制。[账号与同步说明](Docs/public-beta.md)
 
-**旧版升级**：Android beta.4 更换了签名，beta.3 用户需先核对同步记录、另存本机内容，再卸载重装；本机对话和部分照片不参与同步。[迁移步骤与更新说明](Docs/android-release-1.4-beta4.md#签名与发布状态)
+**版本升级**：beta.5 可直接覆盖 beta.4 的两个版本，保留本机数据；beta.3 及更早版本需先核对同步记录、另存本机内容，再卸载重装，本机对话和部分照片不参与同步。[迁移步骤与更新说明](Docs/android-release-1.4-beta4.md#签名与发布状态)
 
 ## 技术与目录
 
