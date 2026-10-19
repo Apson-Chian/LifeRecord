@@ -1,6 +1,6 @@
 # 默认 AI 服务版本
 
-分支：`codex/default-ai-service`，基于 `main` 的 API 设置优化创建，提交说明“提供默认ai服务”。
+预设服务版在 `default-ai-service` 分支维护，核心记录功能与标准版一致，通过服务器代理提供智能服务。
 
 - 主网站（main）：https://apsonchian.ltd/liferecord/
 - 独立默认版本：https://apsonchian.ltd/liferecord-default/

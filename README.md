@@ -1,98 +1,78 @@
-# LifeRecord（生活记录）
+# LifeRecord
 
-Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的图表、数据详情和教练恢复体验。[更新与验证](Docs/android-release-1.4-beta4.md)。两版 APK 已公开。**beta.4 更换签名，不能覆盖 beta.3；迁移前请阅读[安装说明](Docs/android-release-1.4-beta4.md#签名与发布状态)。**
+**把饮食、训练与身体变化，记录在一起。**
 
-当前分支 `codex/default-ai-service` 提供服务器默认 AI，用户连接独立账号后无需填写 AI Key，也可选择自己的接口。安卓已同步主线 UI 与训练部位模块：[默认 AI 版 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.4/LifeRecord-Android-1.4.0-default-beta.4.apk) · [普通版 Release](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.4) · [更新与验证](Docs/android-release-1.4-beta4.md)。[默认版测试网页](https://apsonchian.ltd/liferecord-default/) · [默认服务与额度](Docs/default-ai-service.md)。
+LifeRecord 是一款本地优先的饮食与健身记录应用，提供 iOS、Android 原生客户端和网页端。从一餐、一组训练到长期体重趋势，把日常记录整理成看得懂、能回顾的数据，适合增肌、减脂或维持体重时持续使用。
 
-API 设置更新：预设仅保留 DeepSeek 和 GLM，三端支持新增、保存与切换多个自定义配置。[配置说明与本机 Dots 设置步骤](Docs/api-settings.md)。
+[安卓下载](https://github.com/Apson-Chian/LifeRecord/releases) · [网页体验](https://apsonchian.ltd/liferecord/) · [iOS 工程](iOS/)
 
-1.4 公开邀请测试版本：独立用户、结构化 SQLite 迁移、更自由的 API 兼容参数与外观设置。新安装从空白记录开始。[测试分发与安全说明](Docs/public-beta.md)。
+## 项目亮点
 
-截至 2026 年 10 月 13 日，网页与后端已更新到[现有网站](https://apsonchian.ltd/liferecord/)，Android 1.4.0-beta 安装包已提供测试下载，iOS 1.4（build 5）工程已交付并通过模拟器构建，尚未发布到 TestFlight。网页已补齐设置面板、自定义 API、训练编辑、删除确认、历史分页和 ETag 条件刷新；AI 数据范围保持原样。
+- **记餐更省事**：支持手动填写、文字描述和多张照片识别，记录热量与宏量营养；常用餐食可直接复用，识别结果可编辑后保存。
+- **训练按自己的习惯记录**：选择部位、开始计时即可记录，也能补填动作、重量、次数与组数；支持补记和跨午夜训练。
+- **从记录看到变化**：结合体重、体脂、腰围、营养和训练数据，按 7 天、30 天或全部历史查看趋势、日历与目标反馈，缺测日期不会被当作零值。
+- **有上下文的智能教练**：结合已有记录讨论饮食与训练，支持图片、多对话和周报；记录写入需主动授权，重要修改提供复核流程。
+- **原生体验**：iOS 使用 SwiftUI，Android 使用 Jetpack Compose，提供圆环目标、玻璃导航、深浅色外观和适合手机的录入方式。
+- **本地记录，可选同步**：手机端可离线记录；连接私有同步服务后，在手机和浏览器之间同步餐食、身体测量、训练与目标，也可导出 JSON 留存。
 
-查看[跨平台验证记录](Docs/public-beta-validation.md)与[网页优化交付记录](Docs/web-optimization.md)。测试凭据、用户数据、服务器环境文件和本机分发包不进入仓库。当前仍采用邀请测试，公开注册、密码找回、自动备份与告警尚未实现；真实计费 AI、完整渗透测试和并发压测尚未验证。
+## 界面预览
 
-本地优先的健身记录项目。Android 和 iOS 使用独立的原生工程、界面、存储与构建工具，通过同一私有同步后端与 Web 交换餐食、身体数据、训练、每日目标和删除标记。
+<table>
+  <tr>
+    <th>今日记录</th>
+    <th>训练趋势</th>
+    <th>智能教练</th>
+  </tr>
+  <tr>
+    <td><img src="Android/screenshots/today-light.png" width="240" alt="今日页的营养圆环、日期和快捷记录入口"></td>
+    <td><img src="Android/screenshots/training-beta4.png" width="240" alt="训练时长柱状图与训练日历入口"></td>
+    <td><img src="Android/screenshots/coach-light.png" width="240" alt="智能教练的对话、图片输入与记录权限开关"></td>
+  </tr>
+</table>
 
-## 仓库结构
+预览来自 Android 客户端，使用示例或合成记录。
 
-```text
-LifeRecord/
-├── Android/                      # Kotlin + Jetpack Compose，Android 8.0+
-│   ├── app/                      # 应用源码、单元测试和设备测试
-│   ├── gradle/                   # Gradle Wrapper
-│   ├── screenshots/              # 安卓界面与 iOS 对照预览
-│   └── README.md
-├── iOS/                          # SwiftUI + SwiftData，iOS 17+
-│   ├── LifeRecord/               # 应用源码、资源与隐私声明
-│   ├── LifeRecord.xcodeproj/      # Xcode 工程与共享 Scheme
-│   ├── Configuration/            # Info.plist 与 Entitlements
-│   ├── Tests/                    # Swift 回归程序与运行脚本
-│   └── README.md
-├── Backend/                      # Python / SQLite 私有同步与照片服务
-├── Web/                          # 响应式记录管理后台
-├── Tests/                        # 后端、Web 与跨平台协议回归
-└── Docs/                         # 统计口径与历史设计参考
-```
+## 下载与体验
 
-| 平台 | 打开方式 | 说明 |
-| --- | --- | --- |
-| Android | Android Studio 打开 `Android/` | [运行、功能与界面预览](Android/README.md) · [验证记录](Android/VALIDATION.md) |
-| iOS | Xcode 打开 `iOS/LifeRecord.xcodeproj` | [运行、功能与平台配置](iOS/README.md) |
-| Web / 后端 | 部署 `Web/` 与 `Backend/` | 下方说明与现有服务配置 |
+| 平台 | 使用方式 |
+| --- | --- |
+| Android 8.0+ | [标准版 beta.4](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.4) · [预设服务版 beta.4](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-default-v1.4.0-beta.4) |
+| iOS 17+ | 使用 Xcode 构建 [iOS 工程](iOS/README.md)，目前尚未提供 TestFlight 下载 |
+| Web | [标准版网页](https://apsonchian.ltd/liferecord/) · [预设服务版网页](https://apsonchian.ltd/liferecord-default/) |
 
-安卓客户端使用实际 iOS 页面校准的大标题、圆环、分组设置、教练输入与趋势卡片，并用 Compose 实现浮动玻璃导航，不包含 LifeTrack 联动；原有苹果版本的功能和 LifeTrack 配置保留在 `iOS/`。两端可分别开发、构建和安装，均可离线记录。界面变化、系统效果支持与剩余差异见[安卓与 iOS 对齐记录](Docs/android-ios-parity.md)。
+标准版可配置自己的模型接口；预设服务版连接独立同步账号后即可使用服务器提供的 AI 服务，也支持自定义接口。两版的核心记录功能一致。
 
-## 快速构建
+首次使用可以直接从空白记录开始，填写自己的目标；照片识别和智能教练需要联网并配置服务。跨端同步需在各端填写同一账号的同步密钥，现有在线服务采用邀请制。[账号与同步说明](Docs/public-beta.md)
 
-以下命令在仓库根目录执行。Android 需要 JDK 17、SDK 35；iOS 需要 Xcode，真机运行时在工程中选择自己的签名团队。
+**旧版升级**：Android beta.4 更换了签名，beta.3 用户需先核对同步记录、另存本机内容，再卸载重装；本机对话和部分照片不参与同步。[迁移步骤与更新说明](Docs/android-release-1.4-beta4.md#签名与发布状态)
+
+## 技术与目录
+
+| 目录 | 技术与职责 |
+| --- | --- |
+| [iOS/](iOS/) | SwiftUI、SwiftData、Swift Charts；原生界面、本机存储与趋势展示 |
+| [Android/](Android/) | Kotlin、Jetpack Compose、SQLite；原生界面、本机存储与后台提醒 |
+| [Web/](Web/) | HTML、CSS、JavaScript；浏览器记录管理与趋势查看 |
+| [Backend/](Backend/) | Python、SQLite；账号、记录同步与私有照片服务 |
+| [Tests/](Tests/) / [Docs/](Docs/) | 跨端回归检查、功能说明与统计口径 |
+
+`main` 为标准版，`default-ai-service` 提供预设服务版。两个原生工程可独立构建。
+
+## 本地运行
+
+Android：使用 JDK 17、Android SDK 35，在 Android Studio 中打开 `Android/`，或执行：
 
 ```sh
-# 安卓调试 APK 与核心检查
 cd Android
-./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
-cd ..
-
-# iOS 模拟器构建（无需配置真机签名）
-xcodebuild -project iOS/LifeRecord.xcodeproj -scheme LifeRecord \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath /tmp/LifeRecordDerivedData CODE_SIGNING_ALLOWED=NO build
-
-# 原有 iOS Swift 回归检查
-./iOS/Tests/run.sh
+./gradlew :app:assembleDebug
 ```
 
-安卓 APK 生成于 `Android/app/build/outputs/apk/debug/app-debug.apk`。构建缓存、安装包、本机 SDK 路径和签名密钥均被 Git 忽略。API Key 与同步密钥由用户在各端设置中录入，不写入仓库。
+iOS：使用 Xcode 打开 `iOS/LifeRecord.xcodeproj`，选择模拟器运行；真机运行需配置自己的签名团队。
 
-## DeepSeek 配置与 401 修复
+平台配置与检查：[Android 开发说明](Android/README.md) · [iOS 开发说明](iOS/README.md) · [接口设置](Docs/api-settings.md)
 
-两端官方接口均使用 `https://api.deepseek.com/chat/completions`、`Authorization: Bearer`，预设模型更新为 `deepseek-flash`。发送时自动纠正旧认证选项，清理密钥粘贴中的 Bearer / Authorization 前缀和外围空白，阻止隐藏或包含不可见字符的密钥进入网络请求。密钥继续按服务商独立存储。
+## 数据与隐私
 
-更新 App 后，在「设置 → AI 接口」选择 DeepSeek，复制[开放平台的完整 API Key](https://platform.deepseek.com/api_keys)，保存并测试。不要使用网页登录凭证或第三方服务的密钥。401 表示鉴权失败，402 表示 API 余额不足；错误提示不回显密钥。若新版仍返回 401，请重新创建官方密钥。已有失效密钥无法通过修改客户端恢复。[官方配置](https://api-docs.deepseek.com/)、[错误码说明](https://api-docs.deepseek.com/quick_start/error_codes/)。
+手机端记录保存在本机，接口与同步密钥使用系统安全存储。开启同步后，参与同步的记录与餐食照片会上传到所配置的服务器；使用智能功能时，相关文字、记录和所选图片会发送到配置的 AI 服务。聊天附件、常用餐食照片等本机内容并不全部参与同步或导出，卸载前应另行保留。
 
-`deepseek-flash` 支持图片；新预设开启图片能力，已有关闭设置继续保留，可手动开启。模型别名 `deepseek-v4-flash` 仍受官方支持，模型名更新并非 401 的原因。自动回归使用模拟响应检查实际请求头和错误处理，未使用用户密钥进行真实连通性验证。
-
-## Web 页面
-
-`Web/` 是采用侧栏导航、指标卡与餐食数据表格的响应式管理后台，可新增、编辑和删除带照片的餐食及身体数据，编辑每日目标，查看三层营养圆环、每日圆环与带绿点的月历，并导出完整 JSON。宽屏端还提供日期快捷切换、手动同步、营养概览、跨全部历史的餐食搜索与筛选，以及 `N` / `W` / `/` 键盘快捷操作。数据由 `Backend/` 中的鉴权 SQLite 服务持久化，与 iOS、Android App 每 15 秒及页面重新聚焦时自动双向同步；浏览器只在 Local Storage 中保存当前选择日期等界面偏好。
-
-首次使用时，在 App 的“设置 → App 与浏览器同步”及网页中各粘贴一次相同的同步密钥。网页验证成功后使用 `Secure + HttpOnly + SameSite=Strict` Cookie，不会把密钥写进前端源码或 GitHub。
-
-线上地址：<https://apsonchian.ltd/liferecord/>
-
-AI 营养结果会在保存前保持可编辑；它仅用于日常记录参考，不构成医疗建议。
-
-## 共享回归检查
-
-```sh
-python3 Tests/sync-edit.py
-python3 Tests/admin-api.py
-# 先运行安卓单元测试，生成真实 Kotlin 协议样本
-python3 Tests/android-sync.py
-# 安装 Playwright 并确保 Chrome 可用后
-node Tests/web-smoke.cjs
-```
-
-上述检查使用临时数据库或模拟 API，不访问真实健康记录。Swift 测试与安卓设备测试分别位于 `iOS/Tests/` 和 `Android/app/src/androidTest/`；具体命令见各平台文档。
-
-[身体趋势统计口径](Docs/body-trends.md)描述 iOS 与 Android 的中位数和指数平滑规则；[历史网页设计参考](Docs/DesignReferences/qianwen.html)只作参考，实际 Web 入口为 `Web/index.html`。
+项目用于日常记录与复盘，营养估算和教练建议仅供参考。
