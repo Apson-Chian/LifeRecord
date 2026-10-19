@@ -73,4 +73,4 @@ Debug 与 Release 构建成功；两者 Lint 均为 0 错误、16 警告。共�
 
 普通版 `dist/LifeRecord-Android-1.4.0-beta.3.apk`：versionCode 7，Release 非调试，v2/v3 签名通过并沿用原证书。SHA-256：`366fd09d76e3bf7567f9aede466ee2274b9ba72f7459813a90af988cb6096414`。完整变更及下载见 [发布记录](../Docs/android-release-1.4-beta3.md)。
 
-普通版和默认版覆盖安装及冷启动已在专用 API 35 模拟器验证：旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3，均成功，无崩溃。共享 JSON 协议及同步编辑回归通过。默认版已单独完成 50 项 JVM、26 项设备检查及服务器代理脱敏测试，源码及结果见 [默认服务分支](https://github.com/Apson-Chian/LifeRecord/blob/codex/default-ai-service/Docs/default-ai-service.md)。
+普通版和默认版覆盖安装及冷启动已在专用 API 35 模拟器验证：旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3，均成功，无崩溃。共享 JSON 协议及同步编辑回归通过。默认版已单独完成 50 项 JVM、26 项设备检查及服务器代理脱敏测试，源码及结果见 [默认服务分支](https://github.com/Apson-Chian/LifeRecord/blob/default-ai-service/Docs/default-ai-service.md)。

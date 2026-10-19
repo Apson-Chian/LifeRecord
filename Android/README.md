@@ -45,7 +45,7 @@ Android 1.4.0-beta.4：修复趋势柱状图日期显示，补齐当前 iOS 的�
 
 在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.4) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.4.apk`，在安卓文件管理器中打开并按系统提示安装。**beta.4 与 beta.3 签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
 
-DeepSeek 官方接口固定使用 Bearer 认证，保存和发送都会处理常见粘贴格式；401/402 的处理与密钥重新配置方式见[仓库说明](../README.md#deepseek-配置与-401-修复)。
+照片识别、智能教练与周报需要联网并配置服务。预设和自定义接口的连接、密钥保存与常见错误见[接口设置](../Docs/api-settings.md)。
 
 ## 数据与权限
 
