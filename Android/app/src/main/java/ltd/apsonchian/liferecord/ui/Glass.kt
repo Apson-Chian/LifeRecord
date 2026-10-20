@@ -62,7 +62,6 @@ fun AppBackground(modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     Canvas(modifier.fillMaxSize()) {
         drawRect(colors.background)
-        drawRect(Brush.verticalGradient(listOf(colors.background, lerp(if(colors.background.luminance()<.2f) Color.Black else Color.White,colors.primary,.075f), colors.background)))
     }
 }
 
@@ -138,7 +137,7 @@ private object Refraction {
     }
 }
 
-@Composable fun glassBarHeight(): Dp = if(LocalDensity.current.fontScale > 1.3f) 82.dp else 60.dp
+@Composable fun glassBarHeight(): Dp = if(LocalDensity.current.fontScale > 1.3f) 82.dp else 68.dp
 @Composable fun glassPageBottomPadding(): Dp {
     val density = LocalDensity.current
     return glassBarHeight() + 36.dp + with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
@@ -166,20 +165,20 @@ fun GlassNavigationBar(backdrop: GlassBackdrop, selected: Int, select: (Int) -> 
                 )
             }) {
             Box(Modifier.padding(6.dp).offset(x = position).width(tabWidth).fillMaxHeight()
-                .clip(RoundedCornerShape(50)).background(colors.onSurface.copy(alpha = .055f))
+                .clip(RoundedCornerShape(50)).background(colors.primary.copy(alpha = .10f))
                 .border(.6.dp, Color.White.copy(alpha = if(colors.background.luminance()<.2f) .12f else .34f), RoundedCornerShape(50)))
             Row(Modifier.fillMaxSize().padding(6.dp).selectableGroup()) {
                 labels.forEachIndexed { index, label ->
                     val interactions = remember { MutableInteractionSource() }
                     val pressed by interactions.collectIsPressedAsState()
                     val scale by animateFloatAsState(if(pressed) .94f else 1f, spring(stiffness = 900f), label = "tab press")
-                    val color = if(selected == index) colors.primary else colors.onSurface
+                    val color = if(selected == index) colors.primary else colors.onSurfaceVariant
                     Column(Modifier.weight(1f).fillMaxHeight().testTag("tab-$index").clip(RoundedCornerShape(50))
                         .selectable(selected == index, interactionSource = interactions, indication = null, role = Role.Tab, onClick = { select(index) })
                         .graphicsLayer { scaleX = scale; scaleY = scale },
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
                     ) {
-                        AppIcon(listOf(Glyph.Home,Glyph.Trend,Glyph.Coach,Glyph.Settings)[index],color,Modifier.size(24.dp),filled=index!=1)
+                        AppIcon(listOf(Glyph.Home,Glyph.Trend,Glyph.Coach,Glyph.Settings)[index],color,Modifier.size(24.dp),filled=selected==index && index!=1)
                         Spacer(Modifier.height(3.dp))
                         Text(label, fontSize = 11.sp, fontWeight = if(selected == index) FontWeight.SemiBold else FontWeight.Medium, color = color, maxLines = 1)
                     }

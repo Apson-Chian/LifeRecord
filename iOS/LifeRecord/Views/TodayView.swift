@@ -7,12 +7,21 @@ struct TodayView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
     @EnvironmentObject private var router: AppRouter
-    @Query(sort: \MealEntry.date, order: .reverse) private var meals: [MealEntry]
-    @Query(sort: \BodyMetric.date, order: .reverse) private var bodyMetrics: [BodyMetric]
+    @Query(sort: \MealEntry.date, order: .reverse) private var allMeals: [MealEntry]
+    @Query(sort: \BodyMetric.date, order: .reverse) private var allBodyMetrics: [BodyMetric]
 
-    @Query(sort: \WorkoutEntry.date, order: .reverse) private var workouts: [WorkoutEntry]
+    @Query(sort: \WorkoutEntry.date, order: .reverse) private var allWorkouts: [WorkoutEntry]
+
+    private var isDemoPreview: Bool {
+        !allMeals.contains { !$0.isDemo } && !allBodyMetrics.contains { !$0.isDemo } && !allWorkouts.contains { !$0.isDemo }
+            && (allMeals.contains { $0.isDemo } || allBodyMetrics.contains { $0.isDemo } || allWorkouts.contains { $0.isDemo })
+    }
+    private var meals: [MealEntry] { allMeals.filter { $0.isDemo == isDemoPreview } }
+    private var bodyMetrics: [BodyMetric] { allBodyMetrics.filter { $0.isDemo == isDemoPreview } }
+    private var workouts: [WorkoutEntry] { allWorkouts.filter { $0.isDemo == isDemoPreview } }
 
     @State private var selectedDate = Date.now
+    @State private var demoError: String?
     @State private var activeSheet: SheetDestination?
     @State private var lifeTrackActivity: SharedProfileStore.LifeTrackActivitySnapshot? = nil
 
@@ -104,6 +113,9 @@ struct TodayView: View {
                     lifeTrackActivity = settings.shareWithLifeTrack ? SharedProfileStore.lifeTrackActivity() : nil
                 }
             }
+            .alert("示例未能清除", isPresented: Binding(get: { demoError != nil }, set: { if !$0 { demoError = nil } })) {
+                Button("好") { demoError = nil }
+            } message: { Text(demoError ?? "") }
             .sheet(item: $activeSheet) { destination in
                 switch destination {
                 case .meal: AddMealView(defaultDate: selectedDate)
@@ -121,21 +133,21 @@ struct TodayView: View {
 
     @ViewBuilder
     private var demoDataBanner: some View {
-        if selectedMeals.contains(where: \.isDemo) || bodyMetrics.contains(where: \.isDemo) {
+        if allMeals.contains(where: \.isDemo) || allBodyMetrics.contains(where: \.isDemo) || allWorkouts.contains(where: \.isDemo) {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles.rectangle.stack")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppTheme.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("完整示例数据已写入")
+                    Text(isDemoPreview ? "正在体验示例数据" : "示例已隐藏，正在展示真实记录")
                         .font(.caption.weight(.semibold))
-                    Text("首页、趋势、教练都会展示对应效果")
+                    Text("仅供预览，不计入真实目标反馈或同步")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("清除") {
-                    DemoDataService.clear(context: modelContext)
+                    if !DemoDataService.clear(context: modelContext) { demoError = "请先保存正在编辑的记录后重试。" }
                 }
                 .font(.caption.weight(.semibold))
                 .buttonStyle(.bordered)
@@ -250,7 +262,11 @@ struct TodayView: View {
     }
 
     private func publishSharedDailySummary() {
-        if settings.shareWithLifeTrack { SharedProfileStore.publishDailySummary(date: selectedDate, nutrition: nutrition) }
+        if settings.shareWithLifeTrack {
+            let realNutrition = allMeals.filter { !$0.isDemo && Calendar.current.isSameDay($0.date, selectedDate) }
+                .reduce(into: DailyNutrition()) { $0.add($1) }
+            SharedProfileStore.publishDailySummary(date: selectedDate, nutrition: realNutrition)
+        }
     }
 
     private var macroCard: some View {

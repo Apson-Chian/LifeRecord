@@ -13,7 +13,7 @@ check() {
   echo "PASS: $name"
 }
 
-check settings-privacy LifeRecord/Services/AppSettings.swift LifeRecord/Services/AIAuthentication.swift
+check settings-privacy LifeRecord/Services/RecordInput.swift LifeRecord/Services/AppSettings.swift LifeRecord/Services/AIAuthentication.swift
 check ai-authentication LifeRecord/Services/AIAuthentication.swift
 check body-trend LifeRecord/Services/BodyTrend.swift
 check daily-chart-scale LifeRecord/Services/DailyChartScale.swift
@@ -22,7 +22,7 @@ check coach-task-center LifeRecord/Services/CoachBackgroundExecution.swift LifeR
 check coach-failure-description LifeRecord/Services/CoachFailureDescription.swift
 check coach-photo-storage LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check meal-photo-cache LifeRecord/Services/MealPhotoStore.swift
-check coach-meal-actions LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift LifeRecord/Services/CoachActions.swift
+check coach-meal-actions LifeRecord/Services/RecordInput.swift LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift LifeRecord/Services/CoachActions.swift
 check meal-provenance LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check record-insights LifeRecord/Services/BodyTrend.swift LifeRecord/Services/RecordWeek.swift LifeRecord/Services/RecordQuality.swift LifeRecord/Services/GoalFeedback.swift
 check reminder-plan LifeRecord/Services/ReminderPlan.swift
@@ -32,3 +32,11 @@ check workout-part-review LifeRecord/Services/WorkoutDetails.swift LifeRecord/Se
 check workout-storage LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift
 check workout-summary LifeRecord/Services/WorkoutSummary.swift
 check workout-calendar LifeRecord/Services/WorkoutDetails.swift LifeRecord/Services/WorkoutCalendar.swift
+
+check demo-data LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift LifeRecord/Services/DemoDataService.swift LifeRecord/Services/RecordQuality.swift LifeRecord/Services/GoalFeedback.swift LifeRecord/Services/BodyTrend.swift LifeRecord/Services/RecordWeek.swift
+
+check data-contract LifeRecord/Services/SyncCompatibility.swift LifeRecord/Services/RecordInput.swift LifeRecord/Services/SyncModels.swift LifeRecord/Services/WorkoutDetails.swift
+
+# These exercise the actual synchronization and AI writer with isolated stores.
+./Tests/sync-atomicity.sh
+python3 Tests/coach-atomicity.py

@@ -15,7 +15,7 @@ extension InsightRecords.Body {
 }
 extension InsightRecords.Workout {
     init(_ entry: WorkoutEntry) {
-        self.init(id: entry.id, date: entry.date, endDate: entry.endDate, updatedAt: entry.updatedAt)
+        self.init(id: entry.id, date: entry.date, endDate: entry.endDate, isDemo: entry.isDemo, updatedAt: entry.updatedAt)
     }
 }
 extension GoalFeedback.Goals {

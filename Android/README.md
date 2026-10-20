@@ -1,8 +1,20 @@
-默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载[beta.5](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.5)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
+默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载[beta.6](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.6)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
 
 # LifeRecord Android
 
-Android 1.4.0-beta.5：统一默认 AI 服务，恢复橙色每日热量图并保留日期修复。[更新与验证](../Docs/android-release-1.4-beta5.md)。beta.4 可直接覆盖升级；beta.3 及更早版本需先迁移再重装。
+本机开发版本新增「设置 → 账号与同步」：用户自主注册、账号密码登录及密码修改，管理员无需分配账号，保留原同步密钥兼容；首页、周历、设置和深浅色视觉已调整。[使用与部署说明](../Docs/account-password.md)。账号与界面更新已包含在 beta.6 客户端；线上同步服务尚未部署对应后端，未升级的服务器请继续使用密钥连接。
+
+Android 1.4.0-beta.6：重做首次导览，补齐 30 天示例、训练与身体图表，并合入账号和数据兼容更新。[更新与验证](../Docs/android-release-1.4-beta6.md)。beta.4/5 可直接覆盖升级；beta.3 及更早版本需先迁移再重装。
+
+设备测试现仅针对独立 `sandbox` 构建，包名 `ltd.apsonchian.liferecord.instrumented`。不要安装普通 Debug/Release 包来执行设备测试，也不要复用真实账号或已有个人数据的设备。使用新建的一次性模拟器：
+
+```sh
+./gradlew :app:assembleSandbox :app:assembleSandboxAndroidTest
+python3 ../Tests/android-isolation.py app/build/outputs/apk/sandbox/app-sandbox.apk
+./gradlew :app:connectedSandboxAndroidTest
+```
+
+只有 APK 检查通过后才可运行设备测试。该包使用独立 UID/数据库/密钥存储、内存 fake 网络且移除 INTERNET 权限；误填生产地址也会在传输前被拒绝。历史文档中的 `connectedDebugAndroidTest` 已被替换。正常 Debug/Release 构建、包名和数据保持兼容。验证进度见 [修复进度](../Docs/REPAIR_PROGRESS.md)。
 
 原生 Kotlin + Jetpack Compose 安卓客户端，最低 Android 8.0（API 26）。工程与原有 iOS、Web、后端并列，不包含 LifeTrack App Group、跳转或联动逻辑。
 
@@ -43,7 +55,7 @@ Android 1.4.0-beta.5：统一默认 AI 服务，恢复橙色每日热量图并�
 
 首页顺序、蓝紫主题、蛋白质/碳水/餐次配色、添加菜单、记录日历、餐次分组、照片入口、训练结束后编辑、默认收起的动作组数，以及「问 AI」先填草稿的操作已对齐 iOS。切换标签保留日期、滚动位置、趋势范围、搜索和未发送文字。详细变化与 GitHub 参考见[对齐记录](../Docs/android-ios-parity.md)。
 
-在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.5) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.5.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4 用户直接覆盖安装即可。**beta.3 及更早版本的签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
+在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.6) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.6.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4/5 用户直接覆盖安装即可。**beta.3 及更早版本的签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
 
 照片识别、智能教练与周报需要联网并配置服务。预设和自定义接口的连接、密钥保存与常见错误见[接口设置](../Docs/api-settings.md)。
 
@@ -79,7 +91,7 @@ JSON 导出包含真实记录、目标、删除标记、照片服务器编号、
 - 训练部位专用分类、对话复核、部位目录管理和历史修复已在 1.4.0-beta.3 提供；目录偏好只保存在本机，训练标签通过原有协议同步。
 - 安卓已去除 LifeTrack 联动，iOS 保留原有功能。
 
-`./gradlew :app:connectedDebugAndroidTest` 可在连接的模拟器或手机上检查数据库、密钥与主要记录流程。请使用专门的测试设备。
+`./gradlew :app:connectedSandboxAndroidTest` 在新建的一次性模拟器上检查数据库、密钥与主要记录流程；运行前按文首步骤检查专用 APK。禁止把普通 Debug/Release 用户包作为设备测试目标。
 
 运行安卓单元测试后，回到仓库根目录执行 `python3 Tests/android-sync.py`，会把 Kotlin 实际生成的同步 JSON 送入临时后端数据库验证协议兼容；`python3 Tests/sync-edit.py` 可继续执行原有 iOS/Web 同步回归。
 
@@ -131,3 +143,7 @@ JSON 导出包含真实记录、目标、删除标记、照片服务器编号、
 [发布与验证说明](../Docs/android-release-1.4-beta3.md)。上游 API Key 不会打入默认服务版 APK，始终由服务器代理持有。
 
 默认 AI 服务版也已同步本版 UI 与功能：[默认版 APK](https://github.com/Apson-Chian/LifeRecord/releases/download/android-default-v1.4.0-beta.3/LifeRecord-Android-1.4.0-default-beta.3.apk)。上游密钥留在服务器，需要先连接自己的同步账号。
+
+## 首次使用与示例体验
+
+首次使用提供四步导览，可跳过，也能在最后选择近 30 天完整示例。示例覆盖饮食、身体、训练和预写教练对话；设置中可重新载入或清除，不影响真实记录。[导览预览、数据边界与验证](../Docs/onboarding-and-demo.md)。

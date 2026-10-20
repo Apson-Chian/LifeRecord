@@ -308,6 +308,10 @@ struct AddMealView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
             return
         }
+        do {
+            try RecordInput.meal(name: name, calories: draft.calories, protein: draft.protein,
+                                 carbs: draft.carbs, fat: draft.fat, fiber: draft.fiber, note: draft.note)
+        } catch { errorMessage = error.localizedDescription; return }
         let hasNutrition = draft.calories > 0 || draft.protein > 0 || draft.carbs > 0 || draft.fat > 0
         guard hasNutrition else {
             errorMessage = "请填写营养数据；也可以先点“用 AI 估算营养”，复核结果后再保存。"

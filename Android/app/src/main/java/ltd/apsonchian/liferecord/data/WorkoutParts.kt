@@ -17,7 +17,12 @@ object WorkoutParts {
     }
     val arms=listOf("二头","三头","小臂")
     fun valid(value: String)=value.isNotBlank() && value==value.trim() && value!="未分类" && value.codePointCount(0,value.length)<=30 && value.none {Character.isISOControl(it)}
-    fun of(record: Record)=record.json.optJSONArray("bodyParts")?.strings().orEmpty()
+    fun of(record: Record): List<String> {
+        if (record.json.has("bodyParts") && !record.json.isNull("bodyParts")) return record.json.getJSONArray("bodyParts").strings()
+        return normalized(record.json.optJSONArray("exercises")?.objects().orEmpty().mapNotNull { ex ->
+            ex.optString("bodyPart").takeIf(::valid)
+        })
+    }
     fun normalized(values: List<String>, catalog: List<String> = parts): List<String> {
         val clean=values.filter(::valid).distinct()
         return catalog.filter {it in clean} + clean.filter {it !in catalog}

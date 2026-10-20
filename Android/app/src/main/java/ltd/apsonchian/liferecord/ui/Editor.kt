@@ -114,7 +114,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
     var date by remember { mutableStateOf(r.date.localText()) }
     var end by remember { mutableStateOf(if(r.json.isNull("endDate")) "" else r.json.optDouble("endDate").localText()) }
     var kind by remember { mutableStateOf(r.json.optString("kind", "午餐")) }
-    var selectedParts by remember { mutableStateOf(r.json.optJSONArray("bodyParts")?.strings().orEmpty()) }
+    var selectedParts by remember { mutableStateOf(WorkoutParts.of(r)) }
     var exercises by remember { mutableStateOf(r.json.optJSONArray("exercises")?.objects().orEmpty()) }
     var exEdit by remember { mutableStateOf<Int?>(null) }
     var images by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
@@ -137,7 +137,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         val numeric = when(r.type) { RecordType.MEAL, RecordType.FAVORITE -> listOf("calories","protein","carbs","fat","fiber"); RecordType.BODY -> listOf("weight","bodyFat","waist"); else -> emptyList() }
         numeric.forEach { key -> val text = fields[key].orEmpty(); if(text.isBlank() && key in listOf("bodyFat","waist")) edited.json.put(key, JSONObject.NULL) else edited.json.put(key, text.toDoubleOrNull() ?: error("请检查数字输入")) }
         if(r.type in listOf(RecordType.MEAL, RecordType.FAVORITE)) { edited.json.put("kind", kind); edited.json.put("inputText", input) }
-        if(r.type == RecordType.WORKOUT) { edited.json.put("endDate", if(end.isBlank()) JSONObject.NULL else if(!r.json.isNull("endDate") && end == r.json.optDouble("endDate").localText()) r.json.optDouble("endDate") else end.timestamp()); edited.json.put("bodyParts", JSONArray(selectedParts)); edited.json.put("exercises", JSONArray(exercises)) }
+        if(r.type == RecordType.WORKOUT) { edited.json.put("endDate", if(end.isBlank()) JSONObject.NULL else if(!r.json.isNull("endDate") && end == r.json.optDouble("endDate").localText()) r.json.optDouble("endDate") else end.timestamp()); if(r.json.has("bodyParts") || selectedParts != WorkoutParts.of(r)) edited.json.put("bodyParts", JSONArray(selectedParts)); edited.json.put("exercises", JSONArray(exercises)) }
         edited
     }
     FullForm("编辑${r.type.label}", dismiss, actions = {

@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -104,33 +105,37 @@ import java.time.format.DateTimeFormatter
 }
 
 @Composable fun PageTitle(title: String, subtitle: String, trailing: @Composable (() -> Unit)? = null) {
-    Column(Modifier.fillMaxWidth().semantics { contentDescription=subtitle }) {
-        Row(Modifier.fillMaxWidth().height(44.dp),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically) { trailing?.invoke() }
-        Text(title,Modifier.padding(top=10.dp,bottom=4.dp).testTag("page-title").semantics { heading() },style=MaterialTheme.typography.headlineLarge)
+    Row(Modifier.fillMaxWidth().heightIn(min=64.dp).semantics {contentDescription=subtitle},verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            if(subtitle.isNotBlank()) Text(subtitle,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title,Modifier.testTag("page-title").semantics {heading()},style=MaterialTheme.typography.headlineLarge)
+        }
+        trailing?.invoke()
     }
 }
-@Composable fun Panel(modifier: Modifier = Modifier, tint:Color=MaterialTheme.colorScheme.primary, radius:androidx.compose.ui.unit.Dp=26.dp, content: @Composable ColumnScope.() -> Unit) {
-    val shape=RoundedCornerShape(radius)
-    Surface(modifier.fillMaxWidth().shadow(8.dp,shape,ambientColor=tint.copy(alpha=.045f),spotColor=Color.Black.copy(alpha=.025f)),shape=shape,color=MaterialTheme.colorScheme.surface,border=BorderStroke(.7.dp,tint.copy(alpha=.13f))) {
-        Column(Modifier.background(Brush.linearGradient(listOf(tint.copy(alpha=if(MaterialTheme.colorScheme.background.luminance()<.2f) .13f else .055f),Color.Transparent))).padding(20.dp),verticalArrangement=Arrangement.spacedBy(17.dp),content=content)
+@Composable fun Panel(modifier: Modifier = Modifier, tint:Color=MaterialTheme.colorScheme.primary, radius:androidx.compose.ui.unit.Dp=22.dp, content: @Composable ColumnScope.() -> Unit) {
+    Surface(modifier.fillMaxWidth(),shape=RoundedCornerShape(radius),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,MaterialTheme.colorScheme.onSurface.copy(alpha=.055f))) {
+        Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
     }
 }
 @Composable fun Empty(title: String, text: String) { Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(title, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
 @Composable fun Today(vm: AppViewModel, s: Snapshot, date: LocalDate, select: (LocalDate) -> Unit, detail: (Record) -> Unit, add: (RecordType) -> Unit, notify: (String) -> Unit, edit: (Record) -> Unit, coach: (String) -> Unit, history: (Boolean) -> Unit) {
     var datePicker by remember { mutableStateOf(false) }
     var addMenu by remember { mutableStateOf(false) }
-    val meals = Insights.daily(s.records, date)
-    val body = s.records.filter { it.type == RecordType.BODY }.maxByOrNull { it.date }
-    val workouts = s.records.filter { it.type == RecordType.WORKOUT && it.date.day() == date }.sortedByDescending { it.date }
+    val preview = s.records.none { !it.demo && it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) }
+    val visible = s.records.filter { !it.demo || preview }
+    val meals = Insights.daily(visible, date)
+    val body = visible.filter { it.type == RecordType.BODY }.maxByOrNull { it.date }
+    val workouts = visible.filter { it.type == RecordType.WORKOUT && it.date.day() == date }.sortedByDescending { it.date }
     val status by vm.status.collectAsState()
     val activeWorkout = s.records.firstOrNull { it.type == RecordType.WORKOUT && it.json.isNull("endDate") }
     var liveNow by remember { mutableDoubleStateOf(now()) }
     LaunchedEffect(activeWorkout?.id) { if(activeWorkout != null) while(true) { liveNow = now(); delay(1000) } }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 20.dp, 16.dp, glassPageBottomPadding()), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 20.dp, 16.dp, glassPageBottomPadding()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            val greeting = when { LocalTime.now().hour < 11 -> "早上好"; LocalTime.now().hour < 18 -> "今天状态如何"; else -> "晚上好" }
+            val greeting = when { LocalTime.now().hour < 11 -> "早上好"; LocalTime.now().hour < 18 -> "下午好"; else -> "晚上好" }
             val name = s.profile.optString("displayName")
-            PageTitle(greeting + if(name.isBlank()) "" else "，$name", "生活记录") {
+            PageTitle(greeting + if(name.isBlank()) "" else "，$name", "${if(date==LocalDate.now()) "今日" else "回顾"} · ${date.format(DateTimeFormatter.ofPattern("M月d日 E",java.util.Locale.CHINA))}") {
                 Box {
                     SymbolButton(Glyph.Plus,"添加记录",{addMenu=true})
                     DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
@@ -141,7 +146,7 @@ import java.time.format.DateTimeFormatter
             }
         }
         item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha=.25f)).padding(10.dp),verticalArrangement=Arrangement.spacedBy(11.dp)) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp),verticalArrangement=Arrangement.spacedBy(11.dp)) {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha=.08f)).clickable {select(date.minusDays(1))},contentAlignment=Alignment.Center) { AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.onSurface,Modifier.size(18.dp).graphicsLayer {rotationZ=180f},"前一天") }
                     Row(Modifier.weight(1f).heightIn(min=44.dp).clickable {datePicker=true},horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
@@ -153,50 +158,24 @@ import java.time.format.DateTimeFormatter
                 }
                 val monday=date.minusDays((date.dayOfWeek.value-1).toLong())
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(2.dp)) {
-                    (0L..6L).forEach { i -> val d=monday.plusDays(i);val entries=Insights.daily(s.records,d);val selected=d==date
-                        Column(Modifier.weight(1f).clickable {select(d)}.semantics {contentDescription="$d"},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                            Box(Modifier.size(20.dp).background(if(selected) Meals else Color.Transparent,CircleShape),contentAlignment=Alignment.Center) { Text(listOf("一","二","三","四","五","六","日")[i.toInt()],style=MaterialTheme.typography.labelSmall.copy(fontWeight=FontWeight.Bold),color=if(selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant) }
-                            Box(Modifier.size(42.dp).graphicsLayer {alpha=if(selected || entries.isNotEmpty()) 1f else .72f},contentAlignment=Alignment.Center) {
-                                Ring(Modifier.fillMaxSize(),listOf((Insights.total(entries,"protein")/s.profile.optDouble("proteinGoal").coerceAtLeast(1.0)).toFloat(),(Insights.total(entries,"carbs")/s.profile.optDouble("carbsGoal").coerceAtLeast(1.0)).toFloat(),entries.size/4f),5f)
-                                Text(d.dayOfMonth.toString(),fontSize=8.sp,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                    (0L..6L).forEach { i -> val d=monday.plusDays(i);val entries=Insights.daily(visible,d);val selected=d==date
+                        Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(selected) MaterialTheme.colorScheme.primary else Color.Transparent).selectable(selected,role=Role.Tab,onClick={select(d)}).semantics {contentDescription="$d"}.padding(vertical=9.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Text(listOf("一","二","三","四","五","六","日")[i.toInt()],style=MaterialTheme.typography.labelSmall,color=if(selected) Color.White.copy(alpha=.8f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(d.dayOfMonth.toString(),style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.SemiBold),color=if(selected) Color.White else MaterialTheme.colorScheme.onSurface)
+                            Box(Modifier.size(4.dp).background(if(entries.isNotEmpty()) {if(selected) Color.White else MaterialTheme.colorScheme.primary} else Color.Transparent,CircleShape))
                         }
                     }
                 }
             }
         }
-        if(meals.any {it.demo} || s.records.any {it.demo && it.type==RecordType.BODY}) item {
+        if(s.records.any {it.demo}) item {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha=.3f)).padding(12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                 AppIcon(Glyph.Archive,MaterialTheme.colorScheme.primary,Modifier.size(20.dp))
-                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {Text("已加载示例数据",style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold));Text("用于预览，不计入真实目标反馈",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                SoftButton(onClick=vm::clearDemo,shape=RoundedCornerShape(50),contentPadding=PaddingValues(horizontal=10.dp,vertical=5.dp),modifier=Modifier.height(32.dp)) {Text("清除",style=MaterialTheme.typography.labelMedium)}
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {Text(if(preview) "正在体验示例数据" else "示例已隐藏，正在展示真实记录",style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold));Text("用于预览，不计入真实目标反馈",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                SoftButton(onClick={runCatching {vm.clearDemo()}.onFailure {notify(it.message.orEmpty())}},shape=RoundedCornerShape(50),contentPadding=PaddingValues(horizontal=10.dp,vertical=5.dp),modifier=Modifier.height(32.dp)) {Text("清除",style=MaterialTheme.typography.labelMedium)}
             }
         }
-        item { Panel {
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
-                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {AppIcon(Glyph.Figure,MaterialTheme.colorScheme.primary,Modifier.size(20.dp));Text(s.profile.optString("fitnessGoal"),color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.titleMedium)}
-                Text("每日目标",Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha=.12f)).padding(horizontal=10.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold))
-            }
-            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) {
-                Box(Modifier.size(116.dp).semantics {contentDescription="今日营养圆环，用餐 ${meals.size} 次"},contentAlignment=Alignment.Center) {
-                    Ring(Modifier.fillMaxSize(),listOf((Insights.total(meals,"protein")/s.profile.optDouble("proteinGoal").coerceAtLeast(1.0)).toFloat(),(Insights.total(meals,"carbs")/s.profile.optDouble("carbsGoal").coerceAtLeast(1.0)).toFloat(),meals.size/4f),14f)
-                    Column(horizontalAlignment=Alignment.CenterHorizontally) {Text(meals.size.toString(),fontSize=20.sp,fontWeight=FontWeight.Bold);Text("餐",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                }
-                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                    Metric("蛋白质","${format(Insights.total(meals,"protein"))} / ${format(s.profile.optDouble("proteinGoal"))} g",Protein)
-                    Metric("碳水","${format(Insights.total(meals,"carbs"))} / ${format(s.profile.optDouble("carbsGoal"))} g",Carbs)
-                    Metric("体重",body?.let {String.format(java.util.Locale.ROOT,"%.1f kg",it.json.optDouble("weight"))} ?: "暂无记录",MaterialTheme.colorScheme.primary)
-                }
-            }
-            HorizontalDivider(color=MaterialTheme.colorScheme.onSurface.copy(alpha=.1f))
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Text(String.format(java.util.Locale.US,"%,.0f",Insights.total(meals,"calories")),fontSize=34.sp,fontWeight=FontWeight.SemiBold,letterSpacing=(-1).sp)
-                Text("千卡",Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.weight(1f))
-                val remaining=s.profile.optDouble("calorieGoal")-Insights.total(meals,"calories")
-                Text(if(remaining>=0) "还差 ${format(remaining)} 千卡" else "超出 ${format(-remaining)} 千卡",Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } }
+        item { DailySummary(s, meals, body, date==LocalDate.now()) }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ActionTile("记一餐", "拍照识别 · 手动记录", MaterialTheme.colorScheme.primary, Modifier.weight(1f)) { add(RecordType.MEAL) }
             ActionTile("记体重", "追踪趋势", Protein, Modifier.weight(1f)) { add(RecordType.BODY) }
@@ -241,6 +220,42 @@ import java.time.format.DateTimeFormatter
     }
     if(datePicker) RecordCalendar(date, s.records, { datePicker = false }, select)
 }
+@Composable private fun DailySummary(s:Snapshot,meals:List<Record>,body:Record?,today:Boolean) {
+    val calories=Insights.total(meals,"calories")
+    val goal=s.profile.optDouble("calorieGoal").coerceAtLeast(1.0)
+    val remaining=goal-calories
+    Panel {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            Text(if(today) "今日摄入" else "当日摄入",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
+            Text(s.profile.optString("fitnessGoal"),Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha=.09f)).padding(horizontal=10.dp,vertical=5.dp),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
+        }
+        Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+            Text(String.format(java.util.Locale.US,"%,.0f",calories),fontSize=40.sp,lineHeight=46.sp,fontWeight=FontWeight.Bold,letterSpacing=(-1.5).sp)
+            Text("/ ${format(goal)} 千卡",Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        LinearProgressIndicator(progress={(calories/goal).toFloat().coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),color=MaterialTheme.colorScheme.primary,trackColor=MaterialTheme.colorScheme.primary.copy(alpha=.09f))
+        Text(if(remaining>=0) "距目标还差 ${format(remaining)} 千卡" else "已超出目标 ${format(-remaining)} 千卡",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        HorizontalDivider(color=MaterialTheme.colorScheme.onSurface.copy(alpha=.06f))
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val stacked=maxWidth<300.dp || LocalDensity.current.fontScale>1.3f
+            val ring:@Composable ()->Unit={
+                Box(Modifier.size(88.dp).semantics {contentDescription="今日营养圆环，用餐 ${meals.size} 次"},contentAlignment=Alignment.Center) {
+                    Ring(Modifier.fillMaxSize(),listOf((Insights.total(meals,"protein")/s.profile.optDouble("proteinGoal").coerceAtLeast(1.0)).toFloat(),(Insights.total(meals,"carbs")/s.profile.optDouble("carbsGoal").coerceAtLeast(1.0)).toFloat(),meals.size/4f),8f)
+                    Text("${meals.size} 餐",style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold))
+                }
+            }
+            val metrics:@Composable ()->Unit={
+                Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    Metric("蛋白质","${format(Insights.total(meals,"protein"))} / ${format(s.profile.optDouble("proteinGoal"))} g",Protein)
+                    Metric("碳水","${format(Insights.total(meals,"carbs"))} / ${format(s.profile.optDouble("carbsGoal"))} g",Carbs)
+                }
+            }
+            if(stacked) Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {ring();metrics()}
+            else Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(24.dp)) {ring();Box(Modifier.weight(1f)) {metrics()}}
+        }
+        if(body!=null) Text("最近体重  ${String.format(java.util.Locale.ROOT,"%.1f",body.json.optDouble("weight"))} kg",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
 @Composable fun Metric(label:String,value:String,color:Color) {
     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
         Box(Modifier.size(9.dp).shadow(3.dp,CircleShape,ambientColor=color.copy(alpha=.3f),spotColor=color.copy(alpha=.3f)).background(color,CircleShape))
@@ -259,27 +274,19 @@ import java.time.format.DateTimeFormatter
                 val top = androidx.compose.ui.geometry.Offset(inset,inset); val dimensions = androidx.compose.ui.geometry.Size(diameter,diameter)
                 drawArc(color.copy(alpha=.13f),-90f,360f,false,top,dimensions,style=Stroke(stroke))
                 if(value>0) {
-                    drawIntoCanvas { canvas ->
-                        val bounds=android.graphics.RectF(inset,inset,inset+diameter,inset+diameter)
-                        val paint=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {style=android.graphics.Paint.Style.STROKE;strokeWidth=stroke;strokeCap=android.graphics.Paint.Cap.ROUND;this.color=color.toArgb()}
-                        paint.setShadowLayer(4.dp.toPx(),0f,1.dp.toPx(),color.copy(alpha=.34f).toArgb())
-                        canvas.nativeCanvas.drawArc(bounds,-90f,value*360f,false,paint)
-                        paint.setShadowLayer(2.6.dp.toPx(),1.2.dp.toPx(),2.2.dp.toPx(),Color.Black.copy(alpha=.2f).toArgb())
-                        canvas.nativeCanvas.drawArc(bounds,-90f,value*360f,false,paint)
-                    }
-                    val center=top+androidx.compose.ui.geometry.Offset(diameter/2,diameter/2)
-                    val gradient=Brush.sweepGradient(listOf(lerp(surface,color,.72f),color,lerp(surface,color,.88f),lerp(surface,color,.72f)),center)
-                    rotate(-90f,center) { drawArc(gradient,0f,value*360f,false,top,dimensions,style=Stroke(stroke,cap=StrokeCap.Round)) }
+                    drawArc(color,-90f,value*360f,false,top,dimensions,style=Stroke(stroke,cap=StrokeCap.Round))
                 }
             }
         }
     }
 }
 @Composable fun ActionTile(title:String,subtitle:String,tint:Color,modifier:Modifier,action:()->Unit) {
-    val shape=RoundedCornerShape(22.dp)
-    Column(modifier.clip(shape).background(MaterialTheme.colorScheme.surface).border(.7.dp,tint.copy(alpha=.13f),shape).background(Brush.linearGradient(listOf(tint.copy(alpha=if(MaterialTheme.colorScheme.background.luminance()<.2f) .13f else .055f),Color.Transparent))).clickable(onClick=action).padding(17.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {IconBadge(if(title=="记一餐") Glyph.Meal else Glyph.Weight,tint);Spacer(Modifier.weight(1f));Box(Modifier.size(26.dp).background(tint.copy(alpha=.08f),CircleShape),contentAlignment=Alignment.Center) {AppIcon(Glyph.Plus,tint,Modifier.size(14.dp))}}
-        Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {Text(title,style=MaterialTheme.typography.titleMedium);Text(subtitle,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+    Row(modifier.heightIn(min=88.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).clickable(onClick=action).padding(14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+        IconBadge(if(title=="记一餐") Glyph.Meal else Glyph.Weight,tint,36.dp)
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            Text(title,style=MaterialTheme.typography.titleMedium)
+            Text(if(title=="记一餐") "拍照 / 手动" else "追踪变化",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 @Composable private fun MealRow(record:Record,open:()->Unit) {
@@ -305,14 +312,3 @@ import java.time.format.DateTimeFormatter
     }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "查看详情", tint = MaterialTheme.colorScheme.onSurfaceVariant)
 } }
-@Composable fun Onboarding(vm: AppViewModel) {
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).systemBarsPadding().padding(28.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        Spacer(Modifier.height(36.dp)); Ring(Modifier.size(140.dp), listOf(0.82f,0.64f,0.72f), 12f)
-        Text("把进步，\n记在每一天", style = MaterialTheme.typography.headlineLarge)
-        Text("饮食、训练和身体变化，在一个地方看见。", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Panel { Text("一处记录，随时回顾", style = MaterialTheme.typography.titleMedium); Text("离线记录随时可用；配置私有同步密钥后，可与 iOS 和网页共享数据。AI 接口由你选择。") }
-        Text("记录保存在本机。仅在你启用同步或使用 AI 时，相关数据会发送至配置的服务。", style = MaterialTheme.typography.bodyMedium)
-        AppButton(onClick = { vm.completeOnboarding() }, Modifier.fillMaxWidth().height(54.dp)) { Text("开始我的记录") }
-        SoftButton(onClick = { vm.seedDemo(); vm.completeOnboarding() }, Modifier.fillMaxWidth()) { Text("先看看示例数据") }
-    }
-}

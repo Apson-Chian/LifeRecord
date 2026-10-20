@@ -1,4 +1,5 @@
 const API_BASE = "/liferecord-api";
+const MAX_MEAL_PHOTOS = 12;
 const LEGACY_STORAGE_KEY = "liferecord.web.v1";
 const UI_DATE_KEY = "liferecord.selected-date";
 const symbols = { 早餐: "☀", 午餐: "◐", 晚餐: "☾", 加餐: "◇" };
@@ -74,7 +75,7 @@ async function api(path, options = {}) {
   } finally { clearTimeout(timeout); }
 
   if(generation !== identityGeneration) throw new Error("账号已更换，请重试");
-  if (response.status === 401 && path !== "/auth") {
+  if (response.status === 401 && !["/auth", "/account/login", "/account/register"].includes(path)) {
     clearPrivateState();
     showAuth();
     throw new Error("需要同步密钥");
@@ -282,7 +283,7 @@ async function preparedImageBase64(file) {
 
 async function uploadMealPhotos(mealId, files) {
   const imageIDs = [];
-  for (const file of files.slice(0, 6)) {
+  for (const file of files.slice(0, MAX_MEAL_PHOTOS)) {
     const base64 = await preparedImageBase64(file);
     const result = await api("/images", { method: "POST", body: JSON.stringify({ mealId, base64 }) });
     imageIDs.push(result.id);
@@ -421,20 +422,84 @@ function openWeightDialog() { editBodyRecord(); }
 render();
 boot();
 
+function updateAuthMode() {
+  const mode = $("#authMode").value;
+  const registering = mode === 'register';
+  const keyOnly = mode === 'key';
+  for (const [id, visible] of [['authTokenField', keyOnly], ['authUsernameField', !keyOnly], ['authPasswordField', !keyOnly], ['authConfirmationField', registering]]) {
+    const field = $('#'+id);
+    field.hidden = !visible;
+    field.querySelector('input').required = visible;
+    field.querySelector('input').disabled = !visible;
+  }
+  $('#authPasswordField input').autocomplete = registering ? 'new-password' : 'current-password';
+  $('#authPasswordField input').minLength = registering ? 10 : 1;
+  $('#authSubmit').textContent = registering ? '注册并同步' : keyOnly ? '安全连接' : '登录并同步';
+  $('#authTitle').textContent = registering ? '注册 LifeRecord' : '欢迎回来';
+  $('#authError').textContent = '';
+  for (const input of $('#authForm').querySelectorAll('input[type="password"]')) input.value = '';
+}
+$('#authMode').addEventListener('change', updateAuthMode);
+$('#authDialog').addEventListener('close', () => {
+  for (const input of $('#authForm').querySelectorAll('input[type="password"]')) input.value = '';
+});
+$('#accountPasswordDialog').addEventListener('close', () => $('#accountPasswordForm').reset());
+updateAuthMode();
+
 $("#authForm").addEventListener("submit", async event => {
   event.preventDefault();
   const form = event.currentTarget;
-  const token = new FormData(form).get("token").trim();
+  const mode = $('#authMode').value;
+  const values = new FormData(form);
+  const username = String(values.get('username') || '').trim();
+  const password = String(values.get('password') || '');
+  const submit = $('#authSubmit');
+  if(submit.disabled) return;
   $("#authError").textContent = "";
+  submit.disabled = true;
   try {
-    await api("/auth", { method: "POST", body: JSON.stringify({ token }) });
+    if(mode === 'register' && password !== values.get('confirmation')) throw new Error('两次输入的密码不一致');
+    if(mode === 'key') await api('/auth', {method:'POST', body:JSON.stringify({token:String(values.get('token') || '').trim()})});
+    if(mode === 'register') await api('/account/register', {method:'POST', body:JSON.stringify({username,password})});
+    if(mode === 'login') await api('/account/login', {method:'POST', body:JSON.stringify({username,password})});
+    clearPrivateState();
     connected = true;
     $("#authDialog").close();
-    form.reset();
+    form.reset(); updateAuthMode();
     await boot();
   } catch (error) {
     $("#authError").textContent = error.message;
-  }
+  } finally { submit.disabled = false; }
+});
+
+$('#accountPasswordButton').addEventListener('click', async () => {
+  try {
+    const account = await api('/account/me');
+    $('#accountUsername').value = account.username || '';
+    $('#accountCurrentField').hidden = !account.username;
+    $('#accountCurrentPassword').required = !!account.username;
+    $('#accountPasswordForm').reset();
+    $('#accountUsername').value = account.username || '';
+    $('#accountPasswordError').textContent = '';
+    $('#accountPasswordDialog').showModal();
+  } catch(error) { showToast(error.message); }
+});
+$('#accountPasswordForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  if(submit.disabled) return;
+  $('#accountPasswordError').textContent = '';
+  submit.disabled = true;
+  try {
+    const values = new FormData(form);
+    const password = values.get('password');
+    if(password !== values.get('confirmation')) throw new Error('两次输入的密码不一致');
+    await api('/account/credentials', {method:'POST',body:JSON.stringify({username:values.get('username'),password,currentPassword:values.get('currentPassword')})});
+    form.reset(); $('#accountPasswordDialog').close();
+    showToast('账号密码已保存，其他设备需重新登录');
+  } catch(error) { $('#accountPasswordError').textContent = error.message; }
+  finally { submit.disabled = false; }
 });
 
 $("#mealPreview").addEventListener("click", event => {
@@ -496,7 +561,7 @@ $("#mealForm").addEventListener("submit", async event => {
     const files = Array.from(form.elements.photos.files || []);
     const existing = editingMealID ? state.meals.find(item => item.id === editingMealID) : null;
     if (editingMealID && !existing) throw new Error("该记录已被删除，请关闭后重试");
-    if (files.length + retainedPhotoIDs.length > 6) throw new Error("每餐合计最多保存 6 张照片");
+    if (files.length + retainedPhotoIDs.length > MAX_MEAL_PHOTOS) throw new Error("每餐合计最多保存 12 张照片");
     if (existing && existing.updatedAt !== editingMealVersion) throw new Error("该记录已在其他设备更新，请关闭后重新编辑");
     const date = existing && data.get("date") === editingDateInput ? existing.date : new Date(data.get("date")).getTime() / 1000;
     if (!Number.isFinite(date) || !data.get("name").trim()) throw new Error("请填写有效的名称和时间");

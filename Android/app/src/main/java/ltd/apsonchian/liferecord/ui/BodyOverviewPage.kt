@@ -8,8 +8,10 @@ import androidx.compose.ui.unit.dp
 import ltd.apsonchian.liferecord.data.*
 
 @Composable fun BodyOverviewPage(records:List<Record>,dismiss:()->Unit,detail:(Record)->Unit) {
-    val summary=BodyOverview.summarize(records)
+    val preview=records.any {it.demo} && records.none {!it.demo && it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT)}
+    val summary=BodyOverview.summarize(records,includeDemo=preview)
     SubPage("身体总览",dismiss) {
+        if(preview) Text("示例预览 · 合成身体测量",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.primary)
         Panel {
             Text("趋势体重",style=MaterialTheme.typography.titleMedium)
             Text(summary.points.lastOrNull()?.trend?.let {"${format(it)} kg"} ?: "—",style=MaterialTheme.typography.headlineLarge)
@@ -31,7 +33,7 @@ import ltd.apsonchian.liferecord.data.*
             Text(summary.composition?.let {"依据 ${it.date.localText()} 同一次测量估算；瘦体重不等于肌肉量。"} ?: "记录体重和体脂率后查看估算。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text("原始测量",style=MaterialTheme.typography.titleMedium)
-        records.filter {it.type==RecordType.BODY && !it.demo && it.date<=now()}.sortedByDescending {it.date}.forEach { r -> RecordRow(r) {detail(r)} }
+        records.filter {it.type==RecordType.BODY && (preview || !it.demo) && it.date<=now()}.sortedByDescending {it.date}.forEach { r -> RecordRow(r) {detail(r)} }
     }
 }
 @Composable internal fun OverviewValue(label:String,value:String) {

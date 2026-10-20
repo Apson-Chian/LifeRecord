@@ -80,6 +80,35 @@ struct SavedAPIProfile: Codable, Identifiable {
     var values: [String: String]
 }
 
+struct ProfileDraft {
+    var originalUpdatedAt: Date?
+    var displayName = ""
+    var fitnessGoal = FitnessGoal.maintain
+    var height = 170.0
+    var baselineWeight = 70.0
+    var targetWeight = 70.0
+    var weeklyWeightTarget = 0.0
+    var calorieGoal = 2000.0
+    var proteinGoal = 100.0
+    var carbsGoal = 250.0
+    var fatGoal = 60.0
+
+    func validate() throws {
+        guard displayName.count <= 10000 else { throw RecordInput.Invalid(field: "displayName", reason: "最多 10000 字符") }
+        let values = [height, baselineWeight, targetWeight, weeklyWeightTarget, calorieGoal, proteinGoal, carbsGoal, fatGoal]
+        for ((field, low, high), value) in zip(RecordInput.profileLimits, values) {
+            try RecordInput.number(value, field: field, low: low, high: high)
+        }
+    }
+    mutating func applyTemplate() {
+        switch fitnessGoal {
+        case .gainMuscle: calorieGoal = 2600; proteinGoal = 130; carbsGoal = 340; fatGoal = 70; weeklyWeightTarget = 0.25
+        case .loseFat: calorieGoal = 2000; proteinGoal = 145; carbsGoal = 210; fatGoal = 65; weeklyWeightTarget = -0.35
+        case .maintain: calorieGoal = 2300; proteinGoal = 125; carbsGoal = 285; fatGoal = 70; weeklyWeightTarget = 0
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AppSettings {
@@ -293,6 +322,26 @@ final class AppSettings {
         defaults.removeObject(forKey:"ai.migratedLegacyEndpoint")
         profileUpdatedAt=Date(timeIntervalSince1970:1);save(1.0,Key.profileUpdatedAt)
         isApplyingSyncedProfile=false
+    }
+
+    func profileDraft() -> ProfileDraft {
+        ProfileDraft(originalUpdatedAt: profileUpdatedAt, displayName: displayName, fitnessGoal: fitnessGoal,
+                     height: height, baselineWeight: baselineWeight, targetWeight: targetWeight,
+                     weeklyWeightTarget: weeklyWeightTarget, calorieGoal: calorieGoal,
+                     proteinGoal: proteinGoal, carbsGoal: carbsGoal, fatGoal: fatGoal)
+    }
+
+    func saveProfileDraft(_ draft: ProfileDraft) throws {
+        try draft.validate()
+        guard draft.originalUpdatedAt == profileUpdatedAt else {
+            throw RecordInput.Invalid(field: "profile", reason: "目标已更新，请保留草稿并重新核对")
+        }
+        let profile = SyncedProfile(updatedAt: Date.now.timeIntervalSince1970,
+            displayName: draft.displayName, fitnessGoal: draft.fitnessGoal.rawValue, height: draft.height,
+            baselineWeight: draft.baselineWeight, targetWeight: draft.targetWeight,
+            weeklyWeightTarget: draft.weeklyWeightTarget, calorieGoal: draft.calorieGoal,
+            proteinGoal: draft.proteinGoal, carbsGoal: draft.carbsGoal, fatGoal: draft.fatGoal)
+        applySyncedProfile(profile, updatedAt: Date(timeIntervalSince1970: profile.updatedAt))
     }
 
     func applyGoalTemplate(_ goal: FitnessGoal) {

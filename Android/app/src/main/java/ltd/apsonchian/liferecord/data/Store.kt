@@ -98,12 +98,12 @@ class Store(context: Context, databaseName: String = "liferecord.db") : SQLiteOp
     }
 }
 /** Secrets are encrypted with a non-exportable Android Keystore AES key. Backup is disabled. */
-class Secrets(context: Context) {
-    private val preferences = context.getSharedPreferences("secrets", Context.MODE_PRIVATE)
+class Secrets(context: Context, preferenceName: String = "secrets", private val keyAlias: String = "liferecord.secrets") {
+    private val preferences = context.getSharedPreferences(preferenceName, Context.MODE_PRIVATE)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        return (store.getKey("liferecord.secrets", null) as? SecretKey) ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder("liferecord.secrets", KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
+        return (store.getKey(keyAlias, null) as? SecretKey) ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+            init(KeyGenParameterSpec.Builder(keyAlias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()
     }
     fun clear() { check(preferences.edit().clear().commit()) { "密钥清除失败" } }

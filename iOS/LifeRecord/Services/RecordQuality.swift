@@ -33,6 +33,7 @@ enum InsightRecords {
         var id = UUID()
         var date: Date
         var endDate: Date?
+        var isDemo = false
         var updatedAt = Date.distantPast
     }
 }
@@ -110,7 +111,7 @@ enum RecordQuality {
                 previous = metric
             }
         }
-        for workout in workouts {
+        for workout in workouts where !workout.isDemo {
             if workout.date > now.addingTimeInterval(300) || workout.endDate.map({ $0 > now.addingTimeInterval(300) }) == true {
                 add(.futureDate, .workout, [workout.id], [workout.updatedAt], workout.date, "训练时间在未来", "核对训练起止时间，未来训练不会计入目标反馈。")
             }

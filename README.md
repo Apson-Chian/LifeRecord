@@ -55,15 +55,15 @@ Android 预览使用示例或合成记录。
 
 | 平台 | 使用方式 |
 | --- | --- |
-| Android 8.0+ | [下载 beta.5](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.5) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
+| Android 8.0+ | [下载 beta.6](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.6) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
 | iOS 17+ | 使用 Xcode 构建 [iOS 工程](iOS/README.md)，目前尚未提供 TestFlight 下载 |
 | Web | [网页体验](https://apsonchian.ltd/liferecord-default/) |
 
 新安装默认使用服务器提供的 AI 服务，连接自己的独立同步账号即可使用，无需填写上游 API Key；也可以切换到自定义模型接口。已有安装保留用户原先选择的接口。
 
-首次使用可以直接从空白记录开始，填写自己的目标；照片识别和智能教练需要联网并配置服务。跨端同步需在各端填写同一账号的同步密钥，现有在线服务采用邀请制。[账号与同步说明](Docs/public-beta.md)
+首次使用可以直接从空白记录开始，填写自己的目标；照片识别和智能教练需要联网并配置服务。当前开发版 Android/网页支持用户自行注册账号密码，无需管理员分配；旧同步密钥继续兼容，iOS 暂沿用密钥连接。账号客户端已包含在 beta.6；自主注册后端尚未部署到上述在线服务，服务器未升级时请继续使用密钥连接。[账号与同步说明](Docs/public-beta.md)
 
-**版本升级**：beta.5 可直接覆盖 beta.4 的两个版本，保留本机数据；beta.3 及更早版本需先核对同步记录、另存本机内容，再卸载重装，本机对话和部分照片不参与同步。[迁移步骤与更新说明](Docs/android-release-1.4-beta4.md#签名与发布状态)
+**版本升级**：beta.6 可直接覆盖 beta.4/5，保留本机数据；beta.3 及更早版本需先核对同步记录、另存本机内容，再卸载重装，本机对话和部分照片不参与同步。[本版更新说明](Docs/android-release-1.4-beta6.md) · [旧版本迁移](Docs/android-release-1.4-beta4.md#签名与发布状态)
 
 ## 技术与目录
 

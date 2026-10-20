@@ -52,6 +52,16 @@ import android.net.Uri
     val ai by vm.config.collectAsState()
     if(page.isEmpty()) LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,8.dp,16.dp,glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(24.dp)) {
         item {PageTitle("设置","偏好与个人目标")}
+        item { Panel(Modifier.clickable {page="sync"}) {
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
+                IconBadge(Glyph.Person,MaterialTheme.colorScheme.primary,48.dp)
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                    Text(vm.app.store.get("sync.username").takeIf {vm.app.secrets.get("sync").isNotBlank()}.orEmpty().ifBlank {"你的 LifeRecord"},style=MaterialTheme.typography.titleLarge)
+                    Text(if(vm.app.secrets.get("sync").isBlank()) "登录账号，让记录在设备间同步" else "账号与同步设置",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(16.dp))
+            }
+        } }
         item {SettingsGroup("日常使用") {
             DestinationRow("个人与目标","${s.profile.optString("fitnessGoal")} · 身体与营养",Glyph.Person,MaterialTheme.colorScheme.primary) {page="profile"}
             GroupDivider()
@@ -62,7 +72,7 @@ import android.net.Uri
         item {SettingsGroup("应用与数据") {
             DestinationRow("外观与个性化","",Glyph.Person,Protein) {page="appearance"}
             GroupDivider()
-            DestinationRow("跨设备同步",status,Glyph.Sync,Color(0xFF29AD5E)) {page="sync"}
+            DestinationRow("账号与同步",status,Glyph.Sync,Color(0xFF29AD5E)) {page="sync"}
             GroupDivider()
             DestinationRow("隐私、数据与帮助","",Glyph.Shield,Protein) {page="privacy"}
         }}
@@ -85,7 +95,8 @@ import android.net.Uri
             SettingsRow("导出记录 JSON","包含照片编号；照片字节、对话和密钥不导出") {export.launch("LifeRecord-${java.time.LocalDate.now()}.json")}
             SettingsRow("重看引导","了解记录、AI 与私有同步") {page="";vm.onboarding.value=true}
             SettingsRow("清除本机数据","清除记录、对话、照片与密钥；云端记录保留") {reset=true}
-            SettingsRow("清除示例数据","仅清除带有示例标记的记录") {clear=true}
+            SettingsRow("载入完整示例","近 30 天饮食、身体、训练和示例对话") {runCatching {vm.seedDemo();notify("示例已载入；有真实记录时，图表优先展示真实记录")}.onFailure {notify(it.message.orEmpty())}}
+            SettingsRow("清除示例数据","仅清除带有示例标记的记录和对话") {clear=true}
             Text("记录保存在本机，密钥由 Android Keystore 加密。使用 AI 时，记录上下文会发送至你选择的接口；启用同步后才会上传至私有服务器。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
         "appearance" -> SettingsForm("外观与个性化",{page=""}) {
@@ -113,14 +124,14 @@ import android.net.Uri
         title = "清除示例数据？",
         message = "你自己记录和同步的内容会保留。",
         onDismiss = { clear = false },
-        onConfirm = { vm.clearDemo(); clear = false; notify("示例数据已清除") },
+        onConfirm = { runCatching {vm.clearDemo(); clear = false; notify("示例数据已清除")}.onFailure {notify(it.message.orEmpty())} },
         confirmLabel = "清除"
     )
 }
 @Composable private fun SettingsGroup(title:String,content:@Composable ColumnScope.()->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        Text(title,Modifier.padding(start=16.dp),style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.Medium),color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(MaterialTheme.colorScheme.surface),content=content)
+        Text(title,Modifier.padding(start=16.dp),style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface),content=content)
     }
 }
 @Composable private fun DestinationRow(title:String,subtitle:String,kind:Glyph,tint:Color,onClick:()->Unit) {
@@ -271,20 +282,86 @@ import android.net.Uri
     }
 }
 @Composable fun SyncSettings(vm:AppViewModel,dismiss:()->Unit,notify:(String)->Unit) {
-    var base by remember { mutableStateOf(vm.app.store.get("sync.base",Network.BASE)) }; var key by remember { mutableStateOf("") };var error by remember { mutableStateOf("") };var disable by remember { mutableStateOf(false) }
-    val status by vm.status.collectAsState();val busy by vm.syncing.collectAsState()
-    SettingsForm("私有同步",dismiss) {
-        Text("在安卓、iOS 和网页中使用你自己的独立同步密钥，就能共享餐食、身体测量、训练和每日目标。",style=MaterialTheme.typography.bodyLarge)
-        Panel { Text(status); Text("每位测试者使用独立密钥，不能分享你的私人密钥。常用餐食、动作库和对话只保存在本机。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-        if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
-        TextFieldRow("同步服务器（HTTPS）",base,{base=it})
-        SecretFieldRow("独立用户同步密钥",key,{key=it})
-        AppButton(enabled=key.isNotBlank() && !busy,onClick={runCatching { vm.saveSyncKey(key,base);key="";notify("密钥已保存") }.onFailure { error=it.message.orEmpty() }},modifier=Modifier.fillMaxWidth()) { Text("保存密钥并同步") }
-        SoftButton(enabled=!busy,onClick={vm.sync()},modifier=Modifier.fillMaxWidth()) { Text(if(busy) "正在同步…" else "立即同步") }
-        Text("启用后，App 在前台每 15 秒同步一次。离线记录和照片会保留，联网后继续上传。",style=MaterialTheme.typography.bodyMedium)
-        TextButton(onClick={disable=true}) { Text("关闭同步") }
+    var base by remember { mutableStateOf(vm.app.store.get("sync.base",Network.BASE)) }
+    var key by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf(vm.app.store.get("sync.username")) }
+    // Never save passwords to instance state or preferences.
+    var password by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    var currentPassword by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var disable by remember { mutableStateOf(false) }
+    var mode by rememberSaveable { mutableStateOf("login") }
+    var working by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val status by vm.status.collectAsState()
+    val syncing by vm.syncing.collectAsState()
+    val busy = working || syncing
+    SettingsForm("账号与同步",dismiss) {
+        Panel {
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                IconBadge(Glyph.Shield,MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f)) {
+                    Text(if(vm.app.secrets.get("sync").isBlank()) "让记录，随你同行" else vm.app.store.get("sync.username").ifBlank {"已连接私有同步"},style=MaterialTheme.typography.titleLarge)
+                    Text(status,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Text("登录后同步餐食、身体测量、训练和目标。常用餐食、动作库和对话保留在本机。",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            (listOf("login" to "账号登录","register" to "注册账号") + (if(vm.app.secrets.get("sync").isNotBlank()) listOf("bind" to "设置账号密码") else emptyList()) + listOf("key" to "密钥连接")).forEach { (value,label) ->
+                FilterChip(selected=mode==value,enabled=!busy,onClick={mode=value;error="";password="";confirmation="";currentPassword=""},label={Text(label)})
+            }
+        }
+        if(error.isNotBlank()) Text(error,Modifier.semantics { liveRegion=LiveRegionMode.Polite },color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodyMedium)
+        Panel {
+            if(mode=="key") {
+                Text("使用原有同步密钥",style=MaterialTheme.typography.titleLarge)
+                AccountSecretField("独立用户同步密钥",key,{key=it},!busy)
+                AppButton(enabled=key.isNotBlank() && !busy,onClick={runCatching { vm.saveSyncKey(key,base);key="";error="";notify("密钥已保存") }.onFailure {error=it.message.orEmpty()}},modifier=Modifier.fillMaxWidth()) {Text("连接并同步")}
+            } else {
+                Text(if(mode=="register") "创建你的 LifeRecord 账号" else if(mode=="bind") "设置你的登录方式" else "欢迎回来",style=MaterialTheme.typography.titleLarge)
+                if(mode=="register") Text("自己设置账号和密码即可注册，无需邀请码。注册后自动登录，并同步这台设备尚未绑定账号的本机记录。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(mode=="bind") Text("填写当前密码可修改账号与密码。原来使用同步密钥的用户首次设置时，当前密码留空。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(username,{username=it},Modifier.fillMaxWidth(),enabled=!busy,label={Text("账号")},supportingText={Text("3–32 位字母、数字、下划线或点")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Ascii),shape=RoundedCornerShape(14.dp))
+                if(mode=="bind") AccountSecretField("当前密码（首次设置留空）",currentPassword,{currentPassword=it},!busy)
+                AccountSecretField(if(mode in listOf("bind","register")) "新密码（10–128 个字符）" else "密码",password,{password=it},!busy)
+                if(mode in listOf("bind","register")) AccountSecretField("确认新密码",confirmation,{confirmation=it},!busy)
+                AppButton(enabled=!busy && username.isNotBlank() && password.isNotBlank(),onClick={
+                    if(mode in listOf("bind","register") && (password!=confirmation || password.length !in 10..128)) {
+                        error=if(password!=confirmation) "两次输入的密码不一致" else "密码需要 10–128 个字符"
+                    } else {
+                        working=true;error=""
+                        scope.launch {
+                            try {
+                                vm.connectAccount(base,username,password,mode=="bind",currentPassword,register=mode=="register")
+                                password="";confirmation="";currentPassword="";mode="login"
+                                notify("账号已连接，正在同步记录")
+                            } catch(e:CancellationException) {throw e}
+                            catch(e:Exception) {error=e.message ?: "连接失败，请重试"}
+                            finally {working=false}
+                        }
+                    }
+                },modifier=Modifier.fillMaxWidth()) {
+                    if(working) {CircularProgressIndicator(Modifier.size(18.dp),color=MaterialTheme.colorScheme.onPrimary,strokeWidth=2.dp);Spacer(Modifier.width(8.dp))}
+                    Text(if(working) "正在连接…" else if(mode=="register") "注册并同步" else if(mode=="bind") "保存账号密码" else "登录并同步")
+                }
+            }
+        }
+        SettingsDisclosure("同步服务器") { TextFieldRow("同步服务器（HTTPS）",base,{base=it}) }
+        SoftButton(enabled=!busy && vm.app.secrets.get("sync").isNotBlank(),onClick=vm::sync,modifier=Modifier.fillMaxWidth()) {Text(if(syncing) "正在同步…" else "立即同步")}
+        Text("密码只用于登录，不保存在本机。登录凭据由 Android Keystore 加密保存；会话到期后重新登录。离线记录会在联网后继续同步。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        if(vm.app.secrets.get("sync").isNotBlank()) TextButton(enabled=!busy,onClick={disable=true}) {Text("关闭同步",color=MaterialTheme.colorScheme.error)}
     }
-    if(disable) AlertDialog(onDismissRequest={disable=false},title={Text("关闭同步？")},text={Text("本机记录会保留。需要恢复同步时，重新填写原密钥。")},confirmButton={TextButton(onClick={vm.saveSyncKey("");disable=false}) { Text("关闭同步") }},dismissButton={TextButton(onClick={disable=false}) { Text("取消") }})
+    if(disable) AlertDialog(onDismissRequest={disable=false},title={Text("关闭同步？")},text={Text("本机记录会保留。恢复时请使用原账号登录或填写原同步密钥。")},confirmButton={TextButton(onClick={runCatching {vm.saveSyncKey("");disable=false}.onFailure {error=it.message.orEmpty()}}) {Text("关闭同步")}},dismissButton={TextButton(onClick={disable=false}) {Text("取消")}})
+}
+@Composable private fun AccountSecretField(label:String,value:String,change:(String)->Unit,enabled:Boolean) {
+    var visible by remember { mutableStateOf(false) }
+    OutlinedTextField(value,change,Modifier.fillMaxWidth(),enabled=enabled,label={Text(label)},singleLine=true,
+        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password),
+        visualTransformation=if(visible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon={TextButton(enabled=enabled,onClick={visible=!visible}) {Text(if(visible) "隐藏" else "显示",style=MaterialTheme.typography.labelMedium)}},
+        shape=RoundedCornerShape(14.dp))
 }
 @Composable fun Library(vm:AppViewModel,type:RecordType,dismiss:()->Unit,notify:(String)->Unit) {
     val s by vm.snapshot.collectAsState(); var editor by remember { mutableStateOf<Record?>(null) };var selected by remember { mutableStateOf<Record?>(null) }

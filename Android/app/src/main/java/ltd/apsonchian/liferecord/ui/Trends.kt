@@ -52,10 +52,12 @@ import kotlin.math.abs
     val report by vm.weeklyReport.collectAsState()
     val today=at.day(); val start=if(range==0) LocalDate.MIN else today.minusDays(range.toLong()-1)
     val real=s.records.filter { !it.demo && it.date<=at }
-    val records=real.filter { it.date.day()>=start }
+    val preview = real.none { it.type in listOf(RecordType.MEAL, RecordType.BODY, RecordType.WORKOUT) } && s.records.any { it.demo }
+    val chartRecords = if(preview) s.records.filter { it.demo && it.date<=at } else real
+    val records=chartRecords.filter { it.date.day()>=start }
     val meals=records.filter { it.type==RecordType.MEAL && RecordQuality.validNutrition(it) }
-    val weights=BodyTrend.records(real,"weight",at).filter { it.day>=start }
-    val fat=BodyTrend.records(real,"bodyFat",at).filter { it.day>=start }
+    val weights=BodyTrend.records(chartRecords,"weight",at,includeDemo=preview).filter { it.day>=start }
+    val fat=BodyTrend.records(chartRecords,"bodyFat",at,includeDemo=preview).filter { it.day>=start }
     val workouts=records.filter { it.type==RecordType.WORKOUT }.sortedByDescending { it.date }
     val feedback=GoalFeedback.summarize(s.records,s.profile,range,at,acknowledged)
     val pending=RecordQuality.issues(s.records,at).filter { it.id !in acknowledged }
@@ -66,10 +68,10 @@ import kotlin.math.abs
         Text("有记录的日期才计入；空白日期表示未记录。今日仍可能变化。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         meals.sortedByDescending { it.date }.forEach { r -> RecordRow(r) { detail(r) } }
     }; return }
-    if(showCalendar) { WorkoutCalendarPage(s.records,{showCalendar=false},edit); return }
+    if(showCalendar) { WorkoutCalendarPage(chartRecords,{showCalendar=false},edit); return }
     if(workoutDetails) {WorkoutDetails(vm,workouts,{workoutDetails=false},edit,notify);return}
-    if(details) { RecordDataDetails(s,s.records.filter { !it.demo && it.date.day()>=start },{details=false},detail); return }
-    measurement?.let { field -> MeasurementDetail(real,field,start,{measurement=null},detail); return }
+    if(details) { RecordDataDetails(s,chartRecords.filter { it.date.day()>=start },{details=false},detail); return }
+    measurement?.let { field -> MeasurementDetail(chartRecords,field,start,{measurement=null},detail); return }
     if(quality) { QualityReview(vm,s,{quality=false},detail,notify); return }
     if(showReport) { SubPage("AI 周报",{showReport=false}) {
         report.generatedAt?.let { Text("生成于 ${it.localText()} · 最近七天",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -78,6 +80,7 @@ import kotlin.math.abs
     }; return }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,20.dp,16.dp,glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         item { PageTitle("趋势","回顾训练与身体变化") { SymbolButton(Glyph.List,"查看全部数据详情",{details=true}) } }
+        if(preview) item { Panel { Text("示例预览",style=MaterialTheme.typography.titleMedium); Text("图表展示合成记录。添加真实记录后，趋势会自动展示你的数据；示例不计入目标反馈和周报。",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant) } }
         item { RangePicker(range) { range=it } }
         item { Panel(tint=Color(0xFF31B8C4)) {
             val teal=Color(0xFF31B8C4)
@@ -99,6 +102,8 @@ import kotlin.math.abs
                 DailyBarChart(days,if(range==0) minOf(days.first().day,today.minusDays(6)) else start,today,"分钟",teal,headline=false,tag="workout-chart",emptyMessage="当天无已完成训练记录")
             }
             if(workouts.any { it.json.isNull("endDate") }) Text("有训练进行中，结束后计入统计",style=MaterialTheme.typography.bodySmall,color=teal)
+            val byPart=workouts.flatMap {WorkoutParts.of(it)}.groupingBy {it}.eachCount()
+            if(byPart.isNotEmpty()) Text(byPart.entries.sortedByDescending {it.value}.joinToString(" · ") {"${it.key} ${it.value} 次"},style=MaterialTheme.typography.bodySmall)
             HorizontalDivider(color=MaterialTheme.colorScheme.onSurface.copy(alpha=.08f))
             Row(Modifier.fillMaxWidth().clickable {showCalendar=true}.padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 AppIcon(Glyph.Calendar,teal,Modifier.size(24.dp))
@@ -301,6 +306,7 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
     var bodyOverview by rememberSaveable { mutableStateOf(false) }
     var selectedDayText by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedDay=selectedDayText?.let(LocalDate::parse)
+    val preview=records.any {it.demo} && s.records.none {!it.demo && it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT)}
     if(bodyOverview) {BodyOverviewPage(s.records,{bodyOverview=false},detail);return}
     SubPage("数据详情",dismiss) {
         RecordOverview(s,records,selectedDay,{selectedDayText=it?.toString()},{bodyOverview=true})
@@ -308,7 +314,7 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         Text("全部记录",style=MaterialTheme.typography.titleLarge)
         OutlinedTextField(search,{search=it},Modifier.fillMaxWidth(),label={Text("搜索名称、备注与部位")},singleLine=true)
         Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) { FilterChip(filter==null,{filter=null},label={Text("全部")}); listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT).forEach { t -> FilterChip(filter==t,{filter=t},label={Text(t.label)}) } }
-        val visible=(if(selectedDay==null) records else s.records.filter {!it.demo && it.date<=now()}).filter { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) && (filter==null || it.type==filter) && (selectedDay==null || it.date.day()==selectedDay) && (search.isBlank() || it.title.contains(search,true) || it.json.optString("note").contains(search,true) || it.json.optJSONArray("exercises")?.objects()?.any { ex -> ex.optString("name").contains(search,true) || ex.optString("bodyPart").contains(search,true) }==true) }.sortedByDescending { it.date }
+        val visible=(if(selectedDay==null) records else s.records.filter {(preview || !it.demo) && it.date<=now()}).filter { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) && (filter==null || it.type==filter) && (selectedDay==null || it.date.day()==selectedDay) && (search.isBlank() || it.title.contains(search,true) || it.json.optString("note").contains(search,true) || it.json.optJSONArray("exercises")?.objects()?.any { ex -> ex.optString("name").contains(search,true) || ex.optString("bodyPart").contains(search,true) }==true) }.sortedByDescending { it.date }
         if(visible.isEmpty()) Empty("没有符合条件的记录","调整范围或搜索内容")
         visible.forEach { r -> Panel { RecordRow(r) { detail(r) } } }
     }

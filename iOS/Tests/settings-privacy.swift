@@ -42,6 +42,19 @@ struct SyncedProfile: Codable {
             } catch { }
             precondition(settings.coachName == "小满教练" && settings.coachAvatarData == avatar)
         }
+        // Invalid goal drafts must leave the entire preference domain untouched.
+        let beforeDraft = defaults.dictionaryRepresentation() as NSDictionary
+        var profileDraft = settings.profileDraft()
+        profileDraft.calorieGoal = 100
+        do { try settings.saveProfileDraft(profileDraft); preconditionFailure("invalid goal saved") } catch { }
+        precondition(beforeDraft == defaults.dictionaryRepresentation() as NSDictionary)
+        profileDraft = settings.profileDraft(); profileDraft.height = 70; profileDraft.weeklyWeightTarget = -3
+        try settings.saveProfileDraft(profileDraft)
+        precondition(settings.height == 70 && settings.weeklyWeightTarget == -3)
+        let staleDraft = settings.profileDraft()
+        settings.targetWeight = 71
+        do { try settings.saveProfileDraft(staleDraft); preconditionFailure("stale draft saved") } catch { }
+        precondition(settings.targetWeight == 71)
         // Draft editing happens in the view; only an explicit save changes the persisted identity.
         try settings.updateCoachIdentity(name: "小满教练", avatarData: nil)
         precondition(AppSettings(defaults: defaults).coachAvatarData == nil)

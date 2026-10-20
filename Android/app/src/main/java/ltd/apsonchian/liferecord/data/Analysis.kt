@@ -21,8 +21,8 @@ object BodyTrend {
         }
         return result
     }
-    fun records(records: List<Record>, field: String, at: Double = now()): List<Point> = series(records.filter {
-        it.type == RecordType.BODY && !it.demo && it.date <= at && !it.json.isNull(field) &&
+    fun records(records: List<Record>, field: String, at: Double = now(), includeDemo: Boolean = false): List<Point> = series(records.filter {
+        it.type == RecordType.BODY && (includeDemo || !it.demo) && it.date <= at && !it.json.isNull(field) &&
             (if(field == "weight") RecordQuality.validWeight(it) else it.json.optDouble(field) in 1.0..80.0)
     }.map { Sample(it.date, it.json.optDouble(field)) })
 }

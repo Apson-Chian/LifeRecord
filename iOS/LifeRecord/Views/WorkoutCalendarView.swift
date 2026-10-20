@@ -2,7 +2,14 @@ import SwiftUI
 import SwiftData
 
 struct WorkoutCalendarView: View {
-    @Query(sort: \WorkoutEntry.date) private var workouts: [WorkoutEntry]
+    @Query(sort: \WorkoutEntry.date) private var storedWorkouts: [WorkoutEntry]
+    @Query(filter: #Predicate<MealEntry> { !$0.isDemo }) private var realMealEntry: [MealEntry]
+    @Query(filter: #Predicate<BodyMetric> { !$0.isDemo }) private var realBodyMetric: [BodyMetric]
+
+    private var workouts: [WorkoutEntry] {
+        let hasReal = storedWorkouts.contains { !$0.isDemo } || !realMealEntry.isEmpty || !realBodyMetric.isEmpty
+        return storedWorkouts.filter { $0.isDemo != hasReal }
+    }
     @State private var displayedMonth = WorkoutCalendar.startOfMonth(containing: .now)
     @State private var selectedDay = WorkoutCalendar.calendar().startOfDay(for: .now)
     @State private var editing: WorkoutEntry?

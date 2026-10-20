@@ -11,7 +11,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class StorageTest {
     @Test fun catalogAndRecordUpdateRollBackTogetherWhenAnyDocumentIsInvalid() {
-        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val app=TestIsolation.app()
         val name="catalog-atomic-${java.util.UUID.randomUUID()}.db"
         try {Store(app,name).use {store->
             val before=Snapshot(emptyList(),defaultProfile(),emptyList());store.commit(before,mapOf("workout.bodyPartCatalog" to "[\"背部\"]"))
@@ -22,7 +22,7 @@ class StorageTest {
         }} finally {app.deleteDatabase(name)}
     }
     @Test fun privateCameraUriAcceptsPhotoAndDoesNotExposeMealOrDatabaseDirectories() {
-        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val app=TestIsolation.app()
         val uri=app.photos.captureUri()
         try {
             assertEquals("${app.packageName}.camera",uri.authority)
@@ -37,7 +37,7 @@ class StorageTest {
         assertThrows(java.io.FileNotFoundException::class.java) {app.contentResolver.openInputStream(uri)}
     }
     @Test fun oldJsonStoreMigratesToTypedFieldsWithoutLosingNestedData() {
-        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val app=TestIsolation.app()
         val name="migration-${java.util.UUID.randomUUID()}.db"
         val record=Record.create(RecordType.WORKOUT).apply { json.put("bodyParts",JSONArray().put("背部"));json.put("exercises",JSONArray().put(JSONObject().put("name","划船").put("sets",JSONArray().put(JSONObject().put("weight",40).put("reps",8).put("durationSeconds",JSONObject.NULL))))) }
         try {
@@ -61,24 +61,24 @@ class StorageTest {
         } finally { app.deleteDatabase(name) }
     }
     @Test fun databaseReopenPreservesOriginalIdAndOptionalFields() {
-        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val app=TestIsolation.app()
         val r=Record.create(RecordType.BODY).apply { json.put("weight",72.3);json.put("bodyFat",JSONObject.NULL);json.put("waist",81.0) }
         val before=app.store.load()
         try {
             app.store.commit(before.copy(records=before.records+r))
-            val reopened=Store(app)
+            val reopened=Store(app,app.store.databaseName)
             val saved=reopened.load().records.single { it.id==r.id }
             assertEquals(72.3,saved.json.getDouble("weight"),0.0);assertTrue(saved.json.isNull("bodyFat"));assertEquals(81.0,saved.json.getDouble("waist"),0.0)
             reopened.close()
         } finally {app.store.commit(before)}
     }
     @Test fun secretsAreIsolatedByProviderAndPersistAcrossInstances() {
-        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val app=TestIsolation.app()
         app.secrets.save("test.deepseek","test-a");app.secrets.save("test.glm","test-b")
-        try { val reopened=Secrets(app);assertEquals("test-a",reopened.get("test.deepseek"));assertEquals("test-b",reopened.get("test.glm"));reopened.clear();assertEquals("",reopened.get("test.deepseek"));assertEquals("",reopened.get("test.glm")) } finally { app.secrets.save("test.deepseek","");app.secrets.save("test.glm","") }
+        try { val reopened=app.newSecrets();assertEquals("test-a",reopened.get("test.deepseek"));assertEquals("test-b",reopened.get("test.glm"));reopened.clear();assertEquals("",reopened.get("test.deepseek"));assertEquals("",reopened.get("test.glm")) } finally { app.secrets.save("test.deepseek","");app.secrets.save("test.glm","") }
     }
     @Test fun chatPhotosPersistAcrossInstancesAndDeleteIndividually() {
-        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val app=TestIsolation.app()
         val bytes=byteArrayOf(1,2,3,4)
         val name=app.photos.saveChat(bytes)
         try { assertArrayEquals(bytes,ltd.apsonchian.liferecord.service.Photos(app).chat(name)) }
@@ -87,7 +87,7 @@ class StorageTest {
     }
     @Test fun gallerySavePublishesCompleteJpegWithoutGalleryReadPermission() {
         org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT>=29)
-        val app=ApplicationProvider.getApplicationContext<LifeRecordApplication>()
+        val app=TestIsolation.app()
         val bitmap=android.graphics.Bitmap.createBitmap(2,2,android.graphics.Bitmap.Config.ARGB_8888)
         val bytes=java.io.ByteArrayOutputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it);it.toByteArray() }
         bitmap.recycle()

@@ -4,7 +4,7 @@ import SwiftData
 @MainActor
 enum DemoDataService {
     private static let versionKey = "LifeRecordDemoDataVersion"
-    private static let currentVersion = 2
+    private static let currentVersion = 3
 
     static var hasInstalledDemoData: Bool {
         UserDefaults.standard.integer(forKey: versionKey) >= currentVersion
@@ -15,177 +15,116 @@ enum DemoDataService {
         reinstall(context: context)
     }
 
-    static func reinstall(context: ModelContext) {
-        clear(context: context)
-        insertComprehensiveDemoData(context: context)
-        UserDefaults.standard.set(currentVersion, forKey: versionKey)
+    /// Replace only marked examples, in one save. Never change the user's goals.
+    @discardableResult
+    static func reinstall(context: ModelContext, now: Date = .now, preferences: UserDefaults = .standard) -> Bool {
+        guard !context.hasChanges else { return false }
+        do {
+            try deleteExamples(context: context)
+            insertExamples(context: context, now: now)
+            try context.save()
+            preferences.set(currentVersion, forKey: versionKey)
+            return true
+        } catch {
+            context.rollback()
+            return false
+        }
     }
 
-    static func clear(context: ModelContext) {
-        let meals = (try? context.fetch(FetchDescriptor<MealEntry>())) ?? []
-        let metrics = (try? context.fetch(FetchDescriptor<BodyMetric>())) ?? []
-        let conversations = (try? context.fetch(FetchDescriptor<CoachConversation>())) ?? []
-
-        meals.filter(\.isDemo).forEach(context.delete)
-        metrics.filter(\.isDemo).forEach(context.delete)
-        conversations.filter(\.isDemo).forEach(context.delete)
-        try? context.save()
+    @discardableResult
+    static func clear(context: ModelContext, preferences: UserDefaults = .standard) -> Bool {
+        guard !context.hasChanges else { return false }
+        do {
+            try deleteExamples(context: context)
+            try context.save()
+            preferences.removeObject(forKey: versionKey)
+            return true
+        } catch {
+            context.rollback()
+            return false
+        }
     }
 
-    private static func insertComprehensiveDemoData(context: ModelContext) {
+    private static func deleteExamples(context: ModelContext) throws {
+        try context.fetch(FetchDescriptor<MealEntry>()).filter(\.isDemo).forEach(context.delete)
+        try context.fetch(FetchDescriptor<BodyMetric>()).filter(\.isDemo).forEach(context.delete)
+        try context.fetch(FetchDescriptor<WorkoutEntry>()).filter(\.isDemo).forEach(context.delete)
+        try context.fetch(FetchDescriptor<CoachConversation>()).filter(\.isDemo).forEach(context.delete)
+    }
+
+    private static func insertExamples(context: ModelContext, now: Date) {
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: .now)
-
-        // 30 天完整身体指标：体重与体脂。
+        let today = calendar.startOfDay(for: now)
         for offset in (0..<30).reversed() {
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
+            func time(_ hour: Int, _ minute: Int = 0) -> Date {
+                min(calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day, now)
+            }
             let progress = Double(29 - offset)
-            let wave = sin(Double(offset) / 3.4) * 0.12
-            let weight = 64.0 + progress * 0.035 + wave
-            let bodyFat = 14.6 - progress * 0.012 + cos(Double(offset) / 4.2) * 0.08
-            context.insert(BodyMetric(
-                date: calendar.date(bySettingHour: 7, minute: 40, second: 0, of: day) ?? day,
-                weight: weight,
-                bodyFat: bodyFat,
-                note: "[示例] 晨起空腹测量",
-                isDemo: true
-            ))
-        }
-
-        // 30 天完整饮食，偶尔留一个缺口用于展示记录连续性。
-        for offset in (0..<30).reversed() {
-            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
-            let trainingDay = offset % 3 != 2
-            let skippedDinner = offset == 10
-
-            let breakfast = MealEntry(
-                date: calendar.date(bySettingHour: 7, minute: 50, second: 0, of: day) ?? day,
-                kind: .breakfast,
-                name: offset % 2 == 0 ? "燕麦鸡蛋牛奶碗" : "全麦面包煎蛋拿铁",
-                calories: offset % 2 == 0 ? 545 : 505,
-                protein: offset % 2 == 0 ? 34 : 30,
-                carbs: offset % 2 == 0 ? 64 : 57,
-                fat: offset % 2 == 0 ? 15 : 14,
-                fiber: 8,
-                note: "[示例] 早餐",
-                isDemo: true
-            )
-
-            let lunchCalories = trainingDay ? 780.0 : 700.0
-            let lunch = MealEntry(
-                date: calendar.date(bySettingHour: 12, minute: 20, second: 0, of: day) ?? day,
-                kind: .lunch,
-                name: offset % 3 == 0 ? "鸡胸肉糙米饭" : (offset % 3 == 1 ? "牛肉面" : "虾仁杂粮饭"),
-                calories: lunchCalories,
-                protein: trainingDay ? 56 : 47,
-                carbs: trainingDay ? 88 : 77,
-                fat: trainingDay ? 19 : 17,
-                fiber: 7,
-                note: "[示例] 午餐",
-                isDemo: true
-            )
-
-            context.insert(breakfast)
-            context.insert(lunch)
-
-            if !skippedDinner {
-                let dinner = MealEntry(
-                    date: calendar.date(bySettingHour: 19, minute: 10, second: 0, of: day) ?? day,
-                    kind: .dinner,
-                    name: offset % 2 == 0 ? "三文鱼藜麦沙拉" : "鸡腿肉红薯西兰花",
-                    calories: offset % 2 == 0 ? 665 : 690,
-                    protein: offset % 2 == 0 ? 47 : 50,
-                    carbs: offset % 2 == 0 ? 58 : 66,
-                    fat: offset % 2 == 0 ? 24 : 21,
-                    fiber: 10,
-                    note: "[示例] 晚餐",
-                    isDemo: true
-                )
-                context.insert(dinner)
+            // Missing measurements are intentional: a gap is never a zero value.
+            if offset != 9 && offset != 18 {
+                context.insert(BodyMetric(date: time(7, 20),
+                    weight: 64 + progress * 0.035 + sin(Double(offset) / 3.4) * 0.18,
+                    bodyFat: offset % 4 == 1 ? nil : 14.6 - progress * 0.012,
+                    waist: offset % 3 == 0 ? 76 - progress * 0.018 : nil,
+                    note: "[示例] 晨起测量 · 数值仅用于体验", isDemo: true))
             }
-
-            if trainingDay {
-                let snack = MealEntry(
-                    date: calendar.date(bySettingHour: 16, minute: 0, second: 0, of: day) ?? day,
-                    kind: .snack,
-                    name: offset % 2 == 0 ? "蛋白棒与香蕉" : "酸奶蓝莓坚果",
-                    calories: offset % 2 == 0 ? 285 : 310,
-                    protein: offset % 2 == 0 ? 24 : 22,
-                    carbs: offset % 2 == 0 ? 35 : 33,
-                    fat: offset % 2 == 0 ? 8 : 10,
-                    fiber: 5,
-                    note: "[示例] 训练日加餐",
-                    isDemo: true
-                )
-                context.insert(snack)
+            if offset != 11 {
+                let trainingDay = offset % 3 != 2
+                let menu: [(MealKind, String, Int, Double, Double, Double, Double)] = [
+                    (.breakfast, offset % 2 == 0 ? "燕麦鸡蛋牛奶碗" : "全麦面包煎蛋", 8, 34, 64, 15, 8),
+                    (.lunch, offset % 2 == 0 ? "鸡胸肉糙米饭" : "虾仁杂粮饭", 12, trainingDay ? 52 : 45, trainingDay ? 88 : 72, 19, 7),
+                    (.dinner, offset % 2 == 0 ? "三文鱼藜麦沙拉" : "鸡腿红薯西兰花", 19, 47, 58, 24, 10),
+                    (.snack, "酸奶蓝莓坚果", 16, 22, 33, 10, 5)
+                ]
+                for (kind, name, hour, protein, carbs, fat, fiber) in menu {
+                    if kind == .snack && !trainingDay { continue }
+                    if kind == .dinner && offset == 10 { continue }
+                    context.insert(MealEntry(date: time(hour), kind: kind, name: name,
+                        calories: protein * 4 + carbs * 4 + fat * 9,
+                        protein: protein, carbs: carbs, fat: fat, fiber: fiber,
+                        note: "[示例] 合成餐食，可点开查看营养明细", isDemo: true))
+                }
+            }
+            if offset % 3 != 2 {
+                let duration = Double(40 + offset % 4 * 5) * 60
+                let end = time(18, 50)
+                let start = end.addingTimeInterval(-duration)
+                let workout = WorkoutEntry(date: start, endDate: end,
+                    note: "[示例] \(offset % 3 == 0 ? "力量训练 · 查看动作与逐组记录" : "有氧与核心 · 查看计时记录")", isDemo: true)
+                if offset % 3 == 0 {
+                    workout.bodyParts = ["胸部", "三头"]
+                    workout.exercises = [
+                        WorkoutExercise(name: "哑铃卧推", sets: (0..<3).map { index in
+                            WorkoutSet(reps: 12 - index * 2, weight: 12 + Double((29 - offset) / 10) * 2)
+                        }, bodyPart: "胸部"),
+                        WorkoutExercise(name: "绳索下压", sets: [WorkoutSet(reps: 12, weight: 15), WorkoutSet(reps: 10, weight: 15)], bodyPart: "三头")
+                    ]
+                } else {
+                    workout.bodyParts = ["有氧", "核心"]
+                    workout.exercises = [
+                        WorkoutExercise(name: "椭圆机", sets: [WorkoutSet(durationSeconds: 1800)], bodyPart: "有氧"),
+                        WorkoutExercise(name: "平板支撑", sets: [WorkoutSet(durationSeconds: 45), WorkoutSet(durationSeconds: 40)], bodyPart: "核心")
+                    ]
+                }
+                context.insert(workout)
             }
         }
-
-        insertConversation(
-            context: context,
-            title: "[示例] 增肌饮食复盘",
-            updatedAt: .now,
-            user: "最近一个月体重和热量怎么样？",
-            assistant: """
-            ## 近 30 天趋势
-            - **体重**：从约 64.0kg 增至 65.0kg，增幅约 1.0kg。
-            - **体脂率**：约 14.6% 降至 14.2%，波动不大。
-            - **热量**：训练日约 2,700kcal，休息日约 2,300kcal。
-
-            ### 建议
-            1. 保持当前热量盈余，不需要额外大幅加餐。
-            2. 训练日把更多碳水安排在训练前后。
-            3. 继续观察 7 日平均体重，而不是单日波动。
-            """
-        )
-
-        insertConversation(
-            context: context,
-            title: "[示例] 训练日加餐",
-            updatedAt: .now.addingTimeInterval(-60 * 60 * 20),
-            user: "训练日应该怎么安排加餐？",
-            assistant: """
-            ## 训练日加餐
-            - **训练前 60–90 分钟**：易消化碳水，例如香蕉或白面包。
-            - **训练后 30 分钟内**：蛋白质加碳水，例如乳清蛋白与香蕉。
-            - **热量调整**：训练日可比休息日多 300kcal 左右。
-
-            如果当天已经达到热量目标，不必强行加餐。
-            """
-        )
-
-        try? context.save()
+        conversation(context, title: "[示例] 看懂一个月的记录", at: now,
+            question: "这些趋势和训练记录怎么看？",
+            answer: "这是预先写好的示例回答，不是实时 AI 分析。\n\n在「趋势」切换近 7 天或近 30 天，查看体重、体脂、每日热量与训练时长。点进训练日历，可以查看部位、动作和每组记录。空白日期表示未记录。\n\n这些都是合成数据，不代表你的身体情况，也不计入真实目标反馈或 AI 周报。")
+        conversation(context, title: "[示例] 从第一餐开始", at: now.addingTimeInterval(-120),
+            question: "我该怎样开始记录？",
+            answer: "这是预先写好的使用示例。\n\n1. 在「今日」点添加，手动记一餐或一次测量。\n2. 训练时点「开始训练」，结束后可补充动作和组数。\n3. 在「设置」填写自己的目标，需要时再连接同步与 AI 服务。\n\n示例可随时在设置中清除；清除后，你自己的记录会保留。")
     }
 
-    private static func insertConversation(
-        context: ModelContext,
-        title: String,
-        updatedAt: Date,
-        user: String,
-        assistant: String
-    ) {
-        let conversation = CoachConversation(
-            title: title,
-            createdAt: updatedAt.addingTimeInterval(-60 * 60 * 24 * 7),
-            updatedAt: updatedAt,
-            isDemo: true
-        )
+    private static func conversation(_ context: ModelContext, title: String, at: Date, question: String, answer: String) {
+        let conversation = CoachConversation(title: title, createdAt: at.addingTimeInterval(-60), updatedAt: at, isDemo: true)
         context.insert(conversation)
-
-        let userMessage = CoachMessage(
-            date: updatedAt.addingTimeInterval(-60),
-            role: "user",
-            content: user
-        )
-        userMessage.conversation = conversation
-        context.insert(userMessage)
-
-        let assistantMessage = CoachMessage(
-            date: updatedAt,
-            role: "assistant",
-            content: assistant
-        )
-        assistantMessage.conversation = conversation
-        context.insert(assistantMessage)
+        for (role, content, date) in [("user", question, at.addingTimeInterval(-60)), ("assistant", answer, at)] {
+            let message = CoachMessage(date: date, role: role, content: content)
+            message.conversation = conversation
+            context.insert(message)
+        }
     }
 }

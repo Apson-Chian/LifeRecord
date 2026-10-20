@@ -32,6 +32,11 @@ with tempfile.TemporaryDirectory() as folder:
     assert request('/sync',{'meals':[{**meal,'name':'B record'}]},key=keyb)[0]==200
     assert request('/snapshot',key=keya)[1]['meals'][0]['name']=='A record'
     assert request('/snapshot',key=keyb)[1]['meals'][0]['name']=='B record'
+    assert request('/diagnostics')[0]==401
+    diagnostics=request('/diagnostics',key=keya)
+    assert diagnostics[0]==200 and diagnostics[1]['issues']
+    assert diagnostics[1]['snapshot']['meals'][0]['name']=='A record'
+    assert 'B record' not in json.dumps(diagnostics[1])
     image=request('/images',{'mealId':'same-id','base64':base64.b64encode(b'\xff\xd8\xfftest').decode()},key=keya)[1]['id']
     assert request('/images/'+image,key=keyb)[0]==404
     assert request('/sync',{'meals':[{**meal,'photoIDs':[image],'updatedAt':2000}]},key=keyb)[0]==400

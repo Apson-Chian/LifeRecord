@@ -255,6 +255,40 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
         app.store.set("sync.base",base.trimEnd('/'))
         app.secrets.save("sync", token); status.value = if(key.isBlank()) "同步已关闭" else "同步密钥已保存"; sync()
     }
+    /** Passwords live only for the request; the returned session uses Keystore storage. */
+    suspend fun connectAccount(base: String, username: String, password: String, bind: Boolean = false, currentPassword: String = "", register: Boolean = false) {
+        require(!syncing.value) { "请等待当前同步结束" }
+        require(!(bind && register))
+        validateHTTPS(base)
+        val normalizedBase = base.trim().trimEnd('/')
+        val generation = dataGeneration.value
+        syncing.value = true
+        try {
+            val oldKey = app.secrets.get("sync")
+            val oldBase = app.store.get("sync.base", Network.BASE)
+            val previous = app.store.get("sync.identity")
+            if(register) require(previous.isBlank()) { "此设备已绑定账号；请使用原账号登录，或先导出并清除本机数据后再注册" }
+            var knownUser = app.store.get("sync.accountId").takeIf { oldBase == normalizedBase }.orEmpty()
+            if(previous.isNotBlank() && knownUser.isBlank()) {
+                require(oldKey.isNotBlank() && previous == syncScope(oldBase, oldKey) && oldBase == normalizedBase) { "请先用原同步密钥连接，确认本机记录归属后再登录" }
+                knownUser = withContext(Dispatchers.IO) { app.network.account(oldBase, "me", oldKey).getString("userId") }
+            }
+            if(bind) require(oldKey.isNotBlank() && oldBase == normalizedBase) { "请先用自己的同步密钥连接，再设置账号密码" }
+            val payload = JSONObject().put("username", username.trim()).put("password", password)
+            if(bind) payload.put("currentPassword", currentPassword)
+            val result = withContext(Dispatchers.IO) { app.network.account(normalizedBase, if(register) "register" else if(bind) "credentials" else "login", if(bind) oldKey else "", payload) }
+            require(generation == dataGeneration.value && app.secrets.get("sync") == oldKey) { "本机配置已更改，请重试" }
+            require(previous.isBlank() || knownUser == result.getString("userId")) { "此设备已有其他账号的数据；请先导出并清除本机数据，再登录新账号" }
+            val token = result.getString("token")
+            app.secrets.save("sync", token)
+            app.store.set("sync.base", normalizedBase)
+            app.store.set("sync.identity", syncScope(normalizedBase, token))
+            app.store.set("sync.accountId", result.getString("userId"))
+            app.store.set("sync.username", result.getString("username"))
+            status.value = "已登录 · ${result.getString("username")}"
+        } finally { syncing.value = false }
+        sync()
+    }
     fun resetLocalData() {
         require(!syncing.value && !aiBusy.value && !partsBusy.value && !weeklyReport.value.generating) { "请等待同步和 AI 任务结束" }
         app.secrets.clear(); app.store.clearAll()
@@ -304,7 +338,12 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
                 val response = withContext(Dispatchers.IO) { app.network.sync(outbound, key) }
                 // Merge against current state after network roundtrip, never stale outbound state.
                 if(app.secrets.get("sync") != key) return@launch
-                persist(Merge.apply(snapshot.value, response)); status.value = if(photoError.isBlank()) "所有设备已同步 · ${LocalTime.now().withSecond(0).withNano(0)}" else "记录已同步，照片等待重试：$photoError"
+                val merged = Merge.apply(snapshot.value, response)
+                val diagnostics = merged.records.mapNotNull { r -> runCatching { Validation.record(r) }.exceptionOrNull()?.let { "${r.type.wire} ${r.id}: ${it.message}" } }
+                val profileDiagnostic = runCatching { Validation.profile(merged.profile) }.exceptionOrNull()?.message
+                persist(merged)
+                if(diagnostics.isNotEmpty() || profileDiagnostic != null) { status.value = "记录已保留；历史数据待核对：" + (diagnostics + listOfNotNull(profileDiagnostic)).take(3).joinToString("；") + "。请导出后人工修正" }
+                else status.value = if(photoError.isBlank()) "所有设备已同步 · ${LocalTime.now().withSecond(0).withNano(0)}" else "记录已同步，照片等待重试：$photoError"
             } catch(e: CancellationException) { throw e } catch(e: Exception) { status.value = "同步失败：${e.message ?: "网络不可用"}" } finally { syncing.value = false }
         }
     }
@@ -464,12 +503,21 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
     private fun fingerprint(s: Snapshot) = s.records.sortedBy { it.id }.joinToString { "${it.type}:${it.id}:${it.updated}" } + s.profile.optDouble("updatedAt") + JSONArray(s.deletions)
     fun completeOnboarding() { app.store.set("onboarded", "yes"); onboarding.value = false }
     fun seedDemo() {
-        val records = (0L..13L).flatMap { offset ->
-            val day = LocalDate.now().minusDays(offset)
-            listOf(Record.create(RecordType.MEAL, day.epochAt(LocalTime.NOON)).apply { json.put("name", "鸡胸肉杂粮饭（示例）"); json.put("calories", 620); json.put("protein", 42); json.put("carbs", 72); json.put("fat", 17); json.put("isDemo", true) },
-                Record.create(RecordType.BODY, day.epochAt(LocalTime.of(8,0))).apply { json.put("weight", 65.0+offset*0.08); json.put("isDemo", true) })
-        }; persist(snapshot.value.copy(records = snapshot.value.records.filterNot { it.demo } + records))
+        require(!aiBusy.value) { "请先等待教练回答结束，再载入示例" }
+        val at = now()
+        val chats = conversations.value.filterNot { it.optBoolean("isDemo") } + DemoData.conversations(at)
+        persist(snapshot.value.copy(records = snapshot.value.records.filterNot { it.demo } + DemoData.records(at)),
+            mapOf("conversations" to JSONArray(chats).toString()))
+        conversations.value = chats
+        if(chats.none { it.optString("id") == selectedConversation.value }) selectedConversation.value = chats.firstOrNull()?.optString("id").orEmpty()
     }
-    fun clearDemo() { persist(snapshot.value.copy(records = snapshot.value.records.filterNot { it.demo })) }
+    fun clearDemo() {
+        require(!aiBusy.value) { "请先等待教练回答结束，再清除示例" }
+        val chats = conversations.value.filterNot { it.optBoolean("isDemo") }
+        persist(snapshot.value.copy(records = snapshot.value.records.filterNot { it.demo }),
+            mapOf("conversations" to JSONArray(chats).toString()))
+        conversations.value = chats
+        if(chats.none { it.optString("id") == selectedConversation.value }) selectedConversation.value = chats.firstOrNull()?.optString("id").orEmpty()
+    }
     fun export(): String = Merge.wire(snapshot.value).put("favorites", JSONArray(snapshot.value.records.filter { it.type == RecordType.FAVORITE }.map { it.json.copy().apply { remove("localPhotoFiles") } })).put("exerciseTemplates", JSONArray(snapshot.value.records.filter { it.type == RecordType.EXERCISE }.map { it.json })).toString(2)
 }

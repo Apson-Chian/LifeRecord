@@ -303,11 +303,11 @@ private struct FavoriteFoodEditor: View {
         guard !foods.contains(where: { $0.id != food?.id && $0.name.caseInsensitiveCompare(cleanName) == .orderedSame }) else {
             errorMessage = "已有同名常用餐食，请换一个名称。"; return
         }
-        guard calories.isFinite, calories > 0, calories <= 20_000,
-              [protein, carbs, fat, fiber].allSatisfy({ $0.isFinite && (0...3_000).contains($0) }),
-              note.count <= 10_000 else {
-            errorMessage = "请核对每份营养数值；热量需要大于 0。"; return
-        }
+        do {
+            try RecordInput.meal(name: name, calories: calories, protein: protein, carbs: carbs, fat: fat, fiber: fiber, note: note)
+            guard calories > 0 else { throw RecordInput.Invalid(field: "calories", reason: "常用餐食热量需大于 0") }
+        } catch { errorMessage = error.localizedDescription; return }
+
         let record = food ?? FavoriteFood(name: cleanName)
         if food == nil { context.insert(record) }
         record.name = cleanName

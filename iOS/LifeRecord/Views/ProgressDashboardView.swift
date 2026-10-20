@@ -4,10 +4,18 @@ import Charts
 
 struct ProgressDashboardView: View {
     @Environment(AppSettings.self) private var settings
-    @Query(sort: \BodyMetric.date) private var bodyMetrics: [BodyMetric]
-    @Query(sort: \MealEntry.date) private var meals: [MealEntry]
+    @Query(sort: \BodyMetric.date) private var allBodyMetrics: [BodyMetric]
+    @Query(sort: \MealEntry.date) private var allMeals: [MealEntry]
 
-    @Query(sort: \WorkoutEntry.date) private var workouts: [WorkoutEntry]
+    @Query(sort: \WorkoutEntry.date) private var allWorkouts: [WorkoutEntry]
+
+    private var isDemoPreview: Bool {
+        !allMeals.contains { !$0.isDemo } && !allBodyMetrics.contains { !$0.isDemo } && !allWorkouts.contains { !$0.isDemo }
+            && (allMeals.contains { $0.isDemo } || allBodyMetrics.contains { $0.isDemo } || allWorkouts.contains { $0.isDemo })
+    }
+    private var meals: [MealEntry] { allMeals.filter { $0.isDemo == isDemoPreview } }
+    private var bodyMetrics: [BodyMetric] { allBodyMetrics.filter { $0.isDemo == isDemoPreview } }
+    private var workouts: [WorkoutEntry] { allWorkouts.filter { $0.isDemo == isDemoPreview } }
 
     @State private var selectedRecordDay = Calendar.current.startOfDay(for: Date.now)
     @State private var range: TrendRange = .month
@@ -94,6 +102,15 @@ struct ProgressDashboardView: View {
                 AppBackground()
                 ScrollView {
                     LazyVStack(spacing: 16) {
+                        if isDemoPreview {
+                            GlassCard {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Label("示例预览", systemImage: "sparkles.rectangle.stack").font(.headline)
+                                    Text("图表展示合成记录。添加真实记录后，趋势会自动展示你的数据；示例不计入目标反馈和周报。")
+                                        .font(.subheadline).foregroundStyle(.secondary)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
                         rangeCard
                         workoutChart
                         weightChart
@@ -355,7 +372,7 @@ struct ProgressDashboardView: View {
                     }.padding(.vertical, 6)
                 }
                 .buttonStyle(AppButtonStyle())
-                .disabled(isGenerating || (!bodyMetrics.contains { !$0.isDemo && $0.date <= insightNow } && !meals.contains { !$0.isDemo && $0.date <= insightNow } && !workouts.contains { $0.date <= insightNow }))
+                .disabled(isGenerating || (!bodyMetrics.contains { !$0.isDemo && $0.date <= insightNow } && !meals.contains { !$0.isDemo && $0.date <= insightNow } && !workouts.contains { !$0.isDemo && $0.date <= insightNow }))
             }
         }
     }
@@ -496,7 +513,7 @@ struct ProgressDashboardView: View {
             let entries = nutrition[day]!
             return "\(day.formatted(date: .numeric, time: .omitted)): \(Int(entries.reduce(0) { $0 + $1.calories }))kcal / P\(Int(entries.reduce(0) { $0 + $1.protein }))g"
         }.joined(separator: ", ")
-        let workoutContext = WorkoutSummary.context(workouts.filter { $0.date >= weekStart && $0.date <= reportNow }.map {
+        let workoutContext = WorkoutSummary.context(workouts.filter { !$0.isDemo && $0.date >= weekStart && $0.date <= reportNow }.map {
             .init(date: $0.date, endDate: $0.endDate, note: $0.contentSummary)
         })
         let weekFeedback = GoalFeedback.summarize(goals: .init(settings), meals: meals.map { InsightRecords.Meal($0) }, body: bodyMetrics.map { InsightRecords.Body($0) }, workouts: workouts.map { InsightRecords.Workout($0) }, days: 7, now: reportNow, acknowledgedIssueIDs: acknowledgedQualityIDs)

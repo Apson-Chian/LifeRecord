@@ -58,6 +58,12 @@ struct CoachMealActionChecks {
         precondition(CoachMealRecorder.makeMeal(from: invalid, date: date, inputText: input, conversationID: conversationID) == nil)
         invalid = reply.actions[0]; invalid.mealKind = "未知餐次"
         precondition(CoachMealRecorder.makeMeal(from: invalid, date: date, inputText: input, conversationID: conversationID) == nil)
+        for (field, value) in [("calories", 20001.0), ("protein", 2001), ("carbs", 3001), ("fat", 2001), ("fiber", 501)] {
+            var row = try JSONSerialization.jsonObject(with: JSONEncoder().encode(reply.actions[0])) as! [String: Any]
+            row[field] = value
+            let action = try JSONDecoder().decode(AIAgentAction.self, from: JSONSerialization.data(withJSONObject: row))
+            precondition(CoachMealRecorder.makeMeal(from: action, date: date, inputText: input, conversationID: conversationID) == nil, "over-limit \(field) must not reach persistence")
+        }
         print("PASS: coach meal action persists across reopen; read-only and invalid actions never reach storage")
     }
 }

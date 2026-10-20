@@ -20,8 +20,9 @@ import java.time.LocalDate
         Text("身体总览",style=MaterialTheme.typography.titleMedium)
         Text("趋势体重 · 今日基准 · 身体组成",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    val preview=records.any {it.demo} && s.records.none {!it.demo && it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT)}
     val today=LocalDate.now();val first=today.minusDays(29)
-    val visible=s.records.filter {!it.demo && it.date<=now() && it.type in listOf(RecordType.MEAL,RecordType.BODY)}
+    val visible=s.records.filter {(preview || !it.demo) && it.date<=now() && it.type in listOf(RecordType.MEAL,RecordType.BODY)}
     Panel {
         Text("记录日历 · 近 30 天",style=MaterialTheme.typography.titleMedium)
         Text("${first} — $today",style=MaterialTheme.typography.bodySmall)
@@ -44,7 +45,7 @@ import java.time.LocalDate
         Text("颜色表示饮食和身体测量的记录类别数；空白不表示未达标。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         selectedDay?.let { TextButton(onClick={select(null)}) {Text("$it · 查看当前范围全部记录")} }
     }
-    val meals=records.filter {it.type==RecordType.MEAL && !it.demo && it.date<=now() && RecordQuality.validNutrition(it)}
+    val meals=records.filter {it.type==RecordType.MEAL && (preview || !it.demo) && it.date<=now() && RecordQuality.validNutrition(it)}
     val days=meals.map {it.date.day()}.distinct().size
     Panel {
         Text("宏量营养均值",style=MaterialTheme.typography.titleMedium)

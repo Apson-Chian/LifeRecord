@@ -89,6 +89,9 @@ enum CoachMealRecorder {
               [action.protein, action.carbs, action.fat, action.fiber].compactMap({ $0 }).allSatisfy({ $0.isFinite && $0 >= 0 }),
               action.mealKind.map({ MealKind(rawValue: $0) != nil }) ?? true,
               action.source.map({ EntrySource(rawValue: $0) != nil }) ?? true else { return nil }
+        guard (try? RecordInput.meal(name: name, calories: calories, protein: action.protein ?? 0,
+                                    carbs: action.carbs ?? 0, fat: action.fat ?? 0, fiber: action.fiber ?? 0,
+                                    note: action.note ?? "")) != nil else { return nil }
         return MealEntry(id: id, date: date,
                          kind: action.mealKind.flatMap(MealKind.init(rawValue:)) ?? .snack,
                          name: name, calories: calories, protein: action.protein ?? 0,

@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 import sys
 import secrets
 from contextvars import ContextVar
+from contextlib import closing
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import database
 import ai_transport
@@ -93,6 +94,19 @@ def initialize() -> None:
     os.chmod(DB_PATH, 0o600)
 
 
+def same_json_value(left, right) -> bool:
+    # Python considers True == 1; JSON booleans and numbers are different types.
+    if isinstance(left, bool) or isinstance(right, bool):
+        return type(left) is type(right) and left == right
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(same_json_value(left[key], right[key]) for key in left)
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(same_json_value(a, b) for a, b in zip(left, right))
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return left == right
+    return type(left) is type(right) and left == right
+
+
 def valid_number(value: object, minimum: float = 0, maximum: float = 1e9) -> bool:
     return not isinstance(value, bool) and isinstance(value, (int, float)) and minimum <= float(value) <= maximum
 
@@ -103,7 +117,7 @@ def valid_body_part(value: object) -> bool:
             and all(character.isprintable() for character in value))
 
 
-def validate_record(record_type: str, item: dict) -> None:
+def validate_record_header(record_type: str, item: dict) -> None:
     if not isinstance(item, dict):
         raise ValueError("record must be an object")
     if not isinstance(item.get("id"), str) or not (1 <= len(item["id"]) <= 80):
@@ -112,9 +126,25 @@ def validate_record(record_type: str, item: dict) -> None:
         raise ValueError("invalid record id characters")
     if not valid_number(item.get("updatedAt"), 1, 4_102_444_800):
         raise ValueError("invalid updatedAt")
+
+
+def validate_record(record_type: str, item: dict) -> None:
+    validate_record_header(record_type, item)
+    # All newly submitted records need a real timestamp. Historical rows are
+    # served/exported without passing through this write validator.
+    if record_type != "settings" and not valid_number(item.get("date"), 0, 4_102_444_800):
+        raise ValueError(f"{record_type} {item['id']}: invalid date")
+    for field in ("note", "name", "displayName"):
+        if field in item and (not isinstance(item[field], str) or len(item[field]) > 10000):
+            raise ValueError(f"{record_type} {item['id']}: invalid {field}")
     if record_type == "meal":
         if not isinstance(item.get("name"), str) or not item["name"].strip():
             raise ValueError("meal name is required")
+        for field, allowed in (("kind", ("早餐", "午餐", "晚餐", "加餐")), ("source", ("手动", "AI 估算"))):
+            if field in item and item[field] not in allowed:
+                raise ValueError(f"meal {item['id']}: invalid {field}")
+        if "createdAt" in item and not valid_number(item["createdAt"], 0, 4_102_444_800):
+            raise ValueError(f"meal {item['id']}: invalid createdAt")
         for key, maximum in (("calories", 20_000), ("protein", 2_000), ("carbs", 3_000), ("fat", 2_000), ("fiber", 500)):
             if not valid_number(item.get(key, 0), 0, maximum):
                 raise ValueError(f"invalid meal {key}")
@@ -132,6 +162,9 @@ def validate_record(record_type: str, item: dict) -> None:
     elif record_type == "body":
         if not valid_number(item.get("weight"), 20, 400):
             raise ValueError("invalid weight")
+        for field, low, high in (("bodyFat", 1, 80), ("waist", 20, 300)):
+            if item.get(field) is not None and not valid_number(item[field], low, high):
+                raise ValueError(f"body {item['id']}: invalid {field}")
     elif record_type == "workout":
         if not valid_number(item.get("date"), 0, 4_102_444_800):
             raise ValueError("invalid workout start")
@@ -172,7 +205,7 @@ def merge_snapshot(snapshot: dict) -> None:
         if not isinstance(items, list) or len(items) > 10_000:
             raise ValueError(f"invalid {key}")
         for item in items:
-            validate_record(record_type, item)
+            validate_record_header(record_type, item)
             operations.append((record_type, item["id"], json.dumps(item, ensure_ascii=False, separators=(",", ":")), float(item["updatedAt"]), 0))
 
     settings = snapshot.get("settings")
@@ -180,7 +213,7 @@ def merge_snapshot(snapshot: dict) -> None:
         if not isinstance(settings, dict):
             raise ValueError("invalid settings")
         settings = {**settings, "id": "profile"}
-        validate_admin_record("settings", settings)
+        validate_record_header("settings", settings)
         operations.append(("settings", "profile", json.dumps(settings, ensure_ascii=False, separators=(",", ":")), float(settings["updatedAt"]), 0))
 
     deletions = snapshot.get("deletions", [])
@@ -200,9 +233,31 @@ def merge_snapshot(snapshot: dict) -> None:
     with _db_lock, connect() as connection:
         for kind, record_id, payload, stamp, deleted in operations:
             incoming = json.loads(payload)
+            # Resolve only unambiguous UUID aliases; never rewrite stored IDs or
+            # choose a winner between historical case collisions.
+            try:
+                canonical_id = str(uuid.UUID(record_id))
+            except ValueError:
+                canonical_id = None
+            if canonical_id:
+                aliases = connection.execute("SELECT record_id FROM user_records WHERE user_id=? AND record_type=? AND lower(record_id)=?", (user,kind,canonical_id)).fetchall()
+                if len(aliases) > 1:
+                    raise ValueError(f"{kind} {record_id}: UUID case collision; export and review manually")
+                if aliases:
+                    record_id = aliases[0]["record_id"]
+                    if not deleted: incoming["id"] = record_id
             previous = database.read_record(connection, user, kind, record_id)
             fields = {"workout": ("exercises", "bodyParts"), "meal": ("inputText", "sourceConversationID")}.get(kind, ())
             if not deleted:
+                # Keep extension and omitted optional fields from installed clients.
+                # Explicit values (including [] and null) still override the old field.
+                incoming = {**previous, **incoming}
+                if same_json_value(incoming, previous):
+                    # An unchanged legacy value is a read/replay, not a new write.
+                    # Do not rewrite it or block other records in a full snapshot.
+                    continue
+                if kind == "settings": validate_admin_record(kind, incoming)
+                else: validate_record(kind, incoming)
                 for field in fields:
                     if field not in incoming and field in previous: incoming[field] = previous[field]
                 # Validate photo ownership when real stored images are referenced.
@@ -277,25 +332,54 @@ def image_record(image_id: str) -> sqlite3.Row | None:
 def current_snapshot() -> dict:
     result = {"meals": [], "bodyMetrics": [], "workoutEntries": [], "settings": None, "deletions": [], "serverTime": time.time()}
     output_keys = {"meal": "meals", "body": "bodyMetrics", "workout": "workoutEntries"}
-    with _db_lock, connect() as connection:
-        rows = connection.execute(
-            "SELECT record_type, record_id, updated_at, deleted FROM user_records WHERE user_id=? ORDER BY updated_at", (_user.get(),)
-        ).fetchall()
-    for row in rows:
-        with connect() as connection:
-            payload = database.read_record(connection, _user.get(), row["record_type"], row["record_id"])
-        # Ignore retained legacy drinking records when serving snapshots.
-        if row["record_type"] == "water":
-            continue
-        if row["deleted"]:
-            result["deletions"].append({"id": row["record_id"], "recordType": row["record_type"], "deletedAt": row["updated_at"]})
-        elif row["record_type"] == "settings":
-            profile = payload
-            profile.pop("waterGoal", None)
-            result["settings"] = profile
-        elif row["record_type"] in output_keys:
-            result[output_keys[row["record_type"]]].append(payload)
+    # An explicit read transaction pins both metadata and typed fields to one
+    # WAL snapshot, including when a separate process commits during this read.
+    with _db_lock, closing(connect()) as connection:
+        with connection:
+            connection.execute("BEGIN")
+            rows = connection.execute(
+                "SELECT record_type, record_id, updated_at, deleted FROM user_records WHERE user_id=? ORDER BY updated_at", (_user.get(),)
+            ).fetchall()
+            for row in rows:
+                if row["record_type"] == "water":
+                    continue
+                if row["deleted"]:
+                    result["deletions"].append({"id": row["record_id"], "recordType": row["record_type"], "deletedAt": row["updated_at"]})
+                    continue
+                payload = database.read_record(connection, _user.get(), row["record_type"], row["record_id"])
+                if row["record_type"] == "settings":
+                    payload.pop("waterGoal", None)
+                    result["settings"] = payload
+                elif row["record_type"] in output_keys:
+                    result[output_keys[row["record_type"]]].append(payload)
     return result
+
+
+def snapshot_diagnostics(snapshot: dict) -> list[dict]:
+    """Read-only diagnostics. Callers keep/export the original snapshot, unchanged."""
+    issues = []
+    for collection, kind in (("meals", "meal"), ("bodyMetrics", "body"), ("workoutEntries", "workout")):
+        aliases = defaultdict(list)
+        for item in snapshot.get(collection, []):
+            identifier = item.get("id", "<missing>") if isinstance(item, dict) else "<invalid>"
+            try:
+                aliases[str(uuid.UUID(identifier))].append(identifier)
+            except (ValueError, TypeError, AttributeError):
+                issues.append(dict(recordType=kind, id=identifier, field="id", reason="legacy ID cannot be represented as an iOS UUID; retain and export original"))
+            try:
+                validate_record(kind, item)
+            except ValueError as error:
+                issues.append(dict(recordType=kind, id=identifier, field="record", reason=str(error)))
+        for identifiers in aliases.values():
+            if len(identifiers) > 1:
+                for identifier in identifiers:
+                    issues.append(dict(recordType=kind, id=identifier, field="id", reason="UUID case collision; no automatic merge"))
+    if snapshot.get("settings") is not None:
+        try:
+            validate_admin_record("settings", snapshot["settings"])
+        except (ValueError, TypeError) as error:
+            issues.append(dict(recordType="settings", id="profile", field="record", reason=str(error)))
+    return issues
 
 
 # Web administrators can edit every synchronized field. Both manual and AI edits
@@ -502,6 +586,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/liferecord-api/health":
             self._json(HTTPStatus.OK, {"ok": True, "service": "liferecord-sync"})
             return
+        if path == "/liferecord-api/account/me":
+            if not self._authorized():
+                self._json(HTTPStatus.UNAUTHORIZED, {"error": "请先登录账号"}); return
+            with connect() as connection:
+                self._json(HTTPStatus.OK, database.account_info(connection, _user.get()))
+            return
+        if path == "/liferecord-api/diagnostics":
+            if not self._authorized():
+                self._json(HTTPStatus.UNAUTHORIZED, {"error": "需要先配对同步密钥"})
+                return
+            snapshot = current_snapshot()
+            self._json(HTTPStatus.OK, {"issues": snapshot_diagnostics(snapshot), "snapshot": snapshot})
+            return
         if path == "/liferecord-api/snapshot":
             if not self._authorized():
                 self._json(HTTPStatus.UNAUTHORIZED, {"error": "需要先配对同步密钥"})
@@ -555,6 +652,29 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path.rstrip("/")
         if path == "/liferecord-api/auth":
             self._authenticate_browser()
+            return
+        if path == "/liferecord-api/account/login":
+            self._login_account()
+            return
+        if path == "/liferecord-api/account/register":
+            self._register_account()
+            return
+        if path == "/liferecord-api/account/credentials":
+            password_client = "password:" + self._client_identity()
+            if auth_blocked(password_client):
+                self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "尝试次数过多，请稍后再试"}); return
+            if not self._authorized():
+                self._json(HTTPStatus.UNAUTHORIZED, {"error": "首次设置请先用自己的同步密钥连接"}); return
+            try:
+                payload = self._read_json()
+                with _db_lock:
+                    with connect() as connection:
+                        account = database.set_credentials(connection, _user.get(), payload.get("username"), payload.get("password"), payload.get("currentPassword"))
+                    self._account_session(account)
+                clear_auth_failures(password_client)
+            except (ValueError, json.JSONDecodeError) as error:
+                note_auth_failure(password_client)
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/liferecord-api/logout":
             self._revoke_session()
@@ -618,6 +738,7 @@ class Handler(BaseHTTPRequestHandler):
                     connection.execute("DELETE FROM user_records WHERE user_id=?",(user,))
                     connection.execute("DELETE FROM user_images WHERE user_id=?",(user,))
                     connection.execute("DELETE FROM sessions WHERE user_id=?",(user,))
+                    connection.execute("DELETE FROM account_credentials WHERE user_id=?",(user,))
                     connection.execute("UPDATE users SET disabled=1 WHERE id=?",(user,))
                 for filename in files: (IMAGE_DIR/filename).unlink(missing_ok=True)
                 self._json(HTTPStatus.OK,{"deleted":True})
@@ -650,6 +771,55 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Set-Cookie", f"{COOKIE_NAME}={session}; Path=/liferecord-api/; Max-Age={SESSION_SECONDS}; HttpOnly; Secure; SameSite=Strict")
         self.end_headers()
 
+    def _login_account(self) -> None:
+        client = "password:" + self._client_identity()
+        if auth_blocked(client):
+            self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "尝试次数过多，请稍后再试"}); return
+        try:
+            payload = self._read_json()
+            with _db_lock:
+                with connect() as connection:
+                    user = database.authenticate_password(connection, payload.get("username"), payload.get("password"))
+                    account = database.account_info(connection, user) if user else None
+                if account: self._account_session(account)
+        except (ValueError, json.JSONDecodeError):
+            account = None
+        if not account:
+            note_auth_failure(client)
+            self._json(HTTPStatus.UNAUTHORIZED, {"error": "账号或密码不正确"}); return
+        clear_auth_failures(client)
+
+    def _register_account(self) -> None:
+        client = "register:" + self._client_identity()
+        with _auth_lock:
+            if auth_blocked(client):
+                self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "注册尝试过于频繁，请稍后再试"}); return
+            # Count successful registrations too; logging in cannot reset this budget.
+            note_auth_failure(client)
+        try:
+            payload = self._read_json()
+            with _db_lock:
+                with connect() as connection:
+                    account = database.register_account(connection, payload.get("username"), payload.get("password"))
+                self._account_session(account)
+        except (ValueError, json.JSONDecodeError) as error:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+
+    def _account_session(self, account) -> None:
+        session = secrets.token_urlsafe(32)
+        expires = time.time() + SESSION_SECONDS
+        with connect() as connection:
+            connection.execute("DELETE FROM sessions WHERE expires_at<?", (time.time(),))
+            connection.execute("INSERT INTO sessions VALUES(?,?,?)", (database.token_hash(session), account["userId"], expires))
+        encoded = json.dumps({**account, "token": session, "expiresAt": expires}, ensure_ascii=False).encode()
+        self.send_response(HTTPStatus.OK)
+        self._security_headers()
+        self.send_header("Set-Cookie", f"{COOKIE_NAME}={session}; Path=/liferecord-api/; Max-Age={SESSION_SECONDS}; HttpOnly; Secure; SameSite=Strict")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
     def _cookie_token(self):
         try:
             value = SimpleCookie(self.headers.get("Cookie", "")).get(COOKIE_NAME)
@@ -660,6 +830,9 @@ class Handler(BaseHTTPRequestHandler):
     def _revoke_session(self):
         with connect() as connection:
             connection.execute("DELETE FROM sessions WHERE token_hash=?", (database.token_hash(self._cookie_token()),))
+            authorization = self.headers.get("Authorization", "")
+            if authorization.startswith("Bearer "):
+                connection.execute("DELETE FROM sessions WHERE token_hash=?", (database.token_hash(authorization[7:]),))
 
     def _authorized(self) -> bool:
         client = self._client_identity()

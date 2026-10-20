@@ -172,6 +172,7 @@ const assert = require('assert/strict');
  assert.equal(await page.locator('.overview-item').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(27, 30, 40)');
  await page.locator('#changeKeyButton').click();
  await page.locator('#authDialog[open]').waitFor();
+ await page.locator('#authMode').selectOption('key');
  await page.locator('[name="token"]').fill('fixture-only-independent-key');
  await page.getByRole('button',{name:'安全连接',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#syncStatus').textContent.includes('已同步'));

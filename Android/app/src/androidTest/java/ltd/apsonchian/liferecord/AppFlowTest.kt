@@ -1,5 +1,6 @@
 package ltd.apsonchian.liferecord
 
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -29,7 +30,7 @@ class AppFlowTest {
     private var accent = "purple"
     private var partCatalog = ""
     @Before fun setup() {
-        app = ApplicationProvider.getApplicationContext()
+        app = TestIsolation.app()
         partCatalog=app.store.get("workout.bodyPartCatalog");app.store.set("workout.bodyPartCatalog",org.json.JSONArray(parts).toString())
         appearance=app.store.get("appearance","system");accent=app.store.get("accent","purple")
         app.store.set("appearance","system");app.store.set("accent","purple")
@@ -50,6 +51,63 @@ class AppFlowTest {
         app.store.set("coach.identity",identity);app.store.set("aiConfig",aiConfig.ifBlank {providerConfig("DeepSeek").toString()})
         app.store.set("appearance",appearance);app.store.set("accent",accent)
         app.store.set("workout.bodyPartCatalog",partCatalog.ifBlank {org.json.JSONArray(parts).toString()})
+    }
+    @Test fun onboardingPreviewIsReadOnlyAndExamplesCanBeReplacedAndCleared() {
+        scenario.onActivity { activity -> ViewModelProvider(activity)[AppViewModel::class.java].onboarding.value = true }
+        compose.onNodeWithTag("onboarding-title").assertTextEquals("从今天的一餐开始")
+        screenshot("onboarding-record")
+        repeat(3) { index ->
+            assertTrue(app.store.load().records.isEmpty())
+            compose.onNodeWithTag("onboarding-continue").performClick()
+            compose.waitForIdle()
+            screenshot("onboarding-step-${index+2}")
+        }
+        assertTrue(app.store.load().records.isEmpty())
+        compose.onNodeWithTag("onboarding-blank").assertIsSelected()
+        compose.onNodeWithTag("onboarding-examples").performScrollTo().performClick()
+        compose.onNodeWithText("上一步").performClick()
+        compose.onNodeWithTag("onboarding-continue").performClick()
+        compose.onNodeWithTag("onboarding-examples").assertIsSelected()
+        compose.onNodeWithText("示例为合成内容，仅保存在本机；不计入真实目标反馈、提醒或 AI 周报，也不会同步。清除示例会保留你自己的记录。").performScrollTo().assertIsDisplayed()
+        screenshot("onboarding-examples")
+        scenario.recreate()
+        compose.onNodeWithText("载入示例，开始体验").assertExists()
+        compose.onNodeWithTag("onboarding-continue").performClick()
+        compose.waitForIdle()
+        assertEquals(154,app.store.load().records.size)
+        assertEquals(2,org.json.JSONArray(app.store.get("conversations")).length())
+        screenshot("onboarding-today")
+        compose.onNodeWithTag("tab-1").performClick()
+        compose.onNodeWithText("示例预览").assertExists()
+        screenshot("onboarding-trends")
+        val real=Record.create(RecordType.BODY).apply {json.put("weight",72.0)}
+        scenario.onActivity {activity ->
+            val vm=ViewModelProvider(activity)[AppViewModel::class.java]
+            vm.save(real);vm.seedDemo()
+            assertEquals(155,vm.snapshot.value.records.size)
+            assertEquals(2,vm.conversations.value.size)
+            vm.clearDemo()
+            assertEquals(listOf(real.id),vm.snapshot.value.records.map {it.id})
+            assertTrue(vm.conversations.value.isEmpty())
+        }
+    }
+    @Test fun skippingOnboardingPreservesExistingRecords() {
+        val real=Record.create(RecordType.BODY).apply {json.put("weight",72.0)}
+        scenario.onActivity {activity ->
+            val vm=ViewModelProvider(activity)[AppViewModel::class.java]
+            vm.save(real);vm.onboarding.value=true
+        }
+        compose.onNodeWithTag("onboarding-skip").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(real.id),app.store.load().records.map {it.id})
+        assertEquals("yes",app.store.get("onboarded"))
+    }
+    private fun screenshot(name:String) {
+        compose.waitForIdle()
+        val folder=java.io.File(app.filesDir,"onboarding-screens").apply {mkdirs()}
+        java.io.File(folder,"$name.png").outputStream().use {stream ->
+            compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG,100,stream)
+        }
     }
     @Test fun manualMealSaveAndDeleteUsesSamePersistentRecord() {
         compose.onNodeWithContentDescription("添加记录").performClick()

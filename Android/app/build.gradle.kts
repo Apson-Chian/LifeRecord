@@ -10,14 +10,24 @@ android {
         applicationId = "ltd.apsonchian.liferecord"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.4.0-beta.5"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 10
+        versionName = "1.4.0-beta.6"
+        testInstrumentationRunner = "ltd.apsonchian.liferecord.IsolatedTestRunner"
     }
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
-    buildTypes { release { isMinifyEnabled = false } }
+    buildTypes {
+        release { isMinifyEnabled = false }
+        create("sandbox") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".instrumented"
+            versionNameSuffix = "-isolated-tests"
+            matchingFallbacks += listOf("debug")
+        }
+    }
+    // Never instrument the package installed by real users, including Debug users.
+    testBuildType = "sandbox"
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 dependencies {

@@ -54,7 +54,7 @@ enum GoalFeedback {
         let validMeals = meals.filter { !$0.isDemo && $0.date <= now && $0.validNutrition }
         let validBody = body.filter { !$0.isDemo && $0.date <= now && $0.validWeight }
         let validWorkouts = workouts.filter { entry in
-            guard entry.date <= now, let end = entry.endDate else { return false }
+            guard !entry.isDemo, entry.date <= now, let end = entry.endDate else { return false }
             return end >= entry.date && end <= now
         }
         let dates = validMeals.map(\.date) + validBody.map(\.date) + validWorkouts.map(\.date)
@@ -133,7 +133,7 @@ enum GoalFeedback {
         }
         if actions.isEmpty { actions.append("继续按当前目标记录和执行，下周再比较趋势；不根据单日波动调整目标。") }
         let completed = workouts.filter { entry in
-            guard entry.date >= start && entry.date <= now, let end = entry.endDate else { return false }
+            guard !entry.isDemo, entry.date >= start && entry.date <= now, let end = entry.endDate else { return false }
             return end >= entry.date && end <= now
         }.count
         return Summary(start: start, end: now, days: days, mealDays: grouped.count,

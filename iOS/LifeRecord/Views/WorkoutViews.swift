@@ -6,7 +6,14 @@ struct WorkoutDayCard: View {
     @Environment(\.modelContext) private var context
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var sync
-    @Query(sort: \WorkoutEntry.date, order: .reverse) private var workouts: [WorkoutEntry]
+    @Query(sort: \WorkoutEntry.date, order: .reverse) private var storedWorkouts: [WorkoutEntry]
+    @Query(filter: #Predicate<MealEntry> { !$0.isDemo }) private var realMealEntry: [MealEntry]
+    @Query(filter: #Predicate<BodyMetric> { !$0.isDemo }) private var realBodyMetric: [BodyMetric]
+
+    private var workouts: [WorkoutEntry] {
+        let hasReal = storedWorkouts.contains { !$0.isDemo } || !realMealEntry.isEmpty || !realBodyMetric.isEmpty
+        return storedWorkouts.filter { $0.isDemo != hasReal }
+    }
     @State private var editing: WorkoutEntry?
     @State private var adding = false
     @State private var error: String?
@@ -52,6 +59,7 @@ struct WorkoutDayCard: View {
                                 Text("\(entry.date.formatted(date: .omitted, time: .shortened)) → \(entry.endDate?.formatted(date: .abbreviated, time: .shortened) ?? "进行中")").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
+                            if entry.isDemo { Text("示例").font(.caption).foregroundStyle(.secondary) }
                             if entry.endDate != nil { Text("\(Int(entry.minutes)) 分钟").font(.subheadline.monospacedDigit()) }
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                         }
@@ -111,6 +119,9 @@ struct WorkoutEditor: View {
     var body: some View {
         NavigationStack {
             Form {
+                if entry?.isDemo == true {
+                    Section { Label("示例训练，不参与同步或真实目标反馈", systemImage: "info.circle").font(.subheadline) }
+                }
                 Section("训练时间") {
                     DatePicker("开始", selection: $start, in: ...Date.now)
                     if entry?.endDate == nil && entry != nil { Toggle("训练已结束", isOn: $finished) }
@@ -173,7 +184,7 @@ struct WorkoutEditor: View {
             .alert("删除这次训练？", isPresented: $confirmDelete) {
                 Button("删除", role: .destructive) {
                     if let entry {
-                        context.insert(SyncTombstone(recordID: entry.id, recordType: "workout"))
+                        if !entry.isDemo { context.insert(SyncTombstone(recordID: entry.id, recordType: "workout")) }
                         context.delete(entry)
                         persist()
                     }
@@ -222,7 +233,7 @@ struct WorkoutEditor: View {
             }
             isClassifying = true
             let candidate = WorkoutPartCandidate(id: entry?.id.uuidString ?? UUID().uuidString, note: note, exerciseNames: exercises.map(\.name))
-            let examples = workouts.filter { !$0.bodyParts.isEmpty }.prefix(24).map {
+            let examples = workouts.filter { !$0.isDemo && !$0.bodyParts.isEmpty }.prefix(24).map {
                 WorkoutPartExample(note: $0.note, exerciseNames: $0.exercises.map(\.name), bodyParts: $0.bodyParts)
             }
             classifyTask = Task {

@@ -6,7 +6,15 @@ import Charts
 /// 每日中位数 vs 趋势体重曲线，以及身体组成（体脂率、脂肪量、瘦体重）。
 struct BodyDashboardView: View {
     @Environment(AppSettings.self) private var settings
-    @Query(sort: \BodyMetric.date) private var bodyMetrics: [BodyMetric]
+    @Query(sort: \BodyMetric.date) private var storedBodyMetrics: [BodyMetric]
+
+    @Query(filter: #Predicate<MealEntry> { !$0.isDemo }) private var realMealEntry: [MealEntry]
+    @Query(filter: #Predicate<WorkoutEntry> { !$0.isDemo }) private var realWorkoutEntry: [WorkoutEntry]
+
+    private var bodyMetrics: [BodyMetric] {
+        let hasReal = storedBodyMetrics.contains { !$0.isDemo } || !realMealEntry.isEmpty || !realWorkoutEntry.isEmpty
+        return storedBodyMetrics.filter { $0.isDemo != hasReal }
+    }
 
     private var calendar: Calendar { .current }
     private var todayStart: Date { calendar.startOfDay(for: .now) }

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f7f9">
   <meta name="description" content="LifeRecord 与 Android、iOS 双向同步的饮食、营养与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
-  <link rel="stylesheet" href="styles.css?v=20261013-default1">
+  <link rel="stylesheet" href="styles.css?v=account-20261013-default1">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
@@ -131,7 +131,7 @@
         <button id="aiCheckConfig" class="secondary-button" type="button">检查地址与参数</button><p id="aiConfigStatus" role="status"></p>
       </section>
       <section class="settings-section"><h3>外观</h3><label>主题<select id="webTheme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></section>
-      <section class="settings-section"><h3>数据与账号</h3><p class="upload-hint">每位测试者使用独立密钥；遗失密钥请联系向你发送邀请的组织者。</p><div class="settings-actions"><button class="secondary-button" id="exportButton" type="button">导出全部记录</button><button class="secondary-button" id="changeKeyButton" type="button">退出 / 更换账号</button><a href="privacy.html">隐私与测试说明</a></div></section>
+      <section class="settings-section"><h3>数据与账号</h3><p class="upload-hint">用户可自行注册账号，无需分配同步密钥。已有密钥用户可以继续连接并设置账号密码。</p><div class="settings-actions"><button class="secondary-button" id="exportButton" type="button">导出全部记录</button><button class="secondary-button" id="accountPasswordButton" type="button">设置账号 / 修改密码</button><button class="secondary-button" id="changeKeyButton" type="button">退出 / 更换账号</button><a href="privacy.html">隐私与测试说明</a></div></section>
       <section class="settings-section danger-section"><h3>注销云端账号</h3><p class="upload-hint">撤销同步凭证并删除云端记录和照片。各设备本机数据及运维备份需要另行处理，请先导出记录。</p><button id="deleteAccountButton" class="delete-record" type="button">注销云端账号</button></section>
       <button class="primary-button submit-button" type="button" data-close="settingsDialog">完成</button>
     </div>
@@ -148,12 +148,29 @@
 
   <dialog id="authDialog" class="modal auth-modal">
     <form id="authForm" class="modal-sheet">
-      <div class="auth-mark">L</div><span class="eyebrow">USER SYNC</span><h2>连接你的 LifeRecord</h2>
-      <p class="auth-copy">每位测试者使用自己的独立同步密钥。在 Android / iOS 的跨设备同步设置中填写相同密钥。请向测试组织者领取，勿使用他人的私人密钥。</p>
-      <label>同步密钥<input name="token" type="password" autocomplete="current-password" required placeholder="粘贴自己的独立同步密钥"></label>
+      <div class="auth-mark">L</div><span class="eyebrow">LIFERECORD ACCOUNT</span><h2 id="authTitle">欢迎回来</h2>
+      <p class="auth-copy">自己注册账号，即可在设备间同步生活记录。无需邀请或管理员分配。</p>
+      <label>登录方式<select id="authMode"><option value="login">账号密码登录</option><option value="register">注册新账号</option><option value="key">同步密钥连接</option></select></label>
+      <label id="authTokenField" hidden>同步密钥<input name="token" type="password" autocomplete="off" placeholder="粘贴自己的独立同步密钥" maxlength="512"></label>
+      <label id="authUsernameField">账号<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="32" pattern="[a-zA-Z0-9][a-zA-Z0-9_.]{2,31}" placeholder="3–32 位字母、数字、下划线或点"></label>
+      <label id="authPasswordField">密码<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+      <label id="authConfirmationField" hidden>确认密码<input name="confirmation" type="password" autocomplete="new-password" maxlength="128"></label>
       <p class="auth-copy"><a href="downloads/LifeRecord-1.4.0-beta.apk" download>下载安卓测试版</a> · <a href="privacy.html">隐私与测试说明</a></p>
-      <p class="form-error" id="authError"></p>
-      <button class="primary-button submit-button" type="submit">安全连接</button>
+      <p class="form-error" id="authError" role="status"></p>
+      <button class="primary-button submit-button" id="authSubmit" type="submit">登录并同步</button>
+    </form>
+  </dialog>
+
+  <dialog id="accountPasswordDialog" class="modal auth-modal" aria-labelledby="accountPasswordTitle">
+    <form id="accountPasswordForm" class="modal-sheet">
+      <div class="modal-top"><h2 id="accountPasswordTitle">账号与密码</h2><button type="button" class="icon-button" data-close="accountPasswordDialog" aria-label="关闭">×</button></div>
+      <p class="auth-copy">设置后可在安卓或网页使用账号密码登录。修改密码会让其他设备的登录会话失效，原同步密钥仍可使用。</p>
+      <label>账号<input id="accountUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="32" pattern="[a-zA-Z0-9][a-zA-Z0-9_.]{2,31}"></label>
+      <label id="accountCurrentField">当前密码<input id="accountCurrentPassword" name="currentPassword" type="password" autocomplete="current-password" maxlength="128"></label>
+      <label>新密码<input name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+      <label>确认新密码<input name="confirmation" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+      <p id="accountPasswordError" class="form-error" role="status"></p>
+      <button class="primary-button submit-button" type="submit">保存账号密码</button>
     </form>
   </dialog>
 
@@ -222,7 +239,7 @@
     </div>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20261013-default1"></script>
+  <script src="app.js?v=account-20261013-default1"></script>
   <script src="admin.js?v=20261013-default1"></script>
   <script src="settings.js?v=20261013-default1"></script>
   <script src="workouts.js?v=20261013-default1"></script>

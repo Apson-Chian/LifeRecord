@@ -3,6 +3,8 @@ import hashlib
 import json
 import secrets
 import time
+import hmac
+import re
 
 LEGACY_USER = 'legacy-owner'
 
@@ -13,6 +15,7 @@ def initialize(db, legacy_token):
     db.executescript('''
     CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, label TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL, created_at REAL NOT NULL, disabled INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at REAL NOT NULL);
+    CREATE TABLE IF NOT EXISTS account_credentials(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS user_records(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, record_type TEXT NOT NULL, record_id TEXT NOT NULL, updated_at REAL NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN(0,1)), PRIMARY KEY(user_id,record_type,record_id));
     CREATE INDEX IF NOT EXISTS user_records_updated ON user_records(user_id,record_type,updated_at);
     CREATE TABLE IF NOT EXISTS record_fields(user_id TEXT NOT NULL, record_type TEXT NOT NULL, record_id TEXT NOT NULL, node INTEGER NOT NULL, parent INTEGER, name TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN('object','array','null','bool','int','real','text')), text_value TEXT, number_value REAL, PRIMARY KEY(user_id,record_type,record_id,node), FOREIGN KEY(user_id,record_type,record_id) REFERENCES user_records(user_id,record_type,record_id) ON DELETE CASCADE);
@@ -83,4 +86,85 @@ def create_user(db,label):
 def user_for_token(db,token):
     if not isinstance(token,str) or not token or len(token)>512: return None
     row=db.execute('SELECT id FROM users WHERE token_hash=? AND disabled=0',(token_hash(token),)).fetchone()
-    return row['id'] if row else None
+    if row: return row['id']
+    row=db.execute('SELECT s.user_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.disabled=0',(token_hash(token),time.time())).fetchone()
+    return row['user_id'] if row else None
+
+
+def normalize_username(value):
+    if not isinstance(value,str): raise ValueError('账号需要 3–32 位字母、数字、下划线或点')
+    value=value.strip().lower()
+    if not re.fullmatch(r'[a-z0-9][a-z0-9_.]{2,31}',value):
+        raise ValueError('账号需要 3–32 位字母、数字、下划线或点，并以字母或数字开头')
+    return value
+
+
+SCRYPT_N = 131072
+
+
+def password_digest(password, salt=None):
+    if not isinstance(password,str) or not 10 <= len(password) <= 128 or not password.strip():
+        raise ValueError('密码需要 10–128 个字符')
+    salt=salt or secrets.token_hex(16)
+    digest=hashlib.scrypt(password.encode('utf-8'),salt=bytes.fromhex(salt),n=SCRYPT_N,r=8,p=1,maxmem=256*1024*1024).hex()
+    return f'scrypt${SCRYPT_N}$8$1${salt}${digest}'
+
+
+def password_matches(password, encoded):
+    try:
+        if not isinstance(password,str) or not 10 <= len(password) <= 128 or not password.strip(): return False
+        parts=encoded.split('$')
+        if len(parts)==3:
+            algorithm,salt,expected=parts
+            n,r,p=16384,8,1  # Read the first password implementation without locking users out.
+        else:
+            algorithm,n,r,p,salt,expected=parts
+            n,r,p=int(n),int(r),int(p)
+        if algorithm!='scrypt' or (n,r,p) not in ((16384,8,1),(SCRYPT_N,8,1)): return False
+        digest=hashlib.scrypt(password.encode('utf-8'),salt=bytes.fromhex(salt),n=n,r=r,p=p,maxmem=256*1024*1024).hex()
+        return hmac.compare_digest(digest,expected)
+    except (ValueError,TypeError,AttributeError): return False
+
+
+# Pay the same password-hashing cost for unknown accounts to avoid a timing oracle.
+_DUMMY_PASSWORD = password_digest('unused-dummy-password')
+
+
+def account_info(db,user):
+    row=db.execute('SELECT username FROM account_credentials WHERE user_id=?',(user,)).fetchone()
+    return {'userId':user,'username':row['username'] if row else ''}
+
+
+def authenticate_password(db,username,password):
+    try: username=normalize_username(username)
+    except ValueError: username=''
+    row=db.execute('SELECT c.* FROM account_credentials c JOIN users u ON u.id=c.user_id WHERE c.username=? AND u.disabled=0',(username,)).fetchone()
+    matched=password_matches(password,row['password_hash'] if row else _DUMMY_PASSWORD)
+    if row and matched and not row['password_hash'].startswith(f'scrypt${SCRYPT_N}$8$1$'):
+        db.execute('UPDATE account_credentials SET password_hash=? WHERE user_id=?',(password_digest(password),row['user_id']))
+    return row['user_id'] if row and matched else None
+
+
+def register_account(db,username,password):
+    """Caller commits user and credentials in one transaction; no invitation is required."""
+    username=normalize_username(username)
+    encoded=password_digest(password)
+    if db.execute('SELECT 1 FROM account_credentials WHERE username=?',(username,)).fetchone():
+        raise ValueError('该账号不可用，请换一个账号')
+    user,_=create_user(db,username)
+    db.execute('INSERT INTO account_credentials VALUES(?,?,?)',(user,username,encoded))
+    return account_info(db,user)
+
+
+def set_credentials(db,user,username,password,current_password=None):
+    username=normalize_username(username)
+    encoded=password_digest(password)
+    current=db.execute('SELECT password_hash FROM account_credentials WHERE user_id=?',(user,)).fetchone()
+    if current and not password_matches(current_password,current['password_hash']):
+        raise ValueError('当前密码不正确')
+    if db.execute('SELECT 1 FROM account_credentials WHERE username=? AND user_id<>?',(username,user)).fetchone():
+        raise ValueError('该账号不可用，请换一个账号')
+    db.execute('INSERT INTO account_credentials VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET username=excluded.username,password_hash=excluded.password_hash',(user,username,encoded))
+    # Password changes invalidate every previous browser/device login.
+    db.execute('DELETE FROM sessions WHERE user_id=?',(user,))
+    return account_info(db,user)

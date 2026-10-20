@@ -407,10 +407,10 @@ struct MealEditView: View {
     private func save() {
         guard !meal.isDeleted else { errorMessage = "该记录已被删除，请关闭编辑页。"; return }
         guard meal.updatedAt == originalUpdatedAt else { errorMessage = "该记录已在其他设备更新，请关闭后重新编辑。"; return }
-        guard !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              [draft.calories, draft.protein, draft.carbs, draft.fat, draft.fiber].allSatisfy({ $0.isFinite && $0 >= 0 }) else {
-            errorMessage = "请填写名称和有效的非负营养数值。"; return
-        }
+        do {
+            try RecordInput.meal(name: draft.name, calories: draft.calories, protein: draft.protein,
+                                 carbs: draft.carbs, fat: draft.fat, fiber: draft.fiber, note: draft.note)
+        } catch { errorMessage = error.localizedDescription; return }
         meal.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         meal.date = date; meal.kindRaw = kind.rawValue
         meal.calories = draft.calories; meal.protein = draft.protein; meal.carbs = draft.carbs

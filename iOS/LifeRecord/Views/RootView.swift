@@ -104,7 +104,7 @@ struct RootView: View {
     private func refreshReminders() {
         RecordReminderCenter.shared.refresh(preferences: .decode(reminderRaw), records: .init(
             meals: meals.filter { !$0.isDemo }.map(\.date),
-            body: bodyMetrics.filter { !$0.isDemo }.map(\.date), workouts: workouts.map(\.date)))
+            body: bodyMetrics.filter { !$0.isDemo }.map(\.date), workouts: workouts.filter { !$0.isDemo }.map(\.date)))
     }
 
     private func updateCoachVisibility(for phase: ScenePhase) {

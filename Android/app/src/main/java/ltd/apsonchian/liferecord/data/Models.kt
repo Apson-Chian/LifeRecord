@@ -49,8 +49,40 @@ fun defaultProfile() = JSONObject().apply {
 object Validation {
     fun number(json: JSONObject, key: String, low: Double, high: Double, optional: Boolean = false) {
         if (optional && (!json.has(key) || json.isNull(key))) return
+        require(json.opt(key) is Number) { "$key 需要 JSON 数值" }
         val value = json.optDouble(key, Double.NaN)
         require(value.isFinite() && value in low..high) { "$key 应在 ${format(low)}–${format(high)} 之间" }
+    }
+    // Shape checks for historical reads, separate from explicit-write bounds.
+    // Preserve absent fields and old outliers in the original JSONObject.
+    fun history(r: Record) {
+        val j = r.json
+        require(j.opt("id") is String && r.id.isNotBlank()) { "历史记录 id 无效；请先导出并人工核对" }
+        fun numeric(key: String, required: Boolean = false) {
+            if (!required && (!j.has(key) || j.isNull(key))) return
+            require(j.opt(key) is Number && j.optDouble(key, Double.NaN).isFinite()) { "${r.type.wire} ${r.id}: $key 类型无效；原始数据保留在服务器诊断导出" }
+        }
+        numeric("date", true); numeric("updatedAt", true)
+        for (key in listOf("note", "name", "kind", "source", "inputText", "sourceConversationID")) {
+            if(j.has(key)) require(j.opt(key) is String) { "${r.type.wire} ${r.id}: $key 需要文本" }
+        }
+        when(r.type) {
+            RecordType.MEAL -> {
+                require(j.opt("name") is String)
+                listOf("calories", "protein", "carbs", "fat", "fiber", "createdAt").forEach { numeric(it) }
+                if(j.has("photoIDs") && !j.isNull("photoIDs")) j.getJSONArray("photoIDs").strings()
+            }
+            RecordType.BODY -> { numeric("weight", true); numeric("bodyFat"); numeric("waist") }
+            RecordType.WORKOUT -> {
+                numeric("endDate")
+                if(j.has("bodyParts") && !j.isNull("bodyParts")) j.getJSONArray("bodyParts").strings()
+                if(j.has("exercises")) j.getJSONArray("exercises").objects().forEach { ex ->
+                    require(ex.opt("name") is String)
+                    ex.getJSONArray("sets").objects()
+                }
+            }
+            else -> Unit
+        }
     }
     fun record(r: Record) {
         val j = r.json
@@ -63,7 +95,7 @@ object Validation {
                 require(ids.size <= 12 && ids.all { it.matches(Regex("[0-9a-f]{32}")) }) { "照片编号无效" }
                 listOf("calories" to 20000.0, "protein" to 2000.0, "carbs" to 3000.0, "fat" to 2000.0, "fiber" to 500.0).forEach { (key, max) -> number(j, key, 0.0, max) }
             }
-            RecordType.BODY -> { number(j, "weight", 20.0, 400.0); number(j, "bodyFat", 0.0, 75.0, true); number(j, "waist", 20.0, 300.0, true) }
+            RecordType.BODY -> { number(j, "weight", 20.0, 400.0); number(j, "bodyFat", 1.0, 80.0, true); number(j, "waist", 20.0, 300.0, true) }
             RecordType.WORKOUT -> {
                 number(j, "endDate", r.date, 4102444800.0, true)
                 val bodyParts = j.optJSONArray("bodyParts")?.strings().orEmpty()
@@ -81,11 +113,18 @@ object Validation {
             RecordType.EXERCISE -> require(j.optString("name").isNotBlank()) { "请填写动作名称" }
         }
     }
+    fun historicalProfile(j: JSONObject) {
+        for (key in listOf("updatedAt", "height", "baselineWeight", "targetWeight", "weeklyWeightTarget", "calorieGoal", "proteinGoal", "carbsGoal", "fatGoal")) {
+            require(j.opt(key) is Number && j.optDouble(key, Double.NaN).isFinite()) { "settings profile: $key 类型无效；请保留诊断导出并人工核对" }
+        }
+        require(j.opt("fitnessGoal") is String && j.opt("displayName") is String) { "settings profile: 文本字段类型无效" }
+    }
     fun profile(j: JSONObject) {
         require(j.optString("fitnessGoal") in listOf("增肌", "减脂", "维持")) { "请选择健身目标" }
-        number(j, "height", 80.0, 250.0); number(j, "baselineWeight", 20.0, 400.0); number(j, "targetWeight", 20.0, 400.0)
-        number(j, "weeklyWeightTarget", -2.0, 2.0)
-        listOf("calorieGoal", "proteinGoal", "carbsGoal", "fatGoal").forEach { number(j, it, 1.0, if(it == "calorieGoal") 20000.0 else 3000.0) }
+        number(j, "height", 50.0, 300.0); number(j, "baselineWeight", 20.0, 400.0); number(j, "targetWeight", 20.0, 400.0)
+        number(j, "weeklyWeightTarget", -5.0, 5.0)
+        number(j, "calorieGoal", 500.0, 10000.0); number(j, "proteinGoal", 1.0, 600.0)
+        number(j, "carbsGoal", 1.0, 1200.0); number(j, "fatGoal", 1.0, 500.0)
     }
 }
 data class Snapshot(val records: List<Record>, val profile: JSONObject, val deletions: List<JSONObject>)
@@ -99,7 +138,7 @@ object Merge {
         }
         listOf(RecordType.MEAL, RecordType.BODY, RecordType.WORKOUT).forEach { type ->
             remote.optJSONArray(type.collection)?.objects()?.forEach { j ->
-                val r = Record(type, j.copy()); Validation.record(r)
+                val r = Record(type, j.copy()); Validation.history(r)
                 val key = type.wire + ":" + r.id.lowercase()
                 if (r.updated > (records[key]?.updated ?: 0.0)) {
                     records[key]?.let { old -> listOf("localPhotoFiles", "uploadedPhotoFiles").forEach { field -> if(old.json.has(field)) r.json.put(field, old.json.get(field)) } }
@@ -108,7 +147,7 @@ object Merge {
             }
         }
         tombs.forEach { (key, d) -> if ((records[key]?.updated ?: Double.MAX_VALUE) <= d.getDouble("deletedAt")) records.remove(key) }
-        val profile = remote.optJSONObject("settings")?.takeIf { it.optDouble("updatedAt") > local.profile.optDouble("updatedAt") }?.also { Validation.profile(it) } ?: local.profile
+        val profile = remote.optJSONObject("settings")?.takeIf { it.optDouble("updatedAt") > local.profile.optDouble("updatedAt") }?.also { Validation.historicalProfile(it) } ?: local.profile
         return Snapshot(records.values.toList(), profile.copy(), tombs.values.toList())
     }
     fun wire(s: Snapshot) = JSONObject().apply {

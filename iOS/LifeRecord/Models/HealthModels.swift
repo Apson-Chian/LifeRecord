@@ -339,9 +339,11 @@ final class WorkoutEntry {
     var exercisesRaw: String = "[]"
     // Empty means a legacy record whose parts come from its exercises.
     var bodyPartsRaw: String = ""
+    var isDemo: Bool = false
     var updatedAt: Date = Date.now
 
-    init(id: UUID = UUID(), date: Date = .now, endDate: Date? = nil, note: String = "") {
+    init(id: UUID = UUID(), date: Date = .now, endDate: Date? = nil, note: String = "", isDemo: Bool = false) {
+        self.isDemo = isDemo
         self.id = id
         self.date = date
         self.endDate = endDate

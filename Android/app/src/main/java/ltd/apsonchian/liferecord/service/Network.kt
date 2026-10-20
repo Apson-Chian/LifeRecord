@@ -10,11 +10,12 @@ import java.util.concurrent.TimeUnit
 import android.util.Base64
 
 class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(100, TimeUnit.SECONDS).build(), private val baseURL: () -> String = { BASE }) {
-    private fun execute(url: String, secret: String, body: JSONObject?, header: String = "Authorization", bearer: Boolean = true, officialDeepSeek: Boolean = false, onCall: ((Call) -> Unit)? = null): ByteArray {
+    private fun execute(url: String, secret: String, body: JSONObject?, header: String = "Authorization", bearer: Boolean = true, officialDeepSeek: Boolean = false, onCall: ((Call) -> Unit)? = null, anonymous: Boolean = false): ByteArray {
         require(url.startsWith("https://")) { "接口地址需要使用 HTTPS" }
-        require(secret.isNotBlank()) { "请先配置密钥" }
+        require(anonymous || secret.isNotBlank()) { "请先配置密钥" }
         require(secret.all { it.code in 33..126 }) { "密钥不能包含空格、换行或中文，请重新粘贴" }
-        val request = Request.Builder().url(url).header(header, if(bearer) "Bearer $secret" else secret).apply {
+        val request = Request.Builder().url(url).apply {
+            if(secret.isNotBlank()) header(header, if(bearer) "Bearer $secret" else secret)
             if(body != null) post(body.toString().toRequestBody("application/json".toMediaType()))
         }.build()
         val call=client.newBuilder().followRedirects(false).followSslRedirects(false).callTimeout(100, TimeUnit.SECONDS).build().newCall(request)
@@ -25,9 +26,16 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
                 if(officialDeepSeek) AIAuthentication.deepSeekFailure(response.code)?.let { error(it) }
                 // Error bodies can contain request echoes. Never display credentials.
                 val summary = runCatching { JSONObject(bytes.toString(Charsets.UTF_8)).let { it.optJSONObject("error")?.optString("message") ?: it.optString("error", it.optString("message", "请求被拒绝")) } }.getOrDefault("请求被拒绝")
-                error("HTTP ${response.code}：${summary.replace(secret, "[密钥已隐藏]").take(240)}")
+                var safe = summary
+                (listOf(secret) + listOf("password", "currentPassword", "token").map { body?.optString(it).orEmpty() }).filter { it.isNotEmpty() }.forEach { safe = safe.replace(it, "[凭据已隐藏]") }
+                error("HTTP ${response.code}：${safe.take(240)}")
             }; bytes
         }
+    }
+    fun account(base: String, path: String, key: String = "", body: JSONObject? = null): JSONObject {
+        validateHTTPS(base)
+        require(path in listOf("me", "login", "register", "credentials"))
+        return JSONObject(execute("${base.trimEnd('/')}/account/$path", key, body, anonymous = path in listOf("login", "register")).toString(Charsets.UTF_8))
     }
     fun sync(snapshot: Snapshot, key: String): JSONObject = JSONObject(execute("${baseURL().trimEnd('/')}/sync", key, Merge.wire(snapshot)).toString(Charsets.UTF_8))
     fun upload(bytes: ByteArray, mealId: String, key: String): String = JSONObject(execute("${baseURL().trimEnd('/')}/images", key, JSONObject().put("mealId", mealId).put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))).toString(Charsets.UTF_8)).getString("id")

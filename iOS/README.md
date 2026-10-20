@@ -47,6 +47,8 @@ xcodebuild -project iOS/LifeRecord.xcodeproj -scheme LifeRecord \
 
 项目最低版本与所用 SDK 版本分别配置；真机系统需受本机 Xcode 支持。目前未提供 TestFlight 下载。
 
+首次使用提供四步导览，可直接开始或主动载入近 30 天的完整示例。[导览预览与示例范围](../Docs/onboarding-and-demo.md)。
+
 ## 设置与数据
 
 照片识别、智能教练和周报需要联网并配置服务，支持预设与自定义兼容接口。[接口设置](../Docs/api-settings.md)
@@ -64,5 +66,5 @@ xcodebuild -project iOS/LifeRecord.xcodeproj -scheme LifeRecord \
 ```
 
 - [身体趋势统计口径](../Docs/body-trends.md)
-- [当前版本更新说明](../Docs/android-release-1.4-beta5.md)
+- [当前版本更新说明](../Docs/android-release-1.4-beta6.md)
 - [共享回归检查](../Tests/README.md)

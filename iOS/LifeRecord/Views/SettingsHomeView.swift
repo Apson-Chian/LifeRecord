@@ -62,15 +62,19 @@ private struct SettingsDestinationLabel: View {
 private struct ProfileSettingsView: View {
     @Environment(AppSettings.self) private var settings
     @FocusState private var focused: Bool
+    @State private var draft = ProfileDraft()
+    @State private var loaded = false
+    @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        @Bindable var settings = settings
         Form {
+            if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
             Section("个人资料") {
-                TextField("称呼（可选）", text: $settings.displayName)
+                TextField("称呼（可选）", text: $draft.displayName)
                     .textContentType(.name)
                     .focused($focused)
-                Picker("当前目标", selection: $settings.fitnessGoal) {
+                Picker("当前目标", selection: $draft.fitnessGoal) {
                     ForEach(FitnessGoal.allCases) { goal in
                         Label(goal.rawValue, systemImage: goal.symbol).tag(goal)
                     }
@@ -78,22 +82,22 @@ private struct ProfileSettingsView: View {
             }
 
             Section("身体与体重") {
-                SettingsNumberRow(title: "身高", value: $settings.height, unit: "cm", focused: $focused)
-                SettingsNumberRow(title: "起始体重", value: $settings.baselineWeight, unit: "kg", focused: $focused)
-                SettingsNumberRow(title: "目标体重", value: $settings.targetWeight, unit: "kg", focused: $focused)
-                SettingsNumberRow(title: "每周体重变化", value: $settings.weeklyWeightTarget, unit: "kg", focused: $focused)
+                SettingsNumberRow(title: "身高", value: $draft.height, unit: "cm", focused: $focused)
+                SettingsNumberRow(title: "起始体重", value: $draft.baselineWeight, unit: "kg", focused: $focused)
+                SettingsNumberRow(title: "目标体重", value: $draft.targetWeight, unit: "kg", focused: $focused)
+                SettingsNumberRow(title: "每周体重变化", value: $draft.weeklyWeightTarget, unit: "kg", focused: $focused)
             }
 
             Section("每日营养目标") {
-                SettingsNumberRow(title: "每日热量", value: $settings.calorieGoal, unit: "kcal", focused: $focused)
-                SettingsNumberRow(title: "蛋白质", value: $settings.proteinGoal, unit: "g", focused: $focused)
-                SettingsNumberRow(title: "碳水", value: $settings.carbsGoal, unit: "g", focused: $focused)
-                SettingsNumberRow(title: "脂肪", value: $settings.fatGoal, unit: "g", focused: $focused)
+                SettingsNumberRow(title: "每日热量", value: $draft.calorieGoal, unit: "kcal", focused: $focused)
+                SettingsNumberRow(title: "蛋白质", value: $draft.proteinGoal, unit: "g", focused: $focused)
+                SettingsNumberRow(title: "碳水", value: $draft.carbsGoal, unit: "g", focused: $focused)
+                SettingsNumberRow(title: "脂肪", value: $draft.fatGoal, unit: "g", focused: $focused)
             }
 
             Section {
-                Button("套用“\(settings.fitnessGoal.rawValue)”建议模板", systemImage: "wand.and.stars") {
-                    settings.applyGoalTemplate(settings.fitnessGoal)
+                Button("套用“\(draft.fitnessGoal.rawValue)”建议模板", systemImage: "wand.and.stars") {
+                    draft.applyTemplate()
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                 }
             } footer: {
@@ -103,6 +107,15 @@ private struct ProfileSettingsView: View {
         .navigationTitle("个人与目标")
         .navigationBarTitleDisplayMode(.inline)
         .keyboardDoneButton()
+        .task { if !loaded { draft = settings.profileDraft(); loaded = true } }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("保存") {
+                    do { try settings.saveProfileDraft(draft); dismiss() }
+                    catch { errorMessage = error.localizedDescription }
+                }
+            }
+        }
     }
 }
 
@@ -467,10 +480,10 @@ private struct PrivacyAndDataSettingsView: View {
             Section("帮助") {
                 Button("重新查看使用引导", systemImage: "book") { showsOnboarding = true }
                 Button("重新写入完整示例数据", systemImage: "arrow.counterclockwise") {
-                    DemoDataService.reinstall(context: modelContext)
+                    if !DemoDataService.reinstall(context: modelContext) { dataError = "示例未能保存。请先保存正在编辑的记录后重试。" }
                 }
                 Button("清除示例数据", systemImage: "trash") {
-                    DemoDataService.clear(context: modelContext)
+                    if !DemoDataService.clear(context: modelContext) { dataError = "示例未能清除。请先保存正在编辑的记录后重试。" }
                 }
                 .foregroundStyle(.red)
             }
@@ -518,7 +531,7 @@ private struct SettingsNumberRow: View {
             Text(title)
             Spacer()
             TextField("0", value: $value, format: .number.precision(.fractionLength(0...2)))
-                .keyboardType(.decimalPad)
+                .keyboardType(title == "每周体重变化" ? .numbersAndPunctuation : .decimalPad)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: 105)
                 .focused(focused)

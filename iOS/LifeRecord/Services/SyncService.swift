@@ -3,74 +3,6 @@ import CryptoKit
 import Observation
 import SwiftData
 
-struct SyncedProfile: Codable {
-    var id = "profile"
-    var updatedAt: Double
-    var displayName: String
-    var fitnessGoal: String
-    var height: Double
-    var baselineWeight: Double
-    var targetWeight: Double
-    var weeklyWeightTarget: Double
-    var calorieGoal: Double
-    var proteinGoal: Double
-    var carbsGoal: Double
-    var fatGoal: Double
-}
-
-private struct SyncedMeal: Codable {
-    var id: String
-    var date: Double
-    var kind: String
-    var name: String
-    var calories: Double
-    var protein: Double
-    var carbs: Double
-    var fat: Double
-    var fiber: Double
-    var note: String
-    var source: String
-    var createdAt: Double
-    var updatedAt: Double
-    var photoIDs: [String]?
-    var inputText: String?
-    var sourceConversationID: String?
-}
-
-private struct SyncedBodyMetric: Codable {
-    var id: String
-    var date: Double
-    var weight: Double
-    var bodyFat: Double?
-    var waist: Double?
-    var note: String
-    var updatedAt: Double
-}
-
-private struct SyncedWorkout: Codable {
-    var exercises: [WorkoutExercise]? = nil
-    var bodyParts: [String]? = nil
-    var id: String
-    var date: Double
-    var endDate: Double?
-    var note: String
-    var updatedAt: Double
-}
-
-private struct SyncedDeletion: Codable {
-    var id: String
-    var recordType: String
-    var deletedAt: Double
-}
-
-private struct SyncSnapshot: Codable {
-    var meals: [SyncedMeal]
-    var bodyMetrics: [SyncedBodyMetric]
-    var workoutEntries: [SyncedWorkout]? = nil
-    var settings: SyncedProfile?
-    var deletions: [SyncedDeletion]
-    var serverTime: Double?
-}
 
 enum SyncServiceError: LocalizedError {
     case notConfigured
@@ -107,6 +39,16 @@ final class SyncCoordinator {
     }
     private var needsAnotherSync = false
     private let photoStore = MealPhotoStore()
+    var compatibilityIssues: [String] = []
+
+    private func diagnosticArchiveURL() throws -> URL {
+        let identity = UserDefaults.standard.string(forKey: "sync.identity") ?? ""
+        guard !identity.isEmpty, identity.allSatisfy({ $0.isHexDigit }) else { throw SyncServiceError.notConfigured }
+        let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                     appropriateFor: nil, create: true).appendingPathComponent("SyncDiagnostics", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent(identity + ".json")
+    }
 
     var isSyncing = false
     var isConfigured = KeychainStore.hasSyncKey
@@ -152,9 +94,18 @@ final class SyncCoordinator {
                 let inbound = try await exchange(outbound, key: key)
                 try Task.checkCancellation()
                 guard KeychainStore.loadSyncKey() == key, Self.baseURL == baseAtStart else { throw CancellationError() }
-                try apply(inbound, context: context, settings: settings)
+                // Archive before applying the display projection. Failure to retain
+                // unreadable originals must never be reported as a complete sync.
+                try inbound.original.write(to: diagnosticArchiveURL(), options: .atomic)
+                try apply(inbound.snapshot, context: context, settings: settings)
+                compatibilityIssues = inbound.issues
                 lastSyncedAt = .now
-                statusMessage = "所有设备已同步"
+                if inbound.issues.isEmpty {
+                    statusMessage = "所有设备已同步"
+                } else {
+                    statusMessage = "可读取记录已同步；\(inbound.issues.count) 项历史数据待核对"
+                    lastError = inbound.issues.prefix(3).joined(separator: "\n") + "\n请在数据导出中保留 compatibilitySnapshot，并按原 ID 人工修正，勿删除原记录。"
+                }
             } catch {
                 if Task.isCancelled || error is CancellationError {
                     statusMessage = "同步已暂停，等待下次同步"
@@ -221,7 +172,12 @@ final class SyncCoordinator {
     func clearPhotoCache() async { await photoStore.clear() }
 
     func exportData(context: ModelContext, settings: AppSettings) throws -> Data {
-        try JSONEncoder().encode(makeSnapshot(context:context,settings:settings))
+        let current = try JSONEncoder().encode(makeSnapshot(context:context,settings:settings))
+        guard let url = try? diagnosticArchiveURL(), FileManager.default.fileExists(atPath: url.path) else { return current }
+        var object = try JSONSerialization.jsonObject(with: current) as! [String: Any]
+        object["compatibilitySnapshot"] = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
+        object["compatibilityNote"] = "只读历史原始快照；不能盲目重放。按原 ID 和当前版本核对后人工修正。"
+        return try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
     }
 
     private func makeSnapshot(context: ModelContext, settings: AppSettings) throws -> SyncSnapshot {
@@ -231,7 +187,7 @@ final class SyncCoordinator {
                 SyncedMeal(
                     id: $0.id.uuidString.lowercased(),
                     date: $0.date.timeIntervalSince1970,
-                    kind: $0.kind.rawValue,
+                    kind: $0.kindRaw,
                     name: $0.name,
                     calories: $0.calories,
                     protein: $0.protein,
@@ -239,7 +195,7 @@ final class SyncCoordinator {
                     fat: $0.fat,
                     fiber: $0.fiber,
                     note: $0.note,
-                    source: $0.source.rawValue,
+                    source: $0.sourceRaw,
                     createdAt: $0.createdAt.timeIntervalSince1970,
                     updatedAt: $0.updatedAt.timeIntervalSince1970,
                     photoIDs: $0.photoIDs,
@@ -260,7 +216,7 @@ final class SyncCoordinator {
                     updatedAt: $0.updatedAt.timeIntervalSince1970
                 )
             }
-        let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>()).map {
+        let workouts = try context.fetch(FetchDescriptor<WorkoutEntry>()).filter { !$0.isDemo }.map {
             SyncedWorkout(exercises: $0.exercises, bodyParts: $0.bodyParts, id: $0.id.uuidString.lowercased(), date: $0.date.timeIntervalSince1970,
                           endDate: $0.endDate?.timeIntervalSince1970, note: $0.note,
                           updatedAt: $0.updatedAt.timeIntervalSince1970)
@@ -297,13 +253,16 @@ final class SyncCoordinator {
         )
     }
 
-    private func exchange(_ snapshot: SyncSnapshot, key: String) async throws -> SyncSnapshot {
+    private func exchange(_ snapshot: SyncSnapshot, key: String) async throws -> SyncCompatibility.Read {
         var request = URLRequest(url: try Self.endpoint("sync"))
         request.httpMethod = "POST"
         request.timeoutInterval = 25
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(snapshot)
+        let encoded = try JSONEncoder().encode(snapshot)
+        if let url = try? diagnosticArchiveURL(), let original = try? Data(contentsOf: url) {
+            request.httpBody = try SyncCompatibility.preservingUnchanged(encoded, original: original)
+        } else { request.httpBody = encoded }
         let (data, response) = try await PrivateHTTPSession.session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw SyncServiceError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
@@ -311,10 +270,33 @@ final class SyncCoordinator {
             let message = payload?["error"] as? String ?? "同步服务器错误 \(http.statusCode)"
             throw SyncServiceError.server("HTTP \(http.statusCode)：\(message)")
         }
-        return try JSONDecoder().decode(SyncSnapshot.self, from: data)
+        return try SyncCompatibility.read(data)
     }
 
-    private func apply(_ snapshot: SyncSnapshot, context: ModelContext, settings: AppSettings) throws {
+    private func apply(_ snapshot: SyncSnapshot, context callerContext: ModelContext, settings: AppSettings, persist: ((ModelContext) throws -> Void)? = nil) throws {
+        // Build and validate the entire inbound plan before touching persistent models.
+        func ids(_ values: [String]) throws {
+            guard values.allSatisfy({ UUID(uuidString: $0) != nil }),
+                  Set(values.map { $0.lowercased() }).count == values.count else { throw SyncServiceError.invalidResponse }
+        }
+        try ids(snapshot.meals.map(\.id)); try ids(snapshot.bodyMetrics.map(\.id))
+        try ids((snapshot.workoutEntries ?? []).map(\.id))
+        guard snapshot.deletions.allSatisfy({ UUID(uuidString: $0.id) != nil && ["meal", "body", "workout"].contains($0.recordType) && $0.deletedAt.isFinite }) else { throw SyncServiceError.invalidResponse }
+        for workout in snapshot.workoutEntries ?? [] {
+            if let exercises = workout.exercises { try WorkoutExercise.validate(exercises) }
+            if let parts = workout.bodyParts {
+                guard parts.count <= 30, parts.allSatisfy(WorkoutBodyParts.isValid), Set(parts).count == parts.count else { throw SyncServiceError.invalidResponse }
+            }
+        }
+        let dirtyKeys = Set((callerContext.changedModelsArray + callerContext.insertedModelsArray + callerContext.deletedModelsArray).compactMap { model -> String? in
+            if let meal = model as? MealEntry { return "meal:" + meal.id.uuidString.lowercased() }
+            if let body = model as? BodyMetric { return "body:" + body.id.uuidString.lowercased() }
+            if let workout = model as? WorkoutEntry { return "workout:" + workout.id.uuidString.lowercased() }
+            return nil
+        })
+        let context = ModelContext(callerContext.container)
+        context.autosaveEnabled = false
+        defer { if context.hasChanges { context.rollback() } }
         let localMeals = try context.fetch(FetchDescriptor<MealEntry>())
         let localBody = try context.fetch(FetchDescriptor<BodyMetric>())
         let localWorkouts = try context.fetch(FetchDescriptor<WorkoutEntry>())
@@ -323,6 +305,15 @@ final class SyncCoordinator {
         var mealsByID = Dictionary(uniqueKeysWithValues: localMeals.map { ($0.id, $0) })
         var bodyByID = Dictionary(uniqueKeysWithValues: localBody.map { ($0.id, $0) })
         var tombstonesByKey = Dictionary(uniqueKeysWithValues: localTombstones.map { ($0.key, $0) })
+
+        var mutations = Set<String>()
+        for remote in snapshot.meals where Date(timeIntervalSince1970: remote.updatedAt) > (mealsByID[UUID(uuidString: remote.id)!]?.updatedAt ?? .distantPast) { mutations.insert("meal:" + remote.id.lowercased()) }
+        for remote in snapshot.bodyMetrics where Date(timeIntervalSince1970: remote.updatedAt) > (bodyByID[UUID(uuidString: remote.id)!]?.updatedAt ?? .distantPast) { mutations.insert("body:" + remote.id.lowercased()) }
+        for remote in snapshot.workoutEntries ?? [] where Date(timeIntervalSince1970: remote.updatedAt) > (workoutsByID[UUID(uuidString: remote.id)!]?.updatedAt ?? .distantPast) { mutations.insert("workout:" + remote.id.lowercased()) }
+        for deletion in snapshot.deletions { mutations.insert(deletion.recordType + ":" + deletion.id.lowercased()) }
+        guard mutations.isDisjoint(with: dirtyKeys) else {
+            throw SyncServiceError.server("同步目标存在未保存草稿，草稿已保留，请先保存或取消后重试")
+        }
 
         for deletion in snapshot.deletions {
             guard let id = UUID(uuidString: deletion.id) else { continue }
@@ -365,7 +356,7 @@ final class SyncCoordinator {
                 local.sourceRaw = remote.source
                 local.createdAt = Date(timeIntervalSince1970: remote.createdAt)
                 local.updatedAt = updatedAt
-                local.photoIDs = remote.photoIDs ?? []
+                if let photoIDs = remote.photoIDs { local.photoIDs = photoIDs }
                 if let inputText = remote.inputText { local.inputText = inputText }
                 if let conversationID = remote.sourceConversationID { local.sourceConversationID = conversationID }
             } else {
@@ -385,6 +376,8 @@ final class SyncCoordinator {
                     inputText: remote.inputText ?? "",
                     sourceConversationID: remote.sourceConversationID ?? ""
                 )
+                entry.kindRaw = remote.kind
+                entry.sourceRaw = remote.source
                 entry.createdAt = Date(timeIntervalSince1970: remote.createdAt)
                 entry.updatedAt = updatedAt
                 context.insert(entry)
@@ -431,22 +424,25 @@ final class SyncCoordinator {
             record.updatedAt = updated
         }
 
+        try Task.checkCancellation()
+        try (persist ?? { try $0.save() })(context)
+        // No suspension or cancellation point between database commit and the
+        // nonthrowing preference projection. A failed save leaves preferences intact.
         if let profile = snapshot.settings {
             settings.applySyncedProfile(profile, updatedAt: Date(timeIntervalSince1970: profile.updatedAt))
         }
-        try context.save()
     }
 }
 
 @MainActor
 enum SyncDeletion {
     static func delete(_ meal: MealEntry, context: ModelContext) {
-        context.insert(SyncTombstone(recordID: meal.id, recordType: "meal"))
+        if !meal.isDemo { context.insert(SyncTombstone(recordID: meal.id, recordType: "meal")) }
         context.delete(meal)
     }
 
     static func delete(_ bodyMetric: BodyMetric, context: ModelContext) {
-        context.insert(SyncTombstone(recordID: bodyMetric.id, recordType: "body"))
+        if !bodyMetric.isDemo { context.insert(SyncTombstone(recordID: bodyMetric.id, recordType: "body")) }
         context.delete(bodyMetric)
     }
 }

@@ -675,7 +675,7 @@ struct CoachView: View {
                 try modelContext.save()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             } catch {
-                modelContext.rollback()
+                // The action writer rolls back its own context. Keep unrelated drafts.
                 guard userMessage.modelContext != nil, conversation.modelContext != nil, !conversation.isDeleted else { throw CancellationError() }
                 if applyingActions {
                     userMessage.generationState = .needsReview
@@ -757,8 +757,21 @@ struct CoachView: View {
         attachedImages: [Data],
         inputText: String,
         conversationID: UUID,
-        explicitlyRequestedDate: Date?
+        explicitlyRequestedDate: Date?,
+        preferenceDefaults: UserDefaults = .standard,
+        persist: (ModelContext) throws -> Void = { try $0.save() }
     ) async throws -> ActionExecution {
+        let callerContext = modelContext
+        let modelContext = ModelContext(callerContext.container)
+        modelContext.autosaveEnabled = false
+        defer { if modelContext.hasChanges { modelContext.rollback() } }
+        let meals = try modelContext.fetch(FetchDescriptor<MealEntry>())
+        let bodyMetrics = try modelContext.fetch(FetchDescriptor<BodyMetric>())
+        let workouts = try modelContext.fetch(FetchDescriptor<WorkoutEntry>())
+        var profileDraft = settings.profileDraft()
+        var profileChanged = false
+        let originalLibrary = preferenceDefaults.string(forKey: ExerciseLibrary.key) ?? "[]"
+        var stagedLibrary = originalLibrary
         var receipts: [String] = []
         var rejectedCount = 0
         var warnings: [String] = []
@@ -774,12 +787,12 @@ struct CoachView: View {
                 .replacingOccurrences(of: " ", with: "_")
             switch type {
             case "add_exercise_template", "update_exercise_template", "delete_exercise_template":
-                var library = ExerciseLibrary.decode(UserDefaults.standard.string(forKey: ExerciseLibrary.key) ?? "[]")
+                var library = ExerciseLibrary.decode(stagedLibrary)
                 let templateIndex = actionRecordID(action).flatMap { id in library.firstIndex { $0.id == id } }
                 if type == "delete_exercise_template" {
                     guard let templateIndex else { rejectedCount += 1; continue }
                     let name = library.remove(at: templateIndex).name
-                    UserDefaults.standard.set(ExerciseLibrary.encode(library), forKey: ExerciseLibrary.key)
+                    stagedLibrary = ExerciseLibrary.encode(library)
                     receipts.append("从动作库删除「\(name)」")
                     continue
                 }
@@ -805,7 +818,7 @@ struct CoachView: View {
                     else if let part = action.bodyPart { library[templateIndex].bodyPart = part == "未分类" ? nil : part }
                     receipts.append("更新动作库「\(library[templateIndex].name)」")
                 }
-                UserDefaults.standard.set(ExerciseLibrary.encode(library), forKey: ExerciseLibrary.key)
+                stagedLibrary = ExerciseLibrary.encode(library)
             case "add_workout", "update_workout", "delete_workout":
                 let existing = actionRecordID(action).flatMap { id in workouts.first { $0.id == id && !$0.isDeleted } }
                 if type != "add_workout" && existing == nil { rejectedCount += 1; continue }
@@ -853,6 +866,11 @@ struct CoachView: View {
                     rejectedCount += 1
                     continue
                 }
+                do {
+                    try RecordInput.meal(name: action.name ?? meal.name, calories: action.calories ?? meal.calories,
+                                         protein: action.protein ?? meal.protein, carbs: action.carbs ?? meal.carbs,
+                                         fat: action.fat ?? meal.fat, fiber: action.fiber ?? meal.fiber, note: action.note ?? meal.note)
+                } catch { rejectedCount += 1; continue }
                 if let value = action.name { meal.name = value.trimmingCharacters(in: .whitespacesAndNewlines) }
                 if let value = action.mealKind { meal.kindRaw = value }
                 if let value = action.source { meal.sourceRaw = value }
@@ -951,36 +969,37 @@ struct CoachView: View {
                       action.carbsGoal.map({ $0.isFinite && (1...1200).contains($0) }) ?? true,
                       action.fatGoal.map({ $0.isFinite && (1...500).contains($0) }) ?? true else { rejectedCount += 1; continue }
                 var updates: [String] = []
-                if let value = action.displayName { settings.displayName = value; updates.append("称呼 \(value)") }
+                if let value = action.displayName { profileDraft.displayName = value; updates.append("称呼 \(value)") }
                 if let value = action.fitnessGoal, let goal = FitnessGoal(rawValue: value) {
-                    settings.fitnessGoal = goal; updates.append("健身目标 \(value)")
+                    profileDraft.fitnessGoal = goal; updates.append("健身目标 \(value)")
                 }
-                if let value = action.height { settings.height = value; updates.append("身高 \(value.formatted()) cm") }
-                if let value = action.baselineWeight { settings.baselineWeight = value; updates.append("起始体重 \(value.formatted()) kg") }
-                if let value = action.weeklyWeightTarget { settings.weeklyWeightTarget = value; updates.append("每周体重变化 \(value.formatted()) kg") }
+                if let value = action.height { profileDraft.height = value; updates.append("身高 \(value.formatted()) cm") }
+                if let value = action.baselineWeight { profileDraft.baselineWeight = value; updates.append("起始体重 \(value.formatted()) kg") }
+                if let value = action.weeklyWeightTarget { profileDraft.weeklyWeightTarget = value; updates.append("每周体重变化 \(value.formatted()) kg") }
                 if let value = action.targetWeight {
-                    settings.targetWeight = value
+                    profileDraft.targetWeight = value
                     updates.append("目标体重 \(value.formatted(.number.precision(.fractionLength(1)))) kg")
                 }
                 if let value = action.calorieGoal {
-                    settings.calorieGoal = value
+                    profileDraft.calorieGoal = value
                     updates.append("热量目标 \(Int(value)) kcal")
                 }
                 if let value = action.proteinGoal {
-                    settings.proteinGoal = value
+                    profileDraft.proteinGoal = value
                     updates.append("蛋白质目标 \(Int(value)) g")
                 }
                 if let value = action.carbsGoal {
-                    settings.carbsGoal = value
+                    profileDraft.carbsGoal = value
                     updates.append("碳水目标 \(Int(value)) g")
                 }
                 if let value = action.fatGoal {
-                    settings.fatGoal = value
+                    profileDraft.fatGoal = value
                     updates.append("脂肪目标 \(Int(value)) g")
                 }
                 if updates.isEmpty {
                     rejectedCount += 1
                 } else {
+                    profileChanged = true
                     receipts.append("更新" + updates.joined(separator: "、"))
                 }
             default:
@@ -990,7 +1009,19 @@ struct CoachView: View {
         if !receipts.isEmpty {
             // 只有数据库真正保存成功，界面才允许显示成功回执。
             try Task.checkCancellation()
-            try modelContext.save()
+            if profileChanged {
+                try profileDraft.validate()
+                guard settings.profileUpdatedAt == profileDraft.originalUpdatedAt else {
+                    throw RecordInput.Invalid(field: "profile", reason: "目标已变化，请重新核对操作")
+                }
+            }
+            guard (preferenceDefaults.string(forKey: ExerciseLibrary.key) ?? "[]") == originalLibrary else {
+                throw RecordInput.Invalid(field: "exerciseLibrary", reason: "动作库已变化，请重新核对操作")
+            }
+            try persist(modelContext)
+            // No await/cancellation between commit and preference projection.
+            if profileChanged { try settings.saveProfileDraft(profileDraft) }
+            if stagedLibrary != originalLibrary { preferenceDefaults.set(stagedLibrary, forKey: ExerciseLibrary.key) }
             await syncCoordinator.sync(context: modelContext, settings: settings)
             if let photoUploadError {
                 syncCoordinator.reportPhotoUploadFailure(photoUploadError)
@@ -1087,6 +1118,9 @@ struct CoachView: View {
     }
 
     private var systemContext: String {
+        let meals = self.meals.filter { !$0.isDemo }
+        let bodyMetrics = self.bodyMetrics.filter { !$0.isDemo }
+        let workouts = self.workouts.filter { !$0.isDemo }
         let latestWeight = bodyMetrics.last?.weight ?? settings.baselineWeight
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
         let recentMeals = meals.filter { $0.date >= cutoff }
