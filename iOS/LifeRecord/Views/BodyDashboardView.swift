@@ -1,20 +1,13 @@
 import SwiftUI
-import SwiftData
 import Charts
 
 /// 「身体」总览：趋势体重、今日中位数、近 7/30 天变化、增重速度，
 /// 每日中位数 vs 趋势体重曲线，以及身体组成（体脂率、脂肪量、瘦体重）。
 struct BodyDashboardView: View {
     @Environment(AppSettings.self) private var settings
-    @Query(sort: \BodyMetric.date) private var storedBodyMetrics: [BodyMetric]
-
-    @Query(filter: #Predicate<MealEntry> { !$0.isDemo }) private var realMealEntry: [MealEntry]
-    @Query(filter: #Predicate<WorkoutEntry> { !$0.isDemo }) private var realWorkoutEntry: [WorkoutEntry]
-
-    private var bodyMetrics: [BodyMetric] {
-        let hasReal = storedBodyMetrics.contains { !$0.isDemo } || !realMealEntry.isEmpty || !realWorkoutEntry.isEmpty
-        return storedBodyMetrics.filter { $0.isDemo != hasReal }
-    }
+    // The trend screen owns the live queries and demo/real selection. Keep this
+    // nested destination query-free to avoid a navigation invalidation loop.
+    let bodyMetrics: [BodyMetric]
 
     private var calendar: Calendar { .current }
     private var todayStart: Date { calendar.startOfDay(for: .now) }

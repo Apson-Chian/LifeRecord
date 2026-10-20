@@ -151,7 +151,7 @@ struct ProgressDashboardView: View {
 
     private var bodyOverviewLink: some View {
         NavigationLink {
-            BodyDashboardView()
+            BodyDashboardView(bodyMetrics: bodyMetrics)
         } label: {
             GlassCard {
                 HStack(spacing: 12) {
