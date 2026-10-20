@@ -28,3 +28,5 @@ Swift 回归已移至 `iOS/Tests/`，运行 `./iOS/Tests/run.sh`；安卓单元�
 - `./iOS/Tests/sync-atomicity.sh`、`python3 iOS/Tests/coach-atomicity.py`：实际私有方法生成测试桥，内存数据库/独立偏好、保存失败/取消/无关草稿；已纳入 Swift run.sh，不访问网络或真实 Keychain。
 
 导览与示例数据回归：Swift `demo-data`（已纳入 `iOS/Tests/run.sh`）、Android `DemoDataTest` 与 `AppFlowTest` 的两项 onboarding 流程；设备测试仍仅运行于新建一次性模拟器的 sandbox 包。[覆盖与预览](../Docs/onboarding-and-demo.md)。
+
+- iOS `account-connection`：已纳入 Swift run.sh，验证注册/登录/改密、旧密钥迁移、账号隔离、凭据保存失败和取消；模拟 API 与独立偏好，不访问真实 Keychain。

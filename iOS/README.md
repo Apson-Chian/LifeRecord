@@ -12,6 +12,7 @@
 - 体重、体脂与腰围记录，配合趋势曲线、每日热量、训练柱状图和目标反馈回顾变化。
 - 支持图片和多对话的智能教练、独立周报，以及主动授权后的记录操作。
 - 深浅色外观、原生材质、明确的键盘收起入口和可编辑的历史记录。
+- 设置首页账号卡片，支持注册、账号密码登录与修改，兼容原同步密钥。账号功能需要新版后端。
 
 ## 界面预览
 
@@ -28,7 +29,7 @@
   </tr>
 </table>
 
-以上为 iOS 真机截图。[训练节奏](screenshots/training.png) · [设置界面](screenshots/settings.png)
+以上为 iOS 真机截图。[训练节奏](screenshots/training.png) · [设置界面](screenshots/settings.png) · [账号登录（模拟器）](screenshots/account-login.png) · [注册确认（模拟器）](screenshots/account-register.png)
 
 ## 运行
 
@@ -53,7 +54,9 @@ xcodebuild -project iOS/LifeRecord.xcodeproj -scheme LifeRecord \
 
 照片识别、智能教练和周报需要联网并配置服务，支持预设与自定义兼容接口。[接口设置](../Docs/api-settings.md)
 
-记录保存在本机 SwiftData，接口与同步密钥保存在 Keychain。连接同步服务后，餐食、身体数据、训练、目标和删除标记可跨端合并；同步在 App 活跃时运行，离线仍可记录。
+进入「设置 → 账号与同步」可注册或登录；原有用户可选择「使用原有同步密钥」，再设置账号密码。账号界面已补入源码，需要安装新构建；线上后端仍需部署新账号路由。[账号与上线状态](../Docs/account-password.md)
+
+记录保存在本机 SwiftData，接口密钥和登录会话保存在 Keychain，账号密码不在本机持久保存。连接同步服务后，餐食、身体数据、训练、目标和删除标记可跨端合并；同步在 App 活跃时运行，离线仍可记录。
 
 聊天、聊天附件、常用餐食照片和部分本机偏好不全部参与同步或导出，卸载前应另行保留。[同步与账号说明](../Docs/public-beta.md)
 

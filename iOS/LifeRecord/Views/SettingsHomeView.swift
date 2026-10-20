@@ -4,10 +4,20 @@ import UIKit
 struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
+    @AppStorage("sync.username") private var accountUsername = ""
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    NavigationLink { AccountSettingsView() } label: {
+                        SettingsDestinationLabel(
+                            title: syncCoordinator.isConfigured && !accountUsername.isEmpty ? accountUsername : "你的 LifeRecord",
+                            subtitle: syncCoordinator.isConfigured ? "账号与同步设置" : "登录或注册，让记录在设备间同步",
+                            symbol: "person.crop.circle", tint: AppTheme.accent)
+                    }
+                    .accessibilityIdentifier("settings-account")
+                }
                 Section("日常使用") {
                     NavigationLink { ProfileSettingsView() } label: {
                         SettingsDestinationLabel(title: "个人与目标", subtitle: "\(settings.fitnessGoal.rawValue) · 身体与营养", symbol: "person", tint: AppTheme.accent)
@@ -23,8 +33,8 @@ struct SettingsView: View {
                     NavigationLink { PersonalizationSettingsView() } label: {
                         SettingsDestinationLabel(title: "外观与个性化", symbol: "paintpalette", tint: .orange)
                     }
-                    NavigationLink { SyncAndIntegrationSettingsView() } label: {
-                        SettingsDestinationLabel(title: "同步与联动", subtitle: syncCoordinator.isConfigured ? "已配置" : "未配置", symbol: "arrow.triangle.2.circlepath", tint: AppTheme.recorded)
+                    NavigationLink { AccountSettingsView() } label: {
+                        SettingsDestinationLabel(title: "账号与同步", subtitle: syncCoordinator.isConfigured ? "已连接" : "未登录", symbol: "arrow.triangle.2.circlepath", tint: AppTheme.recorded)
                     }
                     NavigationLink { PrivacyAndDataSettingsView() } label: {
                         SettingsDestinationLabel(title: "隐私、数据与帮助", symbol: "lock.shield", tint: .blue)
@@ -352,7 +362,7 @@ private struct AISettingsView: View {
     }
 }
 
-private struct SyncAndIntegrationSettingsView: View {
+struct SyncAndIntegrationSettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(SyncCoordinator.self) private var syncCoordinator
     @Environment(\.modelContext) private var modelContext
