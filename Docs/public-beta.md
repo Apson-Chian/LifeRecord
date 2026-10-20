@@ -21,7 +21,7 @@ python3 /opt/liferecord-sync/manage_users.py list
 python3 /opt/liferecord-sync/manage_users.py revoke USER_ID
 ```
 
-当前开发版 Android/网页支持用户自行注册账号密码并自动登录，管理员无需为新用户分配账号或密钥。以上命令只用于兼容老用户的同步密钥管理，密钥只输出一次，不可公开分享。旧用户可用原密钥设置账号密码并保留记录。密码支持运维交互恢复，暂未提供自助邮件找回。[注册与密码存储说明](account-password.md)。撤销不会删除记录；网页注销账号则删除在线记录与照片并使所有会话及 App 凭证失效。
+iOS 当前源码与 Android beta.6 已支持在「设置 → 账号与同步」自行注册账号密码并自动登录，管理员无需为新用户分配账号或密钥。线上账号后端已于 2026-10-20 部署并验收；iOS 需安装新构建。[上线记录](account-deployment-2026-10-20.md)。网页源码同样支持账号密码，线上静态资源需单独发布。以上命令只用于兼容老用户的同步密钥管理，密钥只输出一次，不可公开分享。旧用户可用原密钥设置账号密码并保留记录。密码支持运维交互恢复，暂未提供自助邮件找回。[注册与密码存储说明](account-password.md)。撤销不会删除记录；网页注销账号则删除在线记录与照片并使所有会话及 App 凭证失效。
 
 同一设备更换同步服务器或账号前，先导出、清除本机数据。客户端保留账号绑定，防止把上一个用户的健康记录上传给下一个用户。仅关闭同步不会解除绑定。客户端按完整 API 地址保存 AI Key；改变地址后需为新地址重新填写密钥。
 
@@ -53,7 +53,9 @@ python3 Tests/android-sync.py
 ./iOS/Tests/run.sh
 # Android 工程内
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
-./gradlew :app:connectedDebugAndroidTest
+./gradlew :app:assembleSandbox :app:assembleSandboxAndroidTest
+# 仓库根目录先执行 Tests/android-isolation.py 检查 sandbox APK
+./gradlew :app:connectedSandboxAndroidTest
 # Web：需 Playwright + Chrome
 node Tests/web-smoke.cjs
 ```
