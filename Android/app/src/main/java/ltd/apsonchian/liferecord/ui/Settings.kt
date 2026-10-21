@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -70,7 +71,7 @@ import android.net.Uri
             DestinationRow("教练与 AI",ai.optString("provider"),Glyph.Coach,MaterialTheme.colorScheme.primary) {page="coach"}
         }}
         item {SettingsGroup("应用与数据") {
-            DestinationRow("外观与个性化","",Glyph.Person,Protein) {page="appearance"}
+            DestinationRow("外观与个性化","",Glyph.Palette,Carbs) {page="appearance"}
             GroupDivider()
             DestinationRow("账号与同步",status,Glyph.Sync,Color(0xFF29AD5E)) {page="sync"}
             GroupDivider()
@@ -102,9 +103,9 @@ import android.net.Uri
         "appearance" -> SettingsForm("外观与个性化",{page=""}) {
             val mode by vm.appearance.collectAsState(); val color by vm.accent.collectAsState()
             Text("主题模式")
-            FlowRow { listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (value,title) -> FilterChip(mode==value,{vm.personalize(value,color)},label={Text(title)}) } }
+            ChoiceControl(listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色"), mode, {vm.personalize(it,color)})
             Text("强调色")
-            FlowRow { listOf("purple" to "紫色", "blue" to "蓝色", "green" to "绿色", "orange" to "橙色").forEach { (value,title) -> FilterChip(color==value,{vm.personalize(mode,value)},label={Text(title)}) } }
+            ChoiceControl(listOf("purple" to "紫色", "blue" to "蓝色", "green" to "绿色", "orange" to "橙色"), color, {vm.personalize(mode,it)})
         }
         "ai" -> AISettings(vm,{page="coach"},notify)
         "sync" -> SyncSettings(vm,{page=""},notify)
@@ -145,11 +146,17 @@ import android.net.Uri
 @Composable fun SettingsRow(title:String,subtitle:String,onClick:()->Unit) { Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title,style=MaterialTheme.typography.titleMedium); Spacer(Modifier.height(4.dp)); Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,title) } }
 @Composable fun Toggle(title:String,subtitle:String="",checked:Boolean,onChange:(Boolean)->Unit) { Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); if(subtitle.isNotBlank()) Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked,onChange) } }
 @Composable fun ProfileForm(vm:AppViewModel,original:JSONObject,dismiss:()->Unit,notify:(String)->Unit) {
-    val fields=remember { mutableStateMapOf<String,String>().apply { original.keys().forEach { put(it,original.opt(it)?.toString().orEmpty()) } } }
+    val originalText = rememberSaveable { original.toString() }
+    val baseline = remember(originalText) { JSONObject(originalText) }
+    val feedback = rememberActionFeedback()
+    val fields=rememberSaveable(saver=FieldMapSaver) { mutableStateMapOf<String,String>().apply { baseline.keys().forEach { put(it,baseline.opt(it)?.toString().orEmpty()) } } }
     var error by remember { mutableStateOf("") }
-    SettingsForm("个人与目标",dismiss,{TextButton(onClick={runCatching {
-        val p=original.copy(); fields.forEach { (key,value) -> if(key in listOf("displayName","fitnessGoal","id")) p.put(key,value) else if(key!="updatedAt") p.put(key,value.toDouble()) }; vm.saveProfile(p); dismiss(); notify("目标已保存")
-    }.onFailure { error=it.message.orEmpty() }}) { Text("保存") }}) {
+    var discard by remember { mutableStateOf(false) }
+    val initial = rememberSaveable { fields.toSortedMap().toString() }
+    val close = { if (fields.toSortedMap().toString() != initial) discard=true else dismiss() }
+    SettingsForm("个人与目标",close,{TextButton(onClick={runCatching {
+        val p=baseline.copy(); fields.forEach { (key,value) -> if(key in listOf("displayName","fitnessGoal","id")) p.put(key,value) else if(key!="updatedAt") p.put(key,value.toDouble()) }; vm.saveProfile(p); feedback(true); dismiss(); notify("目标已保存")
+    }.onFailure { feedback(false); error=it.message.orEmpty() }}) { Text("保存") }}) {
         if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
         SettingsGroup("个人资料") {
             Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -160,9 +167,7 @@ import android.net.Uri
             FieldDivider()
             Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Text("当前目标",style=MaterialTheme.typography.bodyLarge)
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(2.dp).selectableGroup()) {
-                    listOf("增肌","减脂","维持").forEach {goal -> Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if(fields["fitnessGoal"]==goal) MaterialTheme.colorScheme.surface else Color.Transparent).selectable(fields["fitnessGoal"]==goal,role=Role.Tab,onClick={fields["fitnessGoal"]=goal}).padding(vertical=6.dp),contentAlignment=Alignment.Center) {Text(goal,style=MaterialTheme.typography.bodySmall)} }
-                }
+                ChoiceControl(listOf("增肌","减脂","维持").map {it to it},fields["fitnessGoal"].orEmpty(),{fields["fitnessGoal"]=it})
             }
         }
         val groups=listOf(
@@ -182,6 +187,7 @@ import android.net.Uri
         Text("每周体重变化：减重填负数。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
 
     }
+    if(discard) DiscardChangesDialog({discard=false},dismiss)
 }
 @Composable private fun CoachSettings(vm:AppViewModel,dismiss:()->Unit,openInterface:()->Unit,notify:(String)->Unit) {
     val current by vm.config.collectAsState()
@@ -364,11 +370,11 @@ import android.net.Uri
         shape=RoundedCornerShape(14.dp))
 }
 @Composable fun Library(vm:AppViewModel,type:RecordType,dismiss:()->Unit,notify:(String)->Unit) {
-    val s by vm.snapshot.collectAsState(); var editor by remember { mutableStateOf<Record?>(null) };var selected by remember { mutableStateOf<Record?>(null) }
-    SettingsForm(if(type==RecordType.FAVORITE) "常用餐食" else "我的动作库",dismiss,{IconButton(onClick={editor=Record.create(type)}) { Icon(Icons.Default.Add,"添加") }}) {
+    val s by vm.snapshot.collectAsState(); var editor by rememberSaveable(stateSaver = OptionalRecordSaver) { mutableStateOf<Record?>(null) };var selected by rememberSaveable(stateSaver = OptionalRecordSaver) { mutableStateOf<Record?>(null) }
+    LazySubPage(if(type==RecordType.FAVORITE) "常用餐食" else "我的动作库",dismiss,{IconButton(onClick={editor=Record.create(type)}) { Icon(Icons.Default.Add,"添加") }}) {
         val records=s.records.filter { it.type==type }
-        if(records.isEmpty()) Empty("还没有保存内容","点击右上角添加，之后记录更方便")
-        records.forEach { r -> Panel { RecordRow(r,{selected=r}) } }
+        if(records.isEmpty()) item("empty") {Empty("还没有保存内容","点击右上角添加，之后记录更方便")}
+        items(records,key={it.id}) { r -> Panel { RecordRow(r,{selected=r}) } }
     }
     selected?.let { r -> RecordDetail(vm,r,{selected=null},{selected=null;editor=r.copy()},notify) }
     editor?.let { r -> RecordEditor(vm,r,{editor=null},notify) }

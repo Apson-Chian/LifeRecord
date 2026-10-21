@@ -1,10 +1,9 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package ltd.apsonchian.liferecord.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,18 +21,13 @@ import androidx.compose.ui.platform.LocalContext
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.ui.*
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
 import android.graphics.BitmapFactory
-import android.os.Build
 import kotlinx.coroutines.*
 import ltd.apsonchian.liferecord.AppViewModel
 import ltd.apsonchian.liferecord.data.*
@@ -41,18 +35,44 @@ import org.json.*
 import java.time.*
 import java.time.format.DateTimeFormatter
 
-@Composable fun FullForm(title: String, dismiss: () -> Unit, actions: @Composable RowScope.() -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
+/** Shared modal chrome. Intercept dismissal before hiding so a dirty editor stays visible. */
+@Composable private fun FormFrame(title: String, dismiss: () -> Unit, actions: @Composable RowScope.() -> Unit,
+    dismissEnabled: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = MaterialTheme.colorScheme.background) {
+    val close by rememberUpdatedState(dismiss)
+    val canClose by rememberUpdatedState(dismissEnabled)
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = {
+        if (it == SheetValue.Hidden) { if (canClose) close(); false } else true
+    })
+    ModalBottomSheet(onDismissRequest = { if (canClose) close() }, sheetState = sheet, containerColor = MaterialTheme.colorScheme.background) {
         Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.imePadding().widthIn(max = 760.dp)) {
-                CenterAlignedTopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, navigationIcon = { TextButton(onClick = dismiss) { Text("取消") } }, actions = actions, colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent))
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
-                if(keyboardVisible) TextButton(onClick = { keyboard?.hide() }, modifier = Modifier.align(Alignment.End)) { Text("收起键盘") }
+                CenterAlignedTopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) },
+                    navigationIcon = { TextButton(enabled = dismissEnabled, onClick = dismiss) { Text("取消") } },
+                    actions = actions, windowInsets = WindowInsets(0, 0, 0, 0), colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent))
+                content()
+                if (keyboardVisible) TextButton(onClick = { keyboard?.hide() }, modifier = Modifier.align(Alignment.End)) { Text("收起键盘") }
             }
         }
     }
+}
+@Composable fun FullForm(title: String, dismiss: () -> Unit, actions: @Composable RowScope.() -> Unit = {},
+    dismissEnabled: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+    FormFrame(title, dismiss, actions, dismissEnabled) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
+    }
+}
+@Composable fun LazyFullForm(title: String, dismiss: () -> Unit, actions: @Composable RowScope.() -> Unit = {}, content: LazyListScope.() -> Unit) {
+    FormFrame(title, dismiss, actions) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
+    }
+}
+@Composable internal fun DiscardChangesDialog(dismiss: () -> Unit, discard: () -> Unit) {
+    AlertDialog(onDismissRequest = dismiss, title = { Text("放弃未保存的更改？") },
+        text = { Text("已填写的内容和本次添加的照片将被清除。") },
+        confirmButton = { TextButton(onClick = discard) { Text("放弃更改", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = dismiss) { Text("继续编辑") } })
 }
 @Composable fun TextFieldRow(label: String, value: String, change: (String) -> Unit, number: Boolean = false, lines: Int = 1) {
     Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -96,7 +116,7 @@ import java.time.format.DateTimeFormatter
 fun Double.localText(): String = Instant.ofEpochMilli((this*1000).toLong()).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
 fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()/1000.0
 @Composable fun RecordEditor(vm: AppViewModel, record: Record, dismiss: () -> Unit, notify: (String) -> Unit) {
-    val r = remember(record.id) {
+    val r = rememberSaveable(record.id, saver = RecordSaver) {
         record.copy().apply {
             if(type in listOf(RecordType.MEAL, RecordType.BODY) && vm.snapshot.value.records.none { it.id == id }) {
                 val time = LocalTime.now()
@@ -110,20 +130,21 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
             }
         }
     }
-    val fields = remember { mutableStateMapOf<String,String>().apply { listOf("name","calories","protein","carbs","fat","fiber","weight","bodyFat","waist","note","portion","bodyPart").forEach { put(it, if(r.json.isNull(it)) "" else r.json.opt(it)?.toString().orEmpty()) } } }
-    var date by remember { mutableStateOf(r.date.localText()) }
-    var end by remember { mutableStateOf(if(r.json.isNull("endDate")) "" else r.json.optDouble("endDate").localText()) }
-    var kind by remember { mutableStateOf(r.json.optString("kind", "午餐")) }
-    var selectedParts by remember { mutableStateOf(WorkoutParts.of(r)) }
-    var exercises by remember { mutableStateOf(r.json.optJSONArray("exercises")?.objects().orEmpty()) }
-    var exEdit by remember { mutableStateOf<Int?>(null) }
-    var images by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
-    var input by remember { mutableStateOf(r.json.optString("inputText")) }
-    var ai by remember { mutableStateOf(false) }; var aiBusy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
-    var customPart by remember { mutableStateOf("") }
-    var showFavorites by remember { mutableStateOf(false) }
-    var selectedFoodIDs by remember { mutableStateOf(setOf<String>()) }
-    var favoritePhotos by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
+    val fields = rememberSaveable(r.id, saver = FieldMapSaver) { mutableStateMapOf<String,String>().apply { listOf("name","calories","protein","carbs","fat","fiber","weight","bodyFat","waist","note","portion","bodyPart").forEach { put(it, if(r.json.isNull(it)) "" else r.json.opt(it)?.toString().orEmpty()) } } }
+    var date by rememberSaveable(r.id) { mutableStateOf(r.date.localText()) }
+    var end by rememberSaveable(r.id) { mutableStateOf(if(r.json.isNull("endDate")) "" else r.json.optDouble("endDate").localText()) }
+    var kind by rememberSaveable(r.id) { mutableStateOf(r.json.optString("kind", "午餐")) }
+    var selectedParts by rememberSaveable(r.id) { mutableStateOf(WorkoutParts.of(r)) }
+    var exercises by rememberSaveable(r.id, stateSaver = ExerciseListSaver) { mutableStateOf(r.json.optJSONArray("exercises")?.objects().orEmpty()) }
+    var exEdit by rememberSaveable(r.id) { mutableStateOf<Int?>(null) }
+    var images by rememberSaveable(r.id, stateSaver = draftPhotoSaver(vm.app.photos, r.id)) { mutableStateOf<List<ByteArray>>(emptyList()) }
+    var input by rememberSaveable(r.id) { mutableStateOf(r.json.optString("inputText")) }
+    var photoReading by remember { mutableStateOf(false) }
+    var ai by rememberSaveable(r.id) { mutableStateOf(false) }; var aiBusy by remember { mutableStateOf(false) }; var error by rememberSaveable(r.id) { mutableStateOf("") }
+    var customPart by rememberSaveable(r.id) { mutableStateOf("") }
+    var showFavorites by rememberSaveable(r.id) { mutableStateOf(false) }
+    var selectedFoodIDs by rememberSaveable(r.id, stateSaver = StringSetSaver) { mutableStateOf(setOf<String>()) }
+    var favoritePhotos by rememberSaveable(r.id, stateSaver = draftPhotoSaver(vm.app.photos, r.id)) { mutableStateOf<List<ByteArray>>(emptyList()) }
     val existingPhotoCount = (r.json.optJSONArray("photoIDs")?.length() ?: 0) +
         (r.json.optJSONArray("localPhotoFiles")?.strings().orEmpty() - r.json.optJSONArray("uploadedPhotoFiles")?.strings().orEmpty().toSet()).size
     val photoLimit = (12 - existingPhotoCount).coerceAtLeast(0)
@@ -131,6 +152,16 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
     val scope = rememberCoroutineScope()
     val s by vm.snapshot.collectAsState()
     val catalog by vm.bodyPartChoices.collectAsState()
+    var modeName by rememberSaveable(r.id) { mutableStateOf(MealScanMode.MEAL.name) }
+    val scanMode = MealScanMode.valueOf(modeName)
+    var discard by remember { mutableStateOf(false) }
+    val feedback = rememberActionFeedback()
+    val imageSignature = remember(images) { images.map { it.contentHashCode() }.toString() }
+    val signature = fields.toSortedMap().toString() + date + end + kind + selectedParts.toString() +
+        JSONArray(exercises).toString() + input + imageSignature
+    val initialSignature = rememberSaveable(r.id) { signature }
+    val leave = { vm.app.photos.discardDraft(r.id); dismiss() }
+    val requestDismiss = { if (!aiBusy && !photoReading) { if (signature != initialSignature) discard = true else leave() } }
     val build: () -> Record = {
         val edited = r.copy(); edited.json.put("date", if(date == r.date.localText()) r.date else date.timestamp())
         listOf("name","note","portion","bodyPart").forEach { edited.json.put(it, fields[it].orEmpty().trim()) }
@@ -140,19 +171,19 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         if(r.type == RecordType.WORKOUT) { edited.json.put("endDate", if(end.isBlank()) JSONObject.NULL else if(!r.json.isNull("endDate") && end == r.json.optDouble("endDate").localText()) r.json.optDouble("endDate") else end.timestamp()); if(r.json.has("bodyParts") || selectedParts != WorkoutParts.of(r)) edited.json.put("bodyParts", JSONArray(selectedParts)); edited.json.put("exercises", JSONArray(exercises)) }
         edited
     }
-    FullForm("编辑${r.type.label}", dismiss, actions = {
-        TextButton(enabled = !aiBusy, onClick = { runCatching { vm.save(build(), images); dismiss(); notify("记录已保存") }.onFailure { error = it.message.orEmpty() } }) { Text("保存") }
+    FullForm("编辑${r.type.label}", requestDismiss, dismissEnabled = !aiBusy && !photoReading, actions = {
+        TextButton(enabled = !aiBusy && !photoReading, onClick = { runCatching { vm.save(build(), images); feedback(true); leave(); notify("记录已保存") }.onFailure { feedback(false); error = it.message.orEmpty() } }) { Text("保存") }
     }) {
         if(error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
         if(r.demo) Text("这是示例记录，不会参与同步和真实趋势。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if(r.type in listOf(RecordType.MEAL, RecordType.FAVORITE)) {
             Panel {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { SoftButton(onClick = { ai = !ai }) { Text("AI 识别 / 修改") }; if(r.type == RecordType.MEAL) TextButton(onClick = { showFavorites = true }) { Text("常用餐食") } }
-                PhotoInput(vm,images,maxCount=photoLimit,enabled=!aiBusy,change={images=it},notify={error=it}) {open -> SoftButton(onClick=open) {Text(if(images.isEmpty()) "添加照片（可多选）" else "继续添加 · 已选 ${images.size} 张")} }
+                PhotoInput(vm,images,maxCount=photoLimit,enabled=!aiBusy,change={images=it},notify={error=it},onReading={photoReading=it}) {open -> SoftButton(onClick=open) {Text(if(images.isEmpty()) "添加照片（可多选）" else "继续添加 · 已选 ${images.size} 张")} }
                 if(images.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     images.forEachIndexed { index, bytes ->
                         Box {
-                            PhotoBytes(bytes, Modifier.size(84.dp))
+                            PhotoBytes(bytes, Modifier.size(84.dp), maxDimension=256)
                             IconButton(onClick={images=images.filterIndexed {i,_ -> i!=index}}, modifier=Modifier.align(Alignment.TopEnd).size(44.dp).background(Color.Black.copy(alpha=.45f),RoundedCornerShape(22.dp))) {
                                 Icon(Icons.Default.Close,"移除第 ${index+1} 张照片", tint=Color.White)
                             }
@@ -160,20 +191,27 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
                     }
                 }
                 if(ai) {
+                    Text("识别类型", style = MaterialTheme.typography.labelLarge)
+                    ChoiceControl(MealScanMode.entries.map { it.name to it.title }, modeName, { modeName = it })
+                    Text(when (scanMode) {
+                        MealScanMode.MEAL -> "同一餐的多张照片会合并判断，避免重复计算。"
+                        MealScanMode.NUTRITION_LABEL -> "请补充吃了多少克或多少份，方便换算包装上的营养数据。"
+                        MealScanMode.INGREDIENTS -> "缺少营养表时会注明估算依据，请核对后保存。"
+                    }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextFieldRow("描述食物、份量或修改要求", input, { input = it }, lines = 3)
-                    AppButton(enabled = !aiBusy && (input.isNotBlank() || images.isNotEmpty()), onClick = {
+                    AppButton(enabled = !aiBusy && !photoReading && (input.isNotBlank() || images.isNotEmpty()), onClick = {
                         aiBusy = true; scope.launch {
                             try {
-                                val result = vm.nutrition(input, images, if(s.records.any { it.id == r.id }) build() else null)
+                                val result = vm.nutrition(input, images, if(s.records.any { it.id == r.id }) build() else null, scanMode)
                                 listOf("name","calories","protein","carbs","fat","fiber","note").forEach { key -> if(result.has(key)) fields[key] = result.get(key).toString() }
-                                r.json.put("source", "AI 估算"); error = ""; notify("结果已填入，请核对后保存")
-                            } catch(e: Exception) { error = e.message.orEmpty() } finally { aiBusy = false }
+                                r.json.put("source", "AI 估算"); error = ""; feedback(true); notify("结果已填入，请核对后保存")
+                            } catch(e: CancellationException) { throw e } catch(e: Exception) { feedback(false); error = e.message.orEmpty() } finally { aiBusy = false }
                         }
                     }, modifier=Modifier.fillMaxWidth()) { if(aiBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("生成营养草稿") }
                 }
             }
             TextFieldRow("餐食名称", fields["name"].orEmpty(), { fields["name"] = it })
-            if(r.type == RecordType.MEAL) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { kinds.forEach { FilterChip(selected = kind == it, onClick = { kind = it }, label = { Text(it) }) } }
+            if(r.type == RecordType.MEAL) ChoiceControl(kinds.map { it to it }, kind, { kind = it })
             else TextFieldRow("每份份量", fields["portion"].orEmpty(), { fields["portion"] = it })
             listOf("calories" to "热量 kcal", "protein" to "蛋白质 g", "carbs" to "碳水 g", "fat" to "脂肪 g", "fiber" to "膳食纤维 g").forEach { (key,label) -> TextFieldRow(label, fields[key].orEmpty(), { fields[key] = it }, true) }
             if(r.type == RecordType.MEAL && !ai) TextFieldRow("原始描述（可选）", input, { input = it }, lines = 2)
@@ -223,12 +261,16 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
             } finally {aiBusy=false}
         }
     }
+    if (discard) DiscardChangesDialog({ discard = false }, { discard = false; leave() })
 }
 @Composable fun ExerciseEditor(original: JSONObject, dismiss: () -> Unit, save: (JSONObject) -> Unit) {
-    var name by remember { mutableStateOf(original.optString("name")) }; var part by remember { mutableStateOf(original.optString("bodyPart", "未分类")) }
-    var rows by remember { mutableStateOf(original.getJSONArray("sets").objects().map { s -> listOf("reps","weight","durationSeconds").map { if(s.isNull(it)) "" else s.opt(it)?.toString().orEmpty() } }) }
-    var error by remember { mutableStateOf("") }
-    FullForm("动作与逐组数据", dismiss, { TextButton(onClick = {
+    var name by rememberSaveable { mutableStateOf(original.optString("name")) }; var part by rememberSaveable { mutableStateOf(original.optString("bodyPart", "未分类")) }
+    var rows by rememberSaveable(stateSaver = SetRowsSaver) { mutableStateOf(original.getJSONArray("sets").objects().map { s -> listOf("reps","weight","durationSeconds").map { if(s.isNull(it)) "" else s.opt(it)?.toString().orEmpty() } }) }
+    var error by rememberSaveable { mutableStateOf("") }
+    var discard by remember { mutableStateOf(false) }
+    val initial = rememberSaveable { name + part + rows.toString() }
+    val close = { if (name + part + rows.toString() != initial) discard = true else dismiss() }
+    FullForm("动作与逐组数据", close, { TextButton(onClick = {
         runCatching {
             val sets = rows.map { values -> JSONObject().apply { listOf("reps","weight","durationSeconds").forEachIndexed { i,key -> if(values[i].isBlank()) put(key, JSONObject.NULL) else if(key == "weight") put(key, values[i].toDouble()) else put(key, values[i].toInt()) } } }
             val ex = JSONObject().put("name",name.trim()).put("bodyPart",part.trim().ifBlank { "未分类" }).put("sets",JSONArray(sets))
@@ -243,6 +285,7 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         } }
         SoftButton(onClick={rows=rows+listOf(listOf("","",""))},enabled=rows.size<100) { Text("添加一组") }
     }
+    if (discard) DiscardChangesDialog({ discard = false }, dismiss)
 }
 @Composable fun RecordDetail(vm: AppViewModel, r: Record, dismiss: () -> Unit, edit: () -> Unit, notify: (String) -> Unit) {
     var delete by remember { mutableStateOf(false) }
@@ -270,52 +313,28 @@ fun String.timestamp(): Double = LocalDateTime.parse(trim(), DateTimeFormatter.o
         onConfirm = { runCatching { vm.delete(r); delete = false; dismiss(); notify("记录已删除") }.onFailure { notify(it.message.orEmpty()) } }
     )
 }
-@Composable fun PhotoBytes(bytes: ByteArray, modifier: Modifier = Modifier, contentScale: androidx.compose.ui.layout.ContentScale = androidx.compose.ui.layout.ContentScale.Crop) {
-    val bitmap = remember(bytes) { BitmapFactory.decodeByteArray(bytes,0,bytes.size)?.asImageBitmap() }
+@Composable fun PhotoBytes(bytes: ByteArray, modifier: Modifier = Modifier, contentScale: androidx.compose.ui.layout.ContentScale = androidx.compose.ui.layout.ContentScale.Crop, maxDimension: Int = 1024) {
+    val bitmap = remember(bytes,maxDimension) {
+        val bounds=BitmapFactory.Options().apply {inJustDecodeBounds=true}
+        BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
+        val options=BitmapFactory.Options().apply {
+            inSampleSize=1
+            while(maxOf(bounds.outWidth,bounds.outHeight)/inSampleSize > maxDimension.coerceAtLeast(64)) inSampleSize*=2
+        }
+        BitmapFactory.decodeByteArray(bytes,0,bytes.size,options)?.asImageBitmap()
+    }
     bitmap?.let { Image(it,"照片",modifier.clip(RoundedCornerShape(16.dp)),contentScale=contentScale) }
 }
 @Composable fun PhotoRecord(vm: AppViewModel,r:Record,id:String,local:Boolean) {
     var bytes by remember(id) { mutableStateOf<ByteArray?>(null) }; var error by remember { mutableStateOf("") }; var retry by remember { mutableIntStateOf(0) }; var full by remember { mutableStateOf(false) }
     LaunchedEffect(id,retry) { try { bytes=vm.photo(r,id,local); error="" } catch(e:Exception) { error=e.message.orEmpty() } }
     bytes?.let { data -> Box(Modifier.fillMaxWidth().height(220.dp).clickable { full=true }) { PhotoBytes(data,Modifier.fillMaxSize()) } } ?: if(error.isBlank()) CircularProgressIndicator() else TextButton(onClick={retry++}) { Text("照片加载失败，点此重试") }
-    if(full) bytes?.let { PhotoViewer(vm,it) { full=false } }
-}
-
-@Composable fun PhotoViewer(vm:AppViewModel,data:ByteArray,dismiss:()->Unit) {
-    val context=LocalContext.current
-    val scope=rememberCoroutineScope()
-    var saving by remember { mutableStateOf(false) };var notice by remember { mutableStateOf("") }
-    val document=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) { uri ->
-        if(uri!=null) scope.launch {
-            saving=true
-            try { withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)?.use { it.write(data) } ?: error("无法写入照片") };notice="照片已保存" }
-            catch(e:Exception) { notice="保存失败：${e.message.orEmpty()}" } finally { saving=false }
-        }
-    }
-    Dialog(onDismissRequest=dismiss,properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
-        var scale by remember { mutableFloatStateOf(1f) };var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) };var swipe by remember { mutableFloatStateOf(0f) }
-        val threshold=with(LocalDensity.current) { 96.dp.toPx() }
-        Box(Modifier.fillMaxSize().background(Color.Black).testTag("photo-viewer")
-            .transformable(rememberTransformableState { zoom,pan,_ -> scale=(scale*zoom).coerceIn(1f,5f);offset=if(scale>1) offset+pan else androidx.compose.ui.geometry.Offset.Zero },canPan={scale>1f})
-            .pointerInput(scale) { detectTapGestures(onDoubleTap={scale=if(scale>1) 1f else 2f;offset=androidx.compose.ui.geometry.Offset.Zero}) }
-            .pointerInput(scale) { if(scale<=1f) detectVerticalDragGestures(onVerticalDrag={change,delta -> change.consume();swipe=(swipe+delta).coerceAtLeast(0f)},onDragEnd={if(swipe>threshold) dismiss() else swipe=0f},onDragCancel={swipe=0f}) }) {
-            PhotoBytes(data,Modifier.fillMaxSize().graphicsLayer { scaleX=scale;scaleY=scale;translationX=offset.x;translationY=offset.y+swipe },androidx.compose.ui.layout.ContentScale.Fit)
-            Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                IconButton(onClick=dismiss) { Icon(Icons.Default.Close,"关闭照片",tint=Color.White) }
-                Spacer(Modifier.weight(1f))
-                TextButton(enabled=!saving,onClick={
-                    if(Build.VERSION.SDK_INT<29) document.launch("LifeRecord-${System.currentTimeMillis()}.jpg") else scope.launch {
-                        saving=true
-                        try { withContext(Dispatchers.IO) { vm.app.photos.saveToGallery(data) };notice="已保存到系统相册" }
-                        catch(e:Exception) { notice="保存失败：${e.message.orEmpty()}" } finally { saving=false }
-                    }
-                }) { Text(if(saving) "保存中…" else "保存到相册",color=Color.White) }
-            }
-            if(notice.isNotBlank()) Text(notice,color=Color.White,modifier=Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp))
-        }
+    if(full) {
+        val photos = recordGallery(vm, r)
+        val key = "${if (local) "local" else "remote"}:$id"
+        PhotoGallery(vm, photos, photos.indexOfFirst { it.key == key }.coerceAtLeast(0)) { full = false }
     }
 }
-
 
 @Composable fun FavoriteFoodPicker(foods: List<Record>, initialSelection: Set<String> = emptySet(), dismiss: () -> Unit, select: (List<Record>) -> Unit) {
     var selected by remember { mutableStateOf(initialSelection) }

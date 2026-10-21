@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,7 +44,9 @@ data class DayBar(val day: LocalDate, val value: Double, val note: String = "")
     var canvasWidth by remember { mutableIntStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     fun display(value: Double) = if(calorieStyle) String.format(java.util.Locale.ROOT,"%,.0f",value) else format(value)
-    val left = with(density) { 42.dp.toPx() }
+    val ticks = remember(points, goal) { DayChartAxis.valueTicks(points.filter {it.value.isFinite()}.maxOfOrNull {it.value} ?: 0.0,goal) }
+    val paint = remember(textColor, density) { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {this.color=textColor.toArgb();textSize=with(density) {11.sp.toPx()}} }
+    val left = maxOf(with(density) {42.dp.toPx()},ticks.maxOf {paint.measureText(display(it))}+with(density) {8.dp.toPx()})
     val right = with(density) { 8.dp.toPx() }
     fun inspect(x: Float) {
         val width = canvasWidth - left - right
@@ -58,16 +60,21 @@ data class DayBar(val day: LocalDate, val value: Double, val note: String = "")
     }
     Canvas(Modifier.fillMaxWidth().height(if(calorieStyle) 210.dp else 178.dp).testTag(tag)
         .onSizeChanged { canvasWidth = it.width }
-        .semantics { contentDescription = "横轴日期 ${axis.first} 至 ${axis.last}，纵轴 $unit。$selectedDay：${selected?.let { "${format(it.value)} $unit" } ?: emptyMessage}" }
+        .semantics {
+            contentDescription = "横轴日期 ${axis.first} 至 ${axis.last}，纵轴 $unit。$selectedDay：${selected?.let { "${format(it.value)} $unit" } ?: emptyMessage}"
+            stateDescription = "$selectedDay，${selected?.let { "${display(it.value)} $unit，${it.note}" } ?: emptyMessage}"
+            customActions = listOf(
+                CustomAccessibilityAction("上一日") {if(selectedDay>axis.first) {selectedText=selectedDay.minusDays(1).toString();true} else false},
+                CustomAccessibilityAction("下一日") {if(selectedDay<axis.last) {selectedText=selectedDay.plusDays(1).toString();true} else false}
+            )
+        }
         .pointerInput(axis, canvasWidth, points) { detectTapGestures { inspect(it.x) } }
         .pointerInput(axis, canvasWidth, points) { detectHorizontalDragGestures { change, _ -> inspect(change.position.x); change.consume() } }
     ) {
         val top=8.dp.toPx(); val bottom=size.height-28.dp.toPx(); val width=size.width-left-right
-        val ticks=DayChartAxis.valueTicks(points.filter {it.value.isFinite()}.maxOfOrNull {it.value} ?: 0.0,goal)
         val maximum=ticks.last()
         fun x(day:LocalDate)=left+axis.fraction(day)*width
         fun y(value:Double)=bottom-((value/maximum).coerceIn(0.0,1.0)*(bottom-top)).toFloat()
-        val paint=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { this.color=textColor.toArgb();textSize=11.sp.toPx() }
         drawContext.canvas.nativeCanvas.apply {
             ticks.forEach { value ->
                 drawLine(gridColor,Offset(left,y(value)),Offset(size.width-right,y(value)),1.dp.toPx())

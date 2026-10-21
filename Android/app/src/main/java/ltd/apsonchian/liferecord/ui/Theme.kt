@@ -22,4 +22,4 @@ private val dark = darkColorScheme(primary = Color(0xFFA69EFF), secondary = Colo
     titleLarge = TextStyle(fontSize = 18.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold), titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),
     bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp), bodyMedium = TextStyle(fontSize = 15.sp, lineHeight = 21.sp), labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
     bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp), labelMedium = TextStyle(fontSize = 12.sp,lineHeight=16.sp), labelSmall = TextStyle(fontSize = 11.sp,lineHeight=15.sp)
-), content = { CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) { content() } })
+), content = { CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface, LocalMotionEnabled provides observeMotionPreference(), LocalPowerSave provides observePowerSaveMode()) { content() } })

@@ -1,5 +1,7 @@
 # Android 与 iOS 对齐记录
 
+2026-10-21：本机 Android 源码完成编辑草稿恢复、三类识别模式、多图翻页、周历营养环、下拉同步、身体双曲线、按需列表与控件/无障碍优化。[实施与验证](android-ios-parity-2026-10-21.md)。已发布 [Android 1.4.0-beta.7](android-release-1.4-beta7.md)。
+
 2026-10-20：当前里程碑如下。iOS 为源码构建，Android 已发布 beta.6；源码功能对齐不等于旧安装自动更新，也不等于线上服务已部署。
 
 | 功能 | iOS 当前源码 | Android beta.6 | 当前限制 |

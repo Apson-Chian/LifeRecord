@@ -1,9 +1,6 @@
 package ltd.apsonchian.liferecord.ui
 
-import android.app.ActivityManager
-import android.content.Context
 import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -26,16 +23,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -65,75 +58,26 @@ fun AppBackground(modifier: Modifier = Modifier) {
     }
 }
 
-/** Real source-backed blur on API 31; AGSL edge refraction on API 33. */
+/** Quiet frosted material over the scroll edge; keep labels on a sharp layer. */
 @Composable
 fun GlassSurface(backdrop: GlassBackdrop, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < .2f
-    val context = LocalContext.current
-    val lowRam = remember(context) { (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).isLowRamDevice }
-    var origin by remember { mutableStateOf(Offset.Zero) }
-    var dimensions by remember { mutableStateOf(Size.Zero) }
-    val density = LocalDensity.current.density
-    val effect = remember(dimensions, density, lowRam) {
-        if (Build.VERSION.SDK_INT >= 31 && !lowRam && dimensions.width > 0) {
-            GlassEffects.blur(dimensions, density)
-        } else null
-    }
+    val blurEnabled = rememberBackdropBlurEnabled()
     val shape = RoundedCornerShape(50)
     Box(modifier
-        .onGloballyPositioned { origin = it.positionInRoot(); dimensions = Size(it.size.width.toFloat(), it.size.height.toFloat()) }
-        .shadow(12.dp, shape, ambientColor = Color.Black.copy(alpha = .08f), spotColor = Color.Black.copy(alpha = .12f))
+        .shadow(8.dp, shape, ambientColor = Color.Black.copy(alpha = .05f), spotColor = Color.Black.copy(alpha = .08f))
         .clip(shape)
-        .border(.8.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = if(dark) .30f else .85f), colors.primary.copy(alpha = .08f), Color.White.copy(alpha = .20f))), shape)
+        .border(.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = if(dark) .16f else .55f), colors.outlineVariant.copy(alpha = .16f))), shape)
     ) {
-        if(effect != null) {
-            Box(Modifier.matchParentSize().graphicsLayer { renderEffect = effect }.drawWithContent {
-                val offset = origin - backdrop.origin
-                translate(-offset.x, -offset.y) { drawLayer(backdrop.layer) }
-            })
+        if (blurEnabled && Build.VERSION.SDK_INT >= 31) {
+            BackdropLayer(backdrop, Modifier.matchParentSize(), 18.dp) { _, _, radius ->
+                ProgressiveBlurEffects.uniform(radius)
+            }
         }
-        Box(Modifier.matchParentSize().background(colors.surface.copy(alpha = if(effect == null) .97f else if(dark) .64f else .57f)))
-        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.White.copy(alpha = if(dark) .06f else .16f), Color.Transparent, colors.primary.copy(alpha = .025f)))))
+        Box(Modifier.matchParentSize().background(colors.surface.copy(alpha = if (!blurEnabled) .97f else if (dark) .58f else .38f)))
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.White.copy(alpha = if (dark) .025f else .08f), Color.Transparent))))
         content()
-    }
-}
-
-@RequiresApi(31)
-private object GlassEffects {
-    fun blur(size: Size, density: Float): RenderEffect {
-        val blur = android.graphics.RenderEffect.createBlurEffect(12f * density, 12f * density, android.graphics.Shader.TileMode.CLAMP)
-        val effect = if(Build.VERSION.SDK_INT >= 33) runCatching { Refraction.effect(size, density, blur) }.getOrDefault(blur) else blur
-        return effect.asComposeRenderEffect()
-    }
-}
-
-@RequiresApi(33)
-private object Refraction {
-    // Rounded-rectangle distance field: refraction is localized to the perimeter.
-    private const val SOURCE = """
-        uniform shader backdrop;
-        uniform float2 extent;
-        uniform float radius;
-        uniform float rim;
-        half4 main(float2 p) {
-            float2 center = extent * 0.5;
-            float2 q = abs(p - center) - (center - radius);
-            float distance = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-            float edge = 1.0 - smoothstep(0.0, rim, -distance);
-            float2 normal = normalize((p - center) / max(center, float2(1.0)) + float2(0.001));
-            float2 samplePoint = clamp(p - normal * edge * rim * 0.32, float2(0.5), extent - 0.5);
-            half4 color = backdrop.eval(samplePoint);
-            return color;
-        }
-    """
-    fun effect(size: Size, density: Float, blur: android.graphics.RenderEffect): android.graphics.RenderEffect {
-        val shader = android.graphics.RuntimeShader(SOURCE).apply {
-            setFloatUniform("extent", size.width, size.height)
-            setFloatUniform("radius", size.height / 2)
-            setFloatUniform("rim", 11f * density)
-        }
-        return android.graphics.RenderEffect.createChainEffect(android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "backdrop"), blur)
     }
 }
 
@@ -148,6 +92,7 @@ fun GlassNavigationBar(backdrop: GlassBackdrop, selected: Int, select: (Int) -> 
     val labels = listOf("今日", "趋势", "教练", "设置")
     val colors = MaterialTheme.colorScheme
     val height = glassBarHeight()
+    val motion = rememberMotionEnabled()
     var dragPosition by remember { mutableStateOf<Float?>(null) }
     BoxWithConstraints(modifier.widthIn(max = 500.dp).fillMaxWidth()) {
         val tabWidth = (maxWidth - 12.dp) / 4
@@ -165,13 +110,13 @@ fun GlassNavigationBar(backdrop: GlassBackdrop, selected: Int, select: (Int) -> 
                 )
             }) {
             Box(Modifier.padding(6.dp).offset(x = position).width(tabWidth).fillMaxHeight()
-                .clip(RoundedCornerShape(50)).background(colors.primary.copy(alpha = .10f))
+                .clip(RoundedCornerShape(50)).background(colors.primary.copy(alpha = .12f))
                 .border(.6.dp, Color.White.copy(alpha = if(colors.background.luminance()<.2f) .12f else .34f), RoundedCornerShape(50)))
             Row(Modifier.fillMaxSize().padding(6.dp).selectableGroup()) {
                 labels.forEachIndexed { index, label ->
                     val interactions = remember { MutableInteractionSource() }
                     val pressed by interactions.collectIsPressedAsState()
-                    val scale by animateFloatAsState(if(pressed) .94f else 1f, spring(stiffness = 900f), label = "tab press")
+                    val scale by animateFloatAsState(if(pressed && motion) .94f else 1f, spring(stiffness = 900f), label = "tab press")
                     val color = if(selected == index) colors.primary else colors.onSurfaceVariant
                     Column(Modifier.weight(1f).fillMaxHeight().testTag("tab-$index").clip(RoundedCornerShape(50))
                         .selectable(selected == index, interactionSource = interactions, indication = null, role = Role.Tab, onClick = { select(index) })

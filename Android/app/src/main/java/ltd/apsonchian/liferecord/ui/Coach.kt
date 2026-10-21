@@ -52,6 +52,8 @@ import ltd.apsonchian.liferecord.data.*
     val snapshot by vm.snapshot.collectAsState()
     val chats by vm.conversations.collectAsState(); val selected by vm.selectedConversation.collectAsState(); val tasks by vm.activeCoachTasks.collectAsState(); val proposal by vm.proposal.collectAsState()
     val busy=selected in tasks
+    val feedback = rememberActionFeedback()
+    var wasBusy by remember(selected) { mutableStateOf(busy) }
     val identity by vm.coachIdentity.collectAsState()
     var showProfile by rememberSaveable {mutableStateOf(false)}
     var text by rememberSaveable { mutableStateOf("") }; val images by vm.draftPhotos.collectAsState(); var favorites by remember { mutableStateOf(false) }; var deleteId by remember { mutableStateOf<String?>(null) }
@@ -65,6 +67,15 @@ import ltd.apsonchian.liferecord.data.*
     val drawer=rememberDrawerState(DrawerValue.Closed)
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     val chat=chats.firstOrNull { it.getString("id")==selected }; val messages=chat?.getJSONArray("messages")?.objects().orEmpty()
+    LaunchedEffect(selected, busy) {
+        if (wasBusy && !busy) {
+            when (messages.lastOrNull {it.optString("role")=="user"}?.optString("generationState")) {
+                "completed" -> feedback(true)
+                "failed", "needsReview" -> feedback(false)
+            }
+        }
+        wasBusy = busy
+    }
     val retryable=CoachGeneration.retryable(messages)?.optString("id")
     val hasProposal=proposal?.conversation==selected
     val bottomIndex=1+messages.size+(if(busy) 1 else 0)+(if(hasProposal) 1 else 0)
@@ -159,7 +170,7 @@ import ltd.apsonchian.liferecord.data.*
                 if(images.isNotEmpty()) {
                     Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         images.forEachIndexed { index,bytes -> Box {
-                            PhotoBytes(bytes,Modifier.size(64.dp))
+                            PhotoBytes(bytes,Modifier.size(64.dp),maxDimension=256)
                             IconButton(onClick={vm.draftPhotos.value=images.filterIndexed { i,_ -> i!=index }},modifier=Modifier.align(Alignment.TopEnd).size(26.dp).background(Color.Black.copy(alpha=.5f),CircleShape)) {Icon(Icons.Default.Close,"移除照片 ${index+1}",tint=Color.White,modifier=Modifier.size(15.dp))}
                         } }
                     }
@@ -210,7 +221,7 @@ import ltd.apsonchian.liferecord.data.*
                 CoachAvatar(identity)
                 Spacer(Modifier.width(10.dp))
             }
-            Surface(Modifier.widthIn(max=bubbleWidth),shape=RoundedCornerShape(20.dp),color=if(user) Purple else MaterialTheme.colorScheme.surface.copy(alpha=.32f),border=if(user) null else BorderStroke(.5.dp,Color.White.copy(alpha=.14f))) {
+            Surface(Modifier.widthIn(max=bubbleWidth),shape=RoundedCornerShape(20.dp),color=if(user) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha=.32f),border=if(user) null else BorderStroke(.5.dp,Color.White.copy(alpha=.14f))) {
                 Column(Modifier.padding(horizontal=14.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     if(!user) Text(identity.name,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     val files=m.optJSONArray("localPhotoFiles")?.strings().orEmpty()
@@ -220,18 +231,18 @@ import ltd.apsonchian.liferecord.data.*
                             LaunchedEffect(name) { bytes=withContext(Dispatchers.IO) { runCatching { vm.app.photos.chat(name) }.getOrNull() } }
                             bytes?.let { data ->
                                 var full by remember { mutableStateOf(false) }
-                                PhotoBytes(data,Modifier.size(72.dp).clickable { full=true })
-                                if(full) PhotoViewer(vm,data) { full=false }
+                                PhotoBytes(data,Modifier.size(72.dp).clickable { full=true },maxDimension=256)
+                                if(full) PhotoGallery(vm, files.map { file -> GalleryPhoto("chat:$file") { vm.app.photos.chat(file) } }, files.indexOf(name)) { full=false }
                             }
                         }
                     }
                     val visibleText=m.optString("displayText",m.getString("content")).let { if(files.isNotEmpty() && !m.has("displayText") && it=="请分析图片") "" else it }
                     if(visibleText.isNotBlank()) androidx.compose.foundation.text.selection.SelectionContainer {
-                        if(user) Text(visibleText,color=Color.White,style=MaterialTheme.typography.bodyLarge) else MarkdownText(visibleText)
+                        if(user) Text(visibleText,color=MaterialTheme.colorScheme.onPrimary,style=MaterialTheme.typography.bodyLarge) else MarkdownText(visibleText)
                     }
                     if(user && m.optString("generationState") in listOf("failed","stopped","needsReview")) {
-                        Text(m.optString("generationError").ifBlank { "上次生成未完成" },color=Color.White.copy(alpha=.85f),style=MaterialTheme.typography.bodySmall)
-                        if(retryable) TextButton(onClick=retry,colors=ButtonDefaults.textButtonColors(contentColor=Color.White),modifier=Modifier.testTag("coach-retry")) { Text("重新生成") }
+                        Text(m.optString("generationError").ifBlank { "上次生成未完成" },color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.85f),style=MaterialTheme.typography.bodySmall)
+                        if(retryable) TextButton(onClick=retry,colors=ButtonDefaults.textButtonColors(contentColor=MaterialTheme.colorScheme.onPrimary),modifier=Modifier.testTag("coach-retry")) { Text("重新生成") }
                     }
                 }
             }

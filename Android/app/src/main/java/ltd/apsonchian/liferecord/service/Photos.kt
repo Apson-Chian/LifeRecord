@@ -19,7 +19,32 @@ class Photos(private val context: Context) {
     private val chat = File(context.filesDir, "chat-photos").apply { mkdirs() }
     private val cache = File(context.cacheDir, "private-photos").apply { mkdirs() }
     private val captures = File(context.cacheDir, "camera").apply { mkdirs() }
-    fun clearAll() { listOf(local, chat, cache, captures).forEach { folder -> folder.listFiles()?.forEach { it.delete() } } }
+    private val drafts = File(context.filesDir, "editor-draft-photos").apply { mkdirs() }
+    fun clearAll() { listOf(local, chat, cache, captures, drafts).forEach { folder -> folder.listFiles()?.forEach { it.deleteRecursively() } } }
+    private fun draftFolder(owner: String): File {
+        // Historical record IDs need not be UUIDs. Hash them instead of restricting
+        // valid imported IDs or allowing any record ID to become a filesystem path.
+        val key=MessageDigest.getInstance("SHA-256").digest(owner.toByteArray(Charsets.UTF_8)).joinToString("") {"%02x".format(it)}
+        return File(drafts, key).apply { mkdirs() }
+    }
+    @Synchronized fun stageDraft(owner: String, images: List<ByteArray>): List<String> {
+        val folder = draftFolder(owner)
+        return images.map { bytes ->
+            val name = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) } + ".jpg"
+            val file = File(folder, name)
+            if (!file.exists()) android.util.AtomicFile(file).let { atomic ->
+                val stream = atomic.startWrite()
+                try { stream.write(bytes); atomic.finishWrite(stream) }
+                catch (e: Exception) { atomic.failWrite(stream); throw e }
+            }
+            name
+        }
+    }
+    fun readDraft(owner: String, name: String): ByteArray? {
+        require(name.matches(Regex("[a-f0-9]{64}\\.jpg")))
+        return File(draftFolder(owner), name).takeIf { it.isFile }?.readBytes()
+    }
+    fun discardDraft(owner: String) { draftFolder(owner).deleteRecursively() }
     fun captureUri(): Uri {
         captures.listFiles().orEmpty().filter {it.lastModified()<System.currentTimeMillis()-86_400_000}.forEach {it.delete()}
         val file=File(captures,"${java.util.UUID.randomUUID()}.jpg").apply {createNewFile()}

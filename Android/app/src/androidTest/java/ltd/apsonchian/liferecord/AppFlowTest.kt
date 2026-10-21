@@ -160,6 +160,7 @@ class AppFlowTest {
         compose.onNodeWithTag("tab-1").performClick()
         compose.onNodeWithText("近 7 天").performClick()
         compose.onNodeWithContentDescription("查看全部数据详情").performClick()
+        compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.ScrollToIndex)).performScrollToNode(hasSetTextAction())
         compose.onNode(hasSetTextAction()).performTextReplacement("retained search")
         hideKeyboard()
         compose.onNodeWithTag("tab-2").performClick()
@@ -183,6 +184,19 @@ class AppFlowTest {
         compose.onNode(hasSetTextAction()).assertTextContains("给出可执行的下一步建议", substring=true)
         compose.onNodeWithTag("tab-2").assertIsSelected()
         assertEquals("[]", app.store.get("conversations", "[]"))
+    }
+    @Test fun progressiveNavigationAppearance() {
+        model { it.seedDemo() }
+        compose.onNodeWithTag("navigation-progressive-blur").assertIsDisplayed()
+        compose.onNodeWithTag("glass-navigation").assertIsDisplayed()
+        compose.onAllNodes(hasScrollAction()).onFirst().performTouchInput { swipeUp(startY = height * .75f, endY = height * .38f) }
+        screenshot("glass-today-light")
+        model { it.personalize("dark", "purple") }
+        screenshot("glass-today-dark")
+        compose.onNodeWithTag("tab-1").performClick()
+        screenshot("glass-trends-dark")
+        compose.onNodeWithTag("tab-3").performClick()
+        screenshot("glass-settings-dark")
     }
     @Test fun glassNavigationCanScrubToAnotherTab() {
         compose.onNodeWithTag("glass-navigation").performTouchInput {
@@ -367,6 +381,7 @@ class AppFlowTest {
         compose.onNode(hasSetTextAction()).performClick().performTextReplacement("键盘和导航测试")
         compose.waitUntil(5000) {compose.onAllNodesWithTag("glass-navigation").fetchSemanticsNodes().isEmpty()}
         compose.onNodeWithTag("glass-navigation").assertDoesNotExist()
+        compose.onNodeWithTag("navigation-progressive-blur").assertDoesNotExist()
         capture("coach-keyboard-1.3")
         hideKeyboard()
         // Exercise the app's actual theme setting without restarting the instrumentation Activity.

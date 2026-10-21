@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.drawscope.*
 import androidx.compose.ui.semantics.*
 import kotlin.math.*
 
-enum class Glyph { Home,Trend,Coach,Settings,Meal,Weight,Workout,Person,Target,Sync,Bell,Shield,Calendar,Sidebar,Compose,Plus,Chevron,Lightbulb,Photo,Archive,Up,List,Figure,Percent }
+enum class Glyph { Home,Trend,Coach,Settings,Meal,Weight,Workout,Person,Target,Sync,Bell,Shield,Calendar,Sidebar,Compose,Plus,Chevron,Lightbulb,Photo,Archive,Up,List,Figure,Percent,Palette }
 /** Shared optical weight and proportions; all paths are drawn locally. */
 @Composable fun AppIcon(kind:Glyph,color:Color,modifier:Modifier=Modifier,description:String?=null,filled:Boolean=false) {
     Canvas(if(description==null) modifier else modifier.semantics { contentDescription=description }) {
@@ -57,6 +57,10 @@ enum class Glyph { Home,Trend,Coach,Settings,Meal,Weight,Workout,Person,Target,S
                 }
                 Glyph.Weight -> { drawCircle(color,2f,Offset(12f,4.5f),style=stroke);outline(path(5f,9f,19f,9f,22f,22f,2f,22f,5f,9f)) }
                 Glyph.Workout -> {box(1f,8f,3f,8f,1f);box(4f,5f,4f,14f,1.3f);line(8f,10f,16f,10f);line(8f,14f,16f,14f);box(16f,5f,4f,14f,1.3f);box(20f,8f,3f,8f,1f)}
+                Glyph.Palette -> {
+                    outline(Path().apply { moveTo(12f,2f);cubicTo(1f,2f,-1f,17f,8f,21f);cubicTo(13f,24f,18f,21f,15f,17f);cubicTo(13f,14f,19f,16f,21f,13f);cubicTo(25f,8f,20f,1f,12f,2f);close() })
+                    listOf(Offset(7f,7f),Offset(13f,5.5f),Offset(18f,9f),Offset(5f,13f)).forEach {drawCircle(color,1.3f,it)}
+                }
                 Glyph.Person -> {drawCircle(color,3.5f,Offset(12f,6f),style=stroke);outline(Path().apply {moveTo(3f,21f);cubicTo(3f,11f,21f,11f,21f,21f);close()})}
                 Glyph.Target -> {for(r in listOf(10f,6f,2f)) drawCircle(color,r,Offset(12f,12f),style=stroke)}
                 Glyph.Sync -> {drawArc(color,205f,145f,false,Offset(4f,4f),Size(16f,16f),style=stroke);drawArc(color,25f,145f,false,Offset(4f,4f),Size(16f,16f),style=stroke);outline(path(16f,7f,20f,10f,22f,6f));outline(path(2f,18f,4f,14f,8f,17f))}

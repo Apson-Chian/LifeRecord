@@ -83,3 +83,17 @@ Release 未启用应用调试，v2/v3 签名通过。专用 API 35 模拟器验�
 
 源码与安装包分开发行，使用服务器已提供的默认 AI 代理，没有读取服务器实际配置、调用计费 AI 或重新部署服务器。详见 [默认服务验证](../Docs/default-ai-service.md)。
 普通版和默认版覆盖安装及冷启动已在专用 API 35 模拟器验证：旧 beta.2 → 普通 beta.3 → 默认 beta.3 → 普通 beta.3，均成功，无崩溃。共享 JSON 协议及同步编辑回归通过。默认版已单独完成 50 项 JVM、26 项设备检查及服务器代理脱敏测试，源码及结果见 [默认服务说明](https://github.com/Apson-Chian/LifeRecord/blob/main/Docs/default-ai-service.md)。
+
+## 2026-10-21：渐进模糊与一致性优化
+
+本轮改进发布为 [Android 1.4.0-beta.7](../Docs/android-release-1.4-beta7.md)，versionCode 11，沿用 beta.4 起的固定签名；未部署服务端。完整实施范围与截图见[一致性实施记录](../Docs/android-ios-parity-2026-10-21.md)。
+
+- Debug / Sandbox 构建成功，两种变体各 69 项 JVM 测试通过，无失败、错误或跳过。
+- Lint：Debug 0 错误 / 16 警告，Sandbox 0 错误 / 15 警告。
+- 发布前追加 Release 构建、69 项 Release 单元测试和 Lint（0 错误 / 16 警告），全部通过；APK v2/v3 签名、与 beta.6 相同证书、正式包名、版本 11 / beta.7 和非调试属性已校验。
+- API 35 独立离线模拟器完整 54 项设备回归全部通过。新增覆盖草稿活动重建、照片私有引用和历史 ID、三种识别请求、同组图片翻页/缩放、双曲线/图表语义、千条历史按需渲染、已删除记录防复活、大字体和省电回退。
+- 渐进模糊像素回归覆盖深浅色、上下缘清晰度变化、偏移采样、底边不透出原图、源内容更新及触摸穿透。深浅色首页、设置、趋势、身体总览、恢复的餐食草稿、多图查看与大字体截图已检查。
+- `Tests/android-sync.py` 与 `Tests/sync-edit.py` 通过，确认 JSON 字段往返、旧客户端兼容、过期更新与删除保护。
+- 安装前通过 `Tests/android-isolation.py` 校验独立包名、fake Application 和无 INTERNET 权限。只安装 `.instrumented` 包，使用合成数据与模拟 AI，不触及真实账号和计费接口。
+
+API 26–32 镜像、低端真机帧率/温升和完整 TalkBack 语音顺序未在本轮验收。模拟器滚动采样不作为手机帧率结论。

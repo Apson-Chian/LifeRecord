@@ -1,0 +1,7 @@
+{
+  "device": "API 35 emulator \/ host-Apple-M5-Metal; not a physical-device benchmark",
+  "frames": 55,
+  "p50Ms": 33.8172,
+  "p95Ms": 44.344759,
+  "over16_7Ms": 55
+}

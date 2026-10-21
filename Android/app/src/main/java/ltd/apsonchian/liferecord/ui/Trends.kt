@@ -28,7 +28,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import ltd.apsonchian.liferecord.AppViewModel
@@ -228,7 +228,7 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         TextButton(onClick=open,contentPadding=PaddingValues(0.dp)) {Text("查看详情",style=MaterialTheme.typography.bodySmall)}
     }
 }
-@Composable fun TrendChart(points:List<BodyTrend.Point>,unit:String,color:Color,smooth:Boolean=false,goal:Double?=null,inspectionControls:Boolean=true) {
+@Composable fun TrendChart(points:List<BodyTrend.Point>,unit:String,color:Color,smooth:Boolean=false,goal:Double?=null,inspectionControls:Boolean=true,dualSeries:Boolean=false) {
     if(points.isEmpty()) return
     var selectedDay by rememberSaveable(points.map {it.day}.toString()) {mutableStateOf<String?>(null)}
     var width by remember {mutableIntStateOf(1)}
@@ -239,21 +239,29 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
     val selected=points.firstOrNull {it.day.toString()==selectedDay} ?: points.last()
     val first=points.first().day.toEpochDay()-.5
     val span=(points.last().day.toEpochDay()-points.first().day.toEpochDay()+1).coerceAtLeast(1).toDouble()
-    val axisWidth=with(density) {32.dp.toPx()}
-    fun select(x:Float) {val day=first+((x-axisWidth)/(width-axisWidth-8f).coerceAtLeast(1f)).coerceIn(0f,1f)*span;selectedDay=points.minBy {abs(it.day.toEpochDay()-day)}.day.toString()}
     val values=points.map {if(smooth) it.trend else it.value}
+    val domainValues=if(dualSeries) points.flatMap {listOf(it.value,it.trend)} else values
+    val pad=maxOf((domainValues.max()-domainValues.min())*.25,.8)
+    val low=domainValues.min()-pad;val high=domainValues.max()+pad
+    val axisWidth=maxOf(with(density) {32.dp.toPx()},maxOf(labels.measureText(String.format(java.util.Locale.ROOT,"%.1f",low)),labels.measureText(String.format(java.util.Locale.ROOT,"%.1f",high)))+with(density) {8.dp.toPx()})
+    fun select(x:Float) {val day=first+((x-axisWidth)/(width-axisWidth-8f).coerceAtLeast(1f)).coerceIn(0f,1f)*span;selectedDay=points.minBy {abs(it.day.toEpochDay()-day)}.day.toString()}
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(4.dp)) {
         Text(String.format(java.util.Locale.ROOT,"%.1f",if(smooth) selected.trend else selected.value),style=MaterialTheme.typography.headlineMedium)
         Text(unit,Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.bodyLarge,color=labelColor)
         Spacer(Modifier.weight(1f));Text(if(selectedDay==null) "最新" else "已选中",style=MaterialTheme.typography.labelSmall,color=color)
     }
     Canvas(Modifier.fillMaxWidth().height(210.dp).onSizeChanged {width=it.width.coerceAtLeast(1)}
-        .semantics {contentDescription="横轴日期，纵轴$unit。点击或横向拖动查看数据。"}
+        .semantics {
+            contentDescription=if(dualSeries) "体重走势，虚线为每日中位数，实线为趋势体重" else "横轴日期，纵轴$unit。点击或横向拖动查看数据。"
+            stateDescription="${selected.day}，中位数 ${format(selected.value)} $unit，趋势 ${format(selected.trend)} $unit，${selected.count} 次测量"
+            customActions=listOf(
+                CustomAccessibilityAction("上一日测量") { val i=points.indexOf(selected);if(i>0) {selectedDay=points[i-1].day.toString();true} else false },
+                CustomAccessibilityAction("下一日测量") { val i=points.indexOf(selected);if(i<points.lastIndex) {selectedDay=points[i+1].day.toString();true} else false }
+            )
+        }
         .pointerInput(points) {detectTapGestures {select(it.x)}}
         .pointerInput(points) {detectHorizontalDragGestures(onDragStart={select(it.x)}) {change,_ -> change.consume();select(change.position.x)}}) {
-        val pad=maxOf((values.max()-values.min())*.25,.8)
-        val low=values.min()-pad;val high=values.max()+pad
-        val left=32.dp.toPx();val right=size.width-8.dp.toPx();val top=6.dp.toPx();val bottom=size.height-24.dp.toPx()
+        val left=axisWidth;val right=size.width-8.dp.toPx();val top=6.dp.toPx();val bottom=size.height-24.dp.toPx()
         fun x(day:LocalDate)=(left+(day.toEpochDay()-first)/span*(right-left)).toFloat()
         fun y(v:Double)=(top+(bottom-top)*(1-(v-low)/(high-low))).toFloat()
         repeat(4) {i ->
@@ -269,9 +277,21 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         val path=Path();points.forEachIndexed {i,p -> if(i==0) path.moveTo(x(p.day),y(values[i])) else path.lineTo(x(p.day),y(values[i]))}
         val area=Path().apply {addPath(path);lineTo(x(points.last().day),bottom);lineTo(x(points.first().day),bottom);close()}
         drawPath(area,Brush.verticalGradient(listOf(color.copy(alpha=.18f),color.copy(alpha=.01f))))
+        if(dualSeries) {
+            val raw=Path()
+            points.forEachIndexed {i,p -> if(i==0) raw.moveTo(x(p.day),y(p.value)) else raw.lineTo(x(p.day),y(p.value)) }
+            drawPath(raw,labelColor,style=Stroke(1.5.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),4.dp.toPx()))))
+            points.forEach {p -> drawCircle(labelColor,2.dp.toPx(),Offset(x(p.day),y(p.value))) }
+        }
         drawPath(path,color,style=Stroke(2.5.dp.toPx(),cap=StrokeCap.Round))
         points.forEachIndexed {i,p -> drawCircle(color,if(p.day==selected.day) 4.dp.toPx() else 2.5.dp.toPx(),Offset(x(p.day),y(values[i])))}
         if(selectedDay!=null) drawLine(color.copy(alpha=.35f),Offset(x(selected.day),top),Offset(x(selected.day),bottom),1.dp.toPx(),pathEffect=PathEffect.dashPathEffect(floatArrayOf(6f,6f)))
+    }
+    if(dualSeries) {
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+            Text("虚线 · 每日中位数",style=MaterialTheme.typography.bodySmall,color=labelColor)
+            Text("实线 · 趋势体重",style=MaterialTheme.typography.bodySmall,color=color)
+        }
     }
     if(selectedDay!=null) Text("${selected.day} · 中位数 ${format(selected.value)} $unit · 趋势 ${format(selected.trend)} $unit · ${selected.count} 次测量",style=MaterialTheme.typography.bodySmall)
     if(inspectionControls) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
@@ -290,14 +310,14 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         when(period) { 1 -> hour in 5..11; 2 -> hour in 12..17; 3 -> hour in 18..23; 4 -> hour in 0..4; else -> true }
     }
     val points=BodyTrend.series(matching.map { BodyTrend.Sample(it.date,it.json.optDouble(field)) }).filter { it.day>=start }
-    SubPage(if(field=="weight") "体重详情" else "体脂详情",dismiss) {
-        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) { listOf("全部","早上","下午","晚上","凌晨").forEachIndexed { i,label -> FilterChip(period==i,{period=i},label={Text(label)}) } }
-        Text("早上 05–12 时 · 下午 12–18 时 · 晚上 18–24 时 · 凌晨 00–05 时",style=MaterialTheme.typography.bodySmall)
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Text("平滑趋势",modifier=Modifier.weight(1f));Switch(smooth,{smooth=it}) }
-        Text("筛选时段后重新计算；缺测不补零。平滑趋势仅供观察长期变化。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        if(points.isEmpty()) Empty("此时段暂无测量","调整测量时段或添加记录") else Panel { TrendChart(points,unit,if(field=="weight") MaterialTheme.colorScheme.primary else Fat,smooth) }
-        Text("原始测量",style=MaterialTheme.typography.titleMedium)
-        matching.filter { it.date.day()>=start }.sortedByDescending { it.date }.forEach { r -> TextButton(onClick={detail(r)}) { Text("${r.date.localText()} · ${format(r.json.optDouble(field))} $unit") } }
+    LazySubPage(if(field=="weight") "体重详情" else "体脂详情",dismiss) {
+        item { ChoiceControl(listOf("全部","早上","下午","晚上","凌晨").mapIndexed {i,label -> i.toString() to label},period.toString(),{period=it.toInt()}) }
+        item { Text("早上 05–12 时 · 下午 12–18 时 · 晚上 18–24 时 · 凌晨 00–05 时",style=MaterialTheme.typography.bodySmall) }
+        item { Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Text("平滑趋势",modifier=Modifier.weight(1f));Switch(smooth,{smooth=it}) } }
+        item { Text("筛选时段后重新计算；缺测不补零。平滑趋势仅供观察长期变化。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { if(points.isEmpty()) Empty("此时段暂无测量","调整测量时段或添加记录") else Panel { TrendChart(points,unit,if(field=="weight") MaterialTheme.colorScheme.primary else Fat,smooth) } }
+        item { Text("原始测量",style=MaterialTheme.typography.titleMedium) }
+        items(matching.filter { it.date.day()>=start }.sortedByDescending { it.date },key={it.id}) { r -> TextButton(onClick={detail(r)}) { Text("${r.date.localText()} · ${format(r.json.optDouble(field))} $unit") } }
     }
 }
 
@@ -308,14 +328,14 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
     val selectedDay=selectedDayText?.let(LocalDate::parse)
     val preview=records.any {it.demo} && s.records.none {!it.demo && it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT)}
     if(bodyOverview) {BodyOverviewPage(s.records,{bodyOverview=false},detail);return}
-    SubPage("数据详情",dismiss) {
-        RecordOverview(s,records,selectedDay,{selectedDayText=it?.toString()},{bodyOverview=true})
-        Text("连续记录 ${Insights.streak(s.records)} 天 · 当前时段 ${records.map { it.date.day() }.distinct().size} 个记录日",style=MaterialTheme.typography.titleMedium)
-        Text("全部记录",style=MaterialTheme.typography.titleLarge)
-        OutlinedTextField(search,{search=it},Modifier.fillMaxWidth(),label={Text("搜索名称、备注与部位")},singleLine=true)
-        Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) { FilterChip(filter==null,{filter=null},label={Text("全部")}); listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT).forEach { t -> FilterChip(filter==t,{filter=t},label={Text(t.label)}) } }
+    LazySubPage("数据详情",dismiss) {
+        item("overview") { Column(verticalArrangement=Arrangement.spacedBy(16.dp)) { RecordOverview(s,records,selectedDay,{selectedDayText=it?.toString()},{bodyOverview=true}) } }
+        item { Text("连续记录 ${Insights.streak(s.records)} 天 · 当前时段 ${records.map { it.date.day() }.distinct().size} 个记录日",style=MaterialTheme.typography.titleMedium) }
+        item { Text("全部记录",style=MaterialTheme.typography.titleLarge) }
+        item { OutlinedTextField(search,{search=it},Modifier.fillMaxWidth(),label={Text("搜索名称、备注与部位")},singleLine=true) }
+        item { ChoiceControl(listOf("" to "全部")+listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT).map {it.name to it.label},filter?.name.orEmpty(),{filter=it.takeIf {value -> value.isNotEmpty()}?.let(RecordType::valueOf)}) }
         val visible=(if(selectedDay==null) records else s.records.filter {(preview || !it.demo) && it.date<=now()}).filter { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) && (filter==null || it.type==filter) && (selectedDay==null || it.date.day()==selectedDay) && (search.isBlank() || it.title.contains(search,true) || it.json.optString("note").contains(search,true) || it.json.optJSONArray("exercises")?.objects()?.any { ex -> ex.optString("name").contains(search,true) || ex.optString("bodyPart").contains(search,true) }==true) }.sortedByDescending { it.date }
-        if(visible.isEmpty()) Empty("没有符合条件的记录","调整范围或搜索内容")
-        visible.forEach { r -> Panel { RecordRow(r) { detail(r) } } }
+        if(visible.isEmpty()) item("empty") { Empty("没有符合条件的记录","调整范围或搜索内容") }
+        items(visible,key={"${it.type}:${it.id}"}) { r -> Panel { RecordRow(r) { detail(r) } } }
     }
 }

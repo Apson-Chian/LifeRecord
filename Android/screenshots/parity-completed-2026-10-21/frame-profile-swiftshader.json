@@ -1,0 +1,7 @@
+{
+  "device": "API 35 emulator \/ SwiftShader; not a physical-device benchmark",
+  "frames": 32,
+  "p50Ms": 144.835072,
+  "p95Ms": 176.134398,
+  "over16_7Ms": 32
+}

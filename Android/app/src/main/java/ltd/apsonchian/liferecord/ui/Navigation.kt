@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,15 +26,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 @Composable fun RangePicker(selected:Int, change:(Int)->Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(2.dp).selectableGroup()) {
-        listOf(7 to "近 7 天",30 to "近 30 天",0 to "全部").forEach { (value,label) ->
-            Box(Modifier.weight(1f).clip(RoundedCornerShape(9.dp))
-                .background(if(selected==value) MaterialTheme.colorScheme.surface else Color.Transparent)
-                .selectable(selected==value,role=Role.Tab,onClick={change(value)}).padding(vertical=5.dp),contentAlignment=Alignment.Center) {
-                Text(label,style=MaterialTheme.typography.bodySmall,color=if(selected==value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
+    ChoiceControl(listOf("7" to "近 7 天", "30" to "近 30 天", "0" to "全部"), selected.toString(), { change(it.toInt()) })
 }
 
 @Composable fun RecordCalendar(selected:LocalDate, records:List<Record>, dismiss:()->Unit, select:(LocalDate)->Unit) {
@@ -77,18 +70,22 @@ import java.time.YearMonth
     val meals=s.records.filter { it.type==RecordType.MEAL &&
         (!photosOnly || it.json.optJSONArray("localPhotoFiles")?.length().orZero()>0 || it.json.optJSONArray("photoIDs")?.length().orZero()>0) &&
         (query.isBlank() || it.title.contains(query,true) || it.json.optString("note").contains(query,true)) }.sortedByDescending { it.date }
-    FullForm(if(photosOnly) "餐食照片" else "餐食记录",dismiss) {
-        OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("搜索餐食与备注")},singleLine=true)
-        if(meals.isEmpty()) Empty("没有符合条件的餐食",if(photosOnly) "添加照片后会显示在这里" else "记录一餐，或调整搜索内容")
-        meals.forEach { r -> Panel {
+    LazyFullForm(if(photosOnly) "餐食照片" else "餐食记录",dismiss) {
+        item("search") { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("搜索餐食与备注")},singleLine=true) }
+        if(meals.isEmpty()) item("empty") { Empty("没有符合条件的餐食",if(photosOnly) "添加照片后会显示在这里" else "记录一餐，或调整搜索内容") }
+        meals.forEach { r ->
+        item("record:${r.id}") { Panel {
             Text(r.date.localText(),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             RecordRow(r) { detail(r) }
-            if(photosOnly) {
-                val locals=r.json.optJSONArray("localPhotoFiles")?.strings().orEmpty()
-                val remotes=r.json.optJSONArray("photoIDs")?.strings().orEmpty().drop(r.json.optJSONArray("uploadedPhotoFiles")?.length() ?: 0)
-                (locals.map { it to true }+remotes.map { it to false }).forEach { (id,local) -> PhotoRecord(vm,r,id,local) }
-            }
         } }
+        if (photosOnly) {
+            recordGallery(vm,r).forEach { photo ->
+                item("${r.id}:${photo.key}") {
+                    PhotoRecord(vm,r,photo.key.substringAfter(":"),photo.key.startsWith("local:"))
+                }
+            }
+        }
+        }
     }
 }
 private fun Int?.orZero()=this ?: 0
@@ -99,5 +96,13 @@ private fun Int?.orZero()=this ?: 0
     Column(Modifier.fillMaxSize().imePadding()) {
         CenterAlignedTopAppBar(title={Text(title,style=MaterialTheme.typography.titleLarge)},navigationIcon={IconButton(onClick=dismiss) { AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.primary,Modifier.size(20.dp).graphicsLayer {rotationZ=180f},"返回") }},actions=actions,colors=TopAppBarDefaults.topAppBarColors(containerColor=Color.Transparent))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start=16.dp,end=16.dp,top=16.dp,bottom=glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
+    }
+}
+
+@Composable internal fun LazySubPage(title:String,dismiss:()->Unit,actions:@Composable RowScope.()->Unit={},content:androidx.compose.foundation.lazy.LazyListScope.()->Unit) {
+    BackHandler { dismiss() }
+    Column(Modifier.fillMaxSize().imePadding()) {
+        CenterAlignedTopAppBar(title={Text(title,style=MaterialTheme.typography.titleLarge)},navigationIcon={IconButton(onClick=dismiss) { AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.primary,Modifier.size(20.dp).graphicsLayer {rotationZ=180f},"返回") }},actions=actions,colors=TopAppBarDefaults.topAppBarColors(containerColor=Color.Transparent))
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f).fillMaxWidth(),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=glassPageBottomPadding()),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
     }
 }

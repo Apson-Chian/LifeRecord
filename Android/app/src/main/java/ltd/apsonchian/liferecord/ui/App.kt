@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -53,11 +54,12 @@ import java.time.format.DateTimeFormatter
     val date = LocalDate.parse(dateText)
     val todayRequest by vm.todayRequest.collectAsState()
     LaunchedEffect(todayRequest) { if(todayRequest > 0) { tab = 0; dateText = LocalDate.now().toString() } }
-    var editor by remember { mutableStateOf<Record?>(null) }
-    var detail by remember { mutableStateOf<Record?>(null) }
+    var editor by rememberSaveable(stateSaver = OptionalRecordSaver) { mutableStateOf<Record?>(null) }
+    var detail by rememberSaveable(stateSaver = OptionalRecordSaver) { mutableStateOf<Record?>(null) }
     var coachDraft by rememberSaveable { mutableStateOf("") }
-    var mealHistory by remember { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(generation) { editor=null;detail=null;coachDraft="";mealHistory=null }
+    var mealHistory by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var restoredGeneration by remember { mutableIntStateOf(generation) }
+    LaunchedEffect(generation) { if (restoredGeneration != generation) { editor=null;detail=null;coachDraft="";mealHistory=null;restoredGeneration=generation } }
     val pages = key(generation) { rememberSaveableStateHolder() }
     val sourceLayer = rememberGraphicsLayer()
     val backdrop = remember(sourceLayer) { GlassBackdrop(sourceLayer) }
@@ -88,7 +90,12 @@ import java.time.format.DateTimeFormatter
                 }
             }
         }
-        if(!keyboardVisible) GlassNavigationBar(backdrop, tab, { focus.clearFocus(force=true);keyboard?.hide();tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp))
+        if (!keyboardVisible) {
+            val navigationInset = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
+            ProgressiveBackdrop(backdrop, Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .height(glassBarHeight() + 64.dp + navigationInset).testTag("navigation-progressive-blur"))
+            GlassNavigationBar(backdrop, tab, { focus.clearFocus(force=true);keyboard?.hide();tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp))
+        }
         SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding().padding(bottom = if(keyboardVisible) 8.dp else glassBarHeight() + 24.dp)) { data ->
             Surface(Modifier.padding(horizontal=24.dp).testTag("status-message"),shape=RoundedCornerShape(50),color=MaterialTheme.colorScheme.surface.copy(alpha=.97f),shadowElevation=8.dp,border=BorderStroke(.7.dp,MaterialTheme.colorScheme.primary.copy(alpha=.12f))) {
                 Text(data.visuals.message,Modifier.padding(horizontal=18.dp,vertical=12.dp),style=MaterialTheme.typography.bodyMedium)
@@ -113,9 +120,12 @@ import java.time.format.DateTimeFormatter
         trailing?.invoke()
     }
 }
-@Composable fun Panel(modifier: Modifier = Modifier, tint:Color=MaterialTheme.colorScheme.primary, radius:androidx.compose.ui.unit.Dp=22.dp, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier.fillMaxWidth(),shape=RoundedCornerShape(radius),color=MaterialTheme.colorScheme.surface,border=BorderStroke(1.dp,MaterialTheme.colorScheme.onSurface.copy(alpha=.055f))) {
-        Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
+@Composable fun Panel(modifier: Modifier = Modifier, tint:Color=MaterialTheme.colorScheme.primary, radius:androidx.compose.ui.unit.Dp=26.dp, content: @Composable ColumnScope.() -> Unit) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < .2f
+    Surface(modifier.fillMaxWidth(),shape=RoundedCornerShape(radius),color=MaterialTheme.colorScheme.surface,
+        border=BorderStroke(.7.dp,tint.copy(alpha=if(dark) .18f else .10f))) {
+        Column(Modifier.background(Brush.linearGradient(listOf(tint.copy(alpha=if(dark) .09f else .035f),Color.Transparent)))
+            .padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
     }
 }
 @Composable fun Empty(title: String, text: String) { Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(title, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
@@ -128,9 +138,17 @@ import java.time.format.DateTimeFormatter
     val body = visible.filter { it.type == RecordType.BODY }.maxByOrNull { it.date }
     val workouts = visible.filter { it.type == RecordType.WORKOUT && it.date.day() == date }.sortedByDescending { it.date }
     val status by vm.status.collectAsState()
+    val syncing by vm.syncing.collectAsState()
+    var refreshRequested by remember { mutableStateOf(false) }
+    var pendingDelete by rememberSaveable(stateSaver = OptionalRecordSaver) { mutableStateOf<Record?>(null) }
+    val feedback = rememberActionFeedback()
+    LaunchedEffect(syncing, refreshRequested) {
+        if (refreshRequested && !syncing) { notify(if (vm.app.secrets.get("sync").isBlank()) "请先在设置中登录账号或连接同步" else vm.status.value); refreshRequested = false }
+    }
     val activeWorkout = s.records.firstOrNull { it.type == RecordType.WORKOUT && it.json.isNull("endDate") }
     var liveNow by remember { mutableDoubleStateOf(now()) }
     LaunchedEffect(activeWorkout?.id) { if(activeWorkout != null) while(true) { liveNow = now(); delay(1000) } }
+    PullToRefreshBox(isRefreshing = syncing && refreshRequested, onRefresh = { refreshRequested = true; vm.sync() }, modifier = Modifier.fillMaxSize().testTag("today-pull-to-refresh")) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 20.dp, 16.dp, glassPageBottomPadding()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             val greeting = when { LocalTime.now().hour < 11 -> "早上好"; LocalTime.now().hour < 18 -> "下午好"; else -> "晚上好" }
@@ -159,10 +177,23 @@ import java.time.format.DateTimeFormatter
                 val monday=date.minusDays((date.dayOfWeek.value-1).toLong())
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(2.dp)) {
                     (0L..6L).forEach { i -> val d=monday.plusDays(i);val entries=Insights.daily(visible,d);val selected=d==date
-                        Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(selected) MaterialTheme.colorScheme.primary else Color.Transparent).selectable(selected,role=Role.Tab,onClick={select(d)}).semantics {contentDescription="$d"}.padding(vertical=9.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                            Text(listOf("一","二","三","四","五","六","日")[i.toInt()],style=MaterialTheme.typography.labelSmall,color=if(selected) Color.White.copy(alpha=.8f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(d.dayOfMonth.toString(),style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.SemiBold),color=if(selected) Color.White else MaterialTheme.colorScheme.onSurface)
-                            Box(Modifier.size(4.dp).background(if(entries.isNotEmpty()) {if(selected) Color.White else MaterialTheme.colorScheme.primary} else Color.Transparent,CircleShape))
+                        val dayMeals = entries.filter { it.type == RecordType.MEAL }
+                        val protein = Insights.total(dayMeals, "protein") / s.profile.optDouble("proteinGoal").coerceAtLeast(1.0)
+                        val carbs = Insights.total(dayMeals, "carbs") / s.profile.optDouble("carbsGoal").coerceAtLeast(1.0)
+                        val largeText = LocalDensity.current.fontScale > 1.3f
+                        Column(Modifier.weight(1f).selectable(selected,role=Role.Tab,onClick={select(d)})
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = d.format(DateTimeFormatter.ofPattern("M月d日 EEEE", java.util.Locale.CHINA))
+                                stateDescription = "${if(entries.isNotEmpty()) "已有记录" else "无记录"}，用餐 ${dayMeals.size} 次，蛋白质 ${format(protein * 100)}%，碳水 ${format(carbs * 100)}%"
+                            }.padding(vertical=6.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                            Text(listOf("一","二","三","四","五","六","日")[i.toInt()],
+                                Modifier.background(if(selected) Meals else Color.Transparent,CircleShape).padding(horizontal=5.dp,vertical=2.dp),
+                                style=MaterialTheme.typography.labelSmall,color=if(selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (largeText) Text(d.dayOfMonth.toString(), style=MaterialTheme.typography.bodySmall, color=if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                            Box(Modifier.size(42.dp).clearAndSetSemantics {},contentAlignment=Alignment.Center) {
+                                Ring(Modifier.fillMaxSize(), listOf(protein.toFloat(),carbs.toFloat(),dayMeals.size/4f),3.5f)
+                                if (!largeText) Text(d.dayOfMonth.toString(),fontSize=9.sp,fontWeight=FontWeight.Bold,color=if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
@@ -210,7 +241,7 @@ import java.time.format.DateTimeFormatter
             val group = meals.filter { it.json.optString("kind") == kind }
             if(group.isNotEmpty()) item { Panel {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {Text(kind,style=MaterialTheme.typography.titleMedium,color=MaterialTheme.colorScheme.primary);Text("${format(Insights.total(group,"calories"))} kcal",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                group.sortedByDescending {it.date}.forEach {r -> MealRow(r) {detail(r)}}
+                group.sortedByDescending {it.date}.forEach {r -> MealRow(r, { detail(r) }, { edit(r.copy()) }, { pendingDelete = r })}
             } }
         }
         val measurements = s.records.filter { it.type == RecordType.BODY && it.date.day() == date }
@@ -218,6 +249,8 @@ import java.time.format.DateTimeFormatter
         item { Panel(Modifier.clickable { coach("请根据我在 $date 的饮食和训练，给出可执行的下一步建议，不修改记录。") }) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("今日提示", style = MaterialTheme.typography.titleMedium); Text("问 AI", color = MaterialTheme.colorScheme.primary) }; Text(if(meals.isEmpty()) "先记下第一餐，让今天的进步有迹可循。" else "已记录 ${meals.size} 餐，蛋白质 ${format(Insights.total(meals,"protein"))} g。结合训练安排下一餐。", style = MaterialTheme.typography.bodyMedium) } }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(status, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); TextButton(onClick = vm::sync) { Text("同步") } } }
     }
+    }
+    pendingDelete?.let { record -> DeleteConfirmationDialog("删除餐食？", "启用同步后，删除会同步到你的其他设备。", {pendingDelete=null}, {runCatching {vm.delete(record);pendingDelete=null;feedback(true);notify("记录已删除")}.onFailure {feedback(false);notify(it.message.orEmpty())}}) }
     if(datePicker) RecordCalendar(date, s.records, { datePicker = false }, select)
 }
 @Composable private fun DailySummary(s:Snapshot,meals:List<Record>,body:Record?,today:Boolean) {
@@ -239,7 +272,7 @@ import java.time.format.DateTimeFormatter
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val stacked=maxWidth<300.dp || LocalDensity.current.fontScale>1.3f
             val ring:@Composable ()->Unit={
-                Box(Modifier.size(88.dp).semantics {contentDescription="今日营养圆环，用餐 ${meals.size} 次"},contentAlignment=Alignment.Center) {
+                Box(Modifier.size(88.dp).semantics {contentDescription="今日营养圆环，用餐 ${meals.size} 次";stateDescription="蛋白质 ${format(Insights.total(meals,"protein"))} / ${format(s.profile.optDouble("proteinGoal"))} 克，碳水 ${format(Insights.total(meals,"carbs"))} / ${format(s.profile.optDouble("carbsGoal"))} 克"},contentAlignment=Alignment.Center) {
                     Ring(Modifier.fillMaxSize(),listOf((Insights.total(meals,"protein")/s.profile.optDouble("proteinGoal").coerceAtLeast(1.0)).toFloat(),(Insights.total(meals,"carbs")/s.profile.optDouble("carbsGoal").coerceAtLeast(1.0)).toFloat(),meals.size/4f),8f)
                     Text("${meals.size} 餐",style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold))
                 }
@@ -248,6 +281,7 @@ import java.time.format.DateTimeFormatter
                 Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     Metric("蛋白质","${format(Insights.total(meals,"protein"))} / ${format(s.profile.optDouble("proteinGoal"))} g",Protein)
                     Metric("碳水","${format(Insights.total(meals,"carbs"))} / ${format(s.profile.optDouble("carbsGoal"))} g",Carbs)
+                    Metric("餐次", "${meals.size} / 4 餐", Meals)
                 }
             }
             if(stacked) Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {ring();metrics()}
@@ -289,8 +323,10 @@ import java.time.format.DateTimeFormatter
         }
     }
 }
-@Composable private fun MealRow(record:Record,open:()->Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick=open).padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+@Composable private fun MealRow(record:Record,open:()->Unit,edit:()->Unit,delete:()->Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+    Row(Modifier.fillMaxWidth().combinedClickable(onClick=open,onLongClick={menu=true}).padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
             Text(record.title,style=MaterialTheme.typography.bodyLarge.copy(fontWeight=FontWeight.Medium))
             if(record.demo) Text("示例",Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha=.08f),RoundedCornerShape(50)).padding(horizontal=7.dp,vertical=2.dp),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -300,6 +336,11 @@ import java.time.format.DateTimeFormatter
             Text("${format(record.json.optDouble("calories"))} kcal",style=MaterialTheme.typography.bodySmall.copy(fontWeight=FontWeight.SemiBold))
             Text(java.time.Instant.ofEpochMilli((record.date*1000).toLong()).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("H:mm")),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+    DropdownMenu(menu,{menu=false}) {
+        DropdownMenuItem(text={Text("编辑")},onClick={menu=false;edit()})
+        DropdownMenuItem(text={Text("删除",color=MaterialTheme.colorScheme.error)},onClick={menu=false;delete()})
+    }
     }
 }
 @Composable fun RecordRow(r: Record, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

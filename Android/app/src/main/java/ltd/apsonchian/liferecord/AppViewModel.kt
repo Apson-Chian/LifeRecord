@@ -199,6 +199,7 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
         val uploaded = r.json.optJSONArray("uploadedPhotoFiles")?.strings().orEmpty()
         require((r.json.optJSONArray("photoIDs")?.length() ?: 0) + (local - uploaded.toSet()).size + photos.size <= 12) { "每条记录最多保存 12 张照片" }
         val latest = snapshot.value.records.find { it.id == r.id && it.type == r.type }
+        require(latest != null || snapshot.value.deletions.none { it.optString("id") == r.id && it.optString("recordType") == r.type.wire }) { "记录已被删除，请关闭编辑页" }
         require(latest == null || latest.updated == r.updated) { "记录已被同步更新，请重新打开编辑" }
         val copy = r.copy(); copy.json.put("updatedAt", now())
         if(photos.isNotEmpty()) copy.json.put("localPhotoFiles", JSONArray(copy.json.optJSONArray("localPhotoFiles")?.strings().orEmpty() + photos.map { app.photos.save(it) }))
@@ -354,10 +355,10 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
     fun endWorkout(r: Record) { save(r.copy().apply { json.put("endDate", now()) }) }
     suspend fun readPhotos(uris: List<Uri>) = withContext(Dispatchers.IO) { uris.map { app.photos.read(it) } }
     suspend fun photo(r: Record, id: String, local: Boolean) = withContext(Dispatchers.IO) { if(local) app.photos.local(id) else app.photos.remote(id, app.secrets.get("sync"), app.network) }
-    suspend fun nutrition(input: String, images: List<ByteArray>, old: Record?): JSONObject = withContext(Dispatchers.IO) {
+    suspend fun nutrition(input: String, images: List<ByteArray>, old: Record?, mode: MealScanMode = MealScanMode.MEAL): JSONObject = withContext(Dispatchers.IO) {
         val c = config.value.copy()
-        val result = app.network.complete(c, aiKey(c),
-            "识别或按要求修改整餐营养。只输出 JSON {name,calories,protein,carbs,fat,fiber,note}，单位 kcal/g，未知份量在 note 中说明。不得凭空给精确数值。", listOf(JSONObject().put("role", "user").put("content", input + (old?.let { "\n当前餐食：${it.json.copy().apply { remove("localPhotoFiles"); remove("uploadedPhotoFiles") }}" } ?: ""))), images, true)
+        val result = network.complete(c, aiKey(c),
+            "${mode.instruction} 识别或按要求修改营养草稿。只输出 JSON {name,calories,protein,carbs,fat,fiber,note}，单位 kcal/g，未知份量在 note 中说明。不得凭空给精确数值。", listOf(JSONObject().put("role", "user").put("content", input + (old?.let { "\n当前餐食：${it.json.copy().apply { remove("localPhotoFiles"); remove("uploadedPhotoFiles") }}" } ?: ""))), images, true)
         parseObject(result)
     }
     suspend fun testConnection(): String = withContext(Dispatchers.IO) {

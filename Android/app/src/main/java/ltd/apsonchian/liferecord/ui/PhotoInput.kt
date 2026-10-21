@@ -12,22 +12,37 @@ import kotlinx.coroutines.*
 import ltd.apsonchian.liferecord.AppViewModel
 
 /** Uses the system camera and picker; only the temporary capture directory is shared. */
-@Composable fun PhotoInput(vm: AppViewModel, photos: List<ByteArray>, maxCount: Int = 12, enabled: Boolean = true, change: (List<ByteArray>) -> Unit, notify: (String) -> Unit, button: @Composable (() -> Unit) -> Unit) {
+@Composable fun PhotoInput(vm: AppViewModel, photos: List<ByteArray>, maxCount: Int = 12, enabled: Boolean = true, change: (List<ByteArray>) -> Unit, notify: (String) -> Unit, onReading: (Boolean) -> Unit = {}, button: @Composable (() -> Unit) -> Unit) {
     var menu by remember {mutableStateOf(false)}
     var reading by remember {mutableStateOf(false)}
     var capture by rememberSaveable {mutableStateOf<String?>(null)}
-    val scope=rememberCoroutineScope()
+    var pending by rememberSaveable {mutableStateOf<List<String>>(emptyList())}
+    var temporary by rememberSaveable {mutableStateOf(false)}
+    val progress by rememberUpdatedState(onReading)
     val currentPhotos by rememberUpdatedState(photos);val currentChange by rememberUpdatedState(change)
-    fun add(uris: List<Uri>, temporary: Boolean = false) {
-        scope.launch {
-            reading=true
-            try {
-                require(currentPhotos.size+uris.size<=maxCount.coerceIn(1,12)) {"最多选择 ${maxCount.coerceIn(1,12)} 张照片"}
-                val added=withContext(Dispatchers.IO) {vm.readPhotos(uris)}
-                currentChange(currentPhotos+added)
-            } catch(e: CancellationException) {throw e}
-            catch(e: Exception) {notify(e.message ?: "无法读取照片")}
-            finally {if(temporary) uris.forEach {runCatching {vm.app.photos.discardCapture(it)}};reading=false}
+    fun add(uris: List<Uri>, captureImage: Boolean = false) {
+        if (!captureImage) uris.forEach {uri -> runCatching {vm.app.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}}
+        temporary=captureImage;pending=uris.map {it.toString()}
+    }
+    LaunchedEffect(pending) {
+        if (pending.isEmpty()) return@LaunchedEffect
+        val uris=pending.map(Uri::parse);val captured=temporary
+        var finished=false
+        reading=true;progress(true)
+        try {
+            require(currentPhotos.size+uris.size<=maxCount.coerceIn(1,12)) {"最多选择 ${maxCount.coerceIn(1,12)} 张照片"}
+            val added=withContext(Dispatchers.IO) {vm.readPhotos(uris)}
+            currentChange(currentPhotos+added);finished=true
+        } catch(e: CancellationException) {throw e}
+        catch(e: Exception) {finished=true;notify(e.message ?: "无法读取照片")}
+        finally {
+            // A recreated composition resumes the saved URI list. Do not delete its capture.
+            if(finished) {
+                if(captured) uris.forEach {runCatching {vm.app.photos.discardCapture(it)}}
+                else uris.forEach {uri -> runCatching {vm.app.contentResolver.releasePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}}
+                pending=emptyList();temporary=false
+            }
+            reading=false;progress(false)
         }
     }
     val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) {success ->

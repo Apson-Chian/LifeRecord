@@ -23,7 +23,8 @@ import androidx.compose.ui.unit.*
 }
 @Composable private fun StyledButton(onClick:()->Unit,modifier:Modifier,enabled:Boolean,tint:Color,foreground:Color,shape:Shape,padding:PaddingValues,prominent:Boolean,content:@Composable RowScope.()->Unit) {
     val source=remember { MutableInteractionSource() };val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if(pressed) .98f else 1f,spring(dampingRatio=1f,stiffness=850f),label="button press")
+    val motion = rememberMotionEnabled()
+    val scale by animateFloatAsState(if(pressed && motion) .98f else 1f,spring(dampingRatio=1f,stiffness=850f),label="button press")
     val gradient=if(prominent) listOf(tint,tint) else listOf(tint.copy(alpha=.09f),tint.copy(alpha=.09f))
     Row(modifier.graphicsLayer { scaleX=scale;scaleY=scale;alpha=if(!enabled) .45f else if(pressed) .8f else 1f }
         .clip(shape).background(Brush.linearGradient(gradient)).border(.7.dp,if(prominent) Color.White.copy(alpha=.16f) else tint.copy(alpha=.16f),shape)

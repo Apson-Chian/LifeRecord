@@ -1,8 +1,10 @@
-默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载[beta.6](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.6)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
+默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载[beta.7](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.7)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
 
 # LifeRecord Android
 
-本机开发版本新增「设置 → 账号与同步」：用户自主注册、账号密码登录及密码修改，管理员无需分配账号，保留原同步密钥兼容；首页、周历、设置和深浅色视觉已调整。[使用与部署说明](../Docs/account-password.md)。账号与界面更新已包含在 beta.6 客户端；线上同步服务尚未部署对应后端，未升级的服务器请继续使用密钥连接。
+Android 1.4.0-beta.7（2026-10-21）：编辑草稿恢复、餐盘/营养成分表/配料表识别、多图翻页、周历营养环、下拉同步、身体总览双曲线、按需列表与无障碍适配。见[实施与验证](../Docs/android-ios-parity-2026-10-21.md)，下载和升级见[本版发布说明](../Docs/android-release-1.4-beta7.md)。
+
+「设置 → 账号与同步」支持：用户自主注册、账号密码登录及密码修改，管理员无需分配账号，保留原同步密钥兼容；首页、周历、设置和深浅色视觉已调整。[使用与部署说明](../Docs/account-password.md)。账号与界面更新已包含在 beta.6 客户端；线上账号后端已于 2026-10-20 部署；自部署服务器需升级对应后端，旧密钥连接继续兼容。
 
 Android 1.4.0-beta.6：重做首次导览，补齐 30 天示例、训练与身体图表，并合入账号和数据兼容更新。[更新与验证](../Docs/android-release-1.4-beta6.md)。beta.4/5 可直接覆盖升级；beta.3 及更早版本需先迁移再重装。
 
@@ -51,11 +53,11 @@ python3 ../Tests/android-isolation.py app/build/outputs/apk/sandbox/app-sandbox.
 
 ## 玻璃导航与 iOS 对齐
 
-1.1.0 使用浮动胶囊导航：真实页面背景模糊、玻璃边缘折射、渐变高光和可滑动的选中胶囊；按钮按压和切换使用弹簧动画，键盘出现时隐藏导航。Android 12 及以上使用背景模糊，Android 13 及以上增加 AGSL 边缘折射；Android 8–11 和低内存设备使用清晰磨砂效果。
+浮动胶囊导航使用真实页面背景模糊、轻量高光和可滑动的选中胶囊，底部新增从清晰到模糊的渐进过渡，覆盖系统手势区域。Android 12 及以上平滑融合三档系统高斯模糊，背景以较低分辨率渲染以减少开销；Android 8–11、低内存设备和省电模式使用渐变遮罩与近实色胶囊。导航图标和文字始终清晰，按钮按压和切换使用弹簧动画；键盘出现时，导航和渐进模糊一起隐藏。实现与验证见[渐进模糊说明](../Docs/android-progressive-blur.md)。
 
 首页顺序、蓝紫主题、蛋白质/碳水/餐次配色、添加菜单、记录日历、餐次分组、照片入口、训练结束后编辑、默认收起的动作组数，以及「问 AI」先填草稿的操作已对齐 iOS。切换标签保留日期、滚动位置、趋势范围、搜索和未发送文字。详细变化与 GitHub 参考见[对齐记录](../Docs/android-ios-parity.md)。
 
-在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.6) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.6.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4/5 用户直接覆盖安装即可。**beta.3 及更早版本的签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
+在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.7) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.7.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4/5/6 用户直接覆盖安装即可。**beta.3 及更早版本的签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
 
 照片识别、智能教练与周报需要联网并配置服务。预设和自定义接口的连接、密钥保存与常见错误见[接口设置](../Docs/api-settings.md)。
 
@@ -85,7 +87,7 @@ JSON 导出包含真实记录、目标、删除标记、照片服务器编号、
 
 ## 当前平台差异
 
-- 玻璃使用 Android RenderEffect/AGSL 近似苹果原生 Liquid Glass；圆环已有渐变和阴影，光照没有复刻苹果完整渲染。
+- 玻璃使用 Android RenderEffect 的多级系统模糊；圆环对齐营养配色与进度含义，材质、光照和系统字体仍有平台差异。
 - 系统相机、照片选择、日期时间、返回和键盘遵循安卓平台。相机仅获得本次临时照片 URI 的授权，拍照完成或取消后清理临时文件。
 - 常用餐食照片、聊天附件、质量确认和周报留在本机，不参与跨设备同步或 JSON 导出；历史聊天照片不会自动附加到后续 AI 请求。
 - 训练部位专用分类、对话复核、部位目录管理和历史修复已在 1.4.0-beta.3 提供；目录偏好只保存在本机，训练标签通过原有协议同步。
