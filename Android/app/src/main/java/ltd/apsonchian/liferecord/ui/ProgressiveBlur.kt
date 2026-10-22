@@ -93,10 +93,15 @@ internal fun BackdropLayer(
     Box(modifier.onGloballyPositioned {
         origin = it.positionInRoot()
         dimensions = it.size
-    }.drawWithContent {
+    }.legacyBlurRedraw().drawWithContent {
         if (renderEffect != null) {
             layer.clip = true
-            layer.renderEffect = renderEffect
+            // API 31 caches filter inputs across RenderNode recordings. Recreate the
+            // filter as well as its display list on that platform to drop stale tiles.
+            layer.renderEffect = if (Build.VERSION.SDK_INT == 31) effect(
+                Size(dimensions.width * inputScale, dimensions.height * inputScale),
+                padding.toFloat(), radius.value * density,
+            ) else renderEffect
             layer.record(size = IntSize(ceil(dimensions.width * inputScale).toInt() + padding * 2, ceil(dimensions.height * inputScale).toInt() + padding * 2)) {
                 // Samples outside the page must remain opaque, otherwise the blurred
                 // output reveals the sharp original near the physical screen edges.

@@ -34,6 +34,11 @@ struct TodayView: View {
         meals.filter { Calendar.current.isSameDay($0.date, selectedDate) }
     }
 
+    private var selectedBodyMetrics: [BodyMetric] {
+        bodyMetrics.filter { Calendar.current.isSameDay($0.date, selectedDate) }
+            .sorted { $0.date > $1.date }
+    }
+
     private var nutrition: DailyNutrition {
         selectedMeals.reduce(into: DailyNutrition()) { $0.add($1) }
     }
@@ -66,6 +71,7 @@ struct TodayView: View {
                         lifeTrackCard
                         macroCard
                         mealLog
+                        bodyLog
                         insightCard
                     }
                     .padding(.horizontal, 16)
@@ -313,6 +319,37 @@ struct TodayView: View {
                     let group = selectedMeals.filter { $0.kind == kind }
                     if !group.isEmpty {
                         MealSection(kind: kind, meals: group)
+                    }
+                }
+            }
+        }
+    }
+
+    private var bodyLog: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("身体测量").font(.title3.bold()).accessibilityIdentifier("today-body-measurements")
+                Spacer()
+                NavigationLink("查看全部") { BodyMeasurementHistoryView(metrics: bodyMetrics) }
+                    .font(.subheadline.weight(.semibold))
+            }
+            GlassCard(tint: AppTheme.protein) {
+                if selectedBodyMetrics.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("这一天还没有身体测量").font(.subheadline).foregroundStyle(.secondary)
+                        Button("记录身体数据") { activeSheet = .weight }
+                            .buttonStyle(AppButtonStyle(tint: AppTheme.protein, prominent: false))
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(selectedBodyMetrics.enumerated()), id: \.element.id) { index, metric in
+                            if index > 0 { Divider() }
+                            NavigationLink { BodyMetricDetailView(entry: metric) } label: {
+                                BodyMeasurementRow(metric: metric)
+                            }
+                            .buttonStyle(.plain).foregroundStyle(.primary)
+                            .accessibilityIdentifier("today-body-\(metric.id.uuidString)")
+                        }
                     }
                 }
             }

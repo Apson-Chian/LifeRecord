@@ -419,6 +419,7 @@ struct AddWeightView: View {
     @State private var date: Date
     @State private var weight: Double
     @State private var bodyFatText = ""
+    @State private var initialBodyFatText: String
     @State private var note = ""
     @State private var errorMessage: String?
     @State private var originalUpdatedAt: Date
@@ -431,7 +432,11 @@ struct AddWeightView: View {
         self.editing = editing
         _date = State(initialValue: editing?.date ?? RecordEntryDate.initial(on: defaultDate))
         _weight = State(initialValue: editing?.weight ?? lastWeight ?? 70)
-        _bodyFatText = State(initialValue: editing?.bodyFat.map { String($0) } ?? "")
+        let initialFat = editing?.bodyFat.map {
+            $0.formatted(.number.locale(Locale(identifier: "en_US_POSIX")).grouping(.never).precision(.fractionLength(0...2)))
+        } ?? ""
+        _bodyFatText = State(initialValue: initialFat)
+        _initialBodyFatText = State(initialValue: initialFat)
         _note = State(initialValue: editing?.note ?? "")
         _originalUpdatedAt = State(initialValue: editing?.updatedAt ?? .distantPast)
     }
@@ -498,7 +503,9 @@ struct AddWeightView: View {
             guard editing.updatedAt == originalUpdatedAt else { errorMessage = "该记录已在其他设备更新，请关闭后重新编辑。"; return }
         }
         let normalized = bodyFatText.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
-        let bodyFat = Double(normalized)
+        // A display-only rounding must not change an existing measurement when
+        // the user only edits its date, weight or note.
+        let bodyFat = normalized == initialBodyFatText && editing != nil ? editing?.bodyFat : Double(normalized)
         guard weight.isFinite, (20...400).contains(weight), normalized.isEmpty || bodyFat.map({ $0.isFinite && (1...80).contains($0) }) == true else {
             errorMessage = "请输入有效的体重（20–400 kg）和体脂率（1–80%），未测体脂请留空。"
             return

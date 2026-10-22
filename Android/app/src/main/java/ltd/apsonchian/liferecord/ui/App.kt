@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package ltd.apsonchian.liferecord.ui
 
 import androidx.activity.compose.BackHandler
@@ -52,6 +52,14 @@ import java.time.format.DateTimeFormatter
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var dateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val date = LocalDate.parse(dateText)
+    val preview = DemoData.isPreview(snapshot.records)
+    val displaySnapshot = if (preview) snapshot.copy(profile = DemoData.profile()) else snapshot
+    val latestExample = snapshot.records.filter { it.demo && it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) }.maxByOrNull { it.date }
+    LaunchedEffect(preview, latestExample?.id) {
+        if (preview && date == LocalDate.now() && snapshot.records.none { it.demo && it.date.day() == date && it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) }) {
+            latestExample?.let { dateText = it.date.day().toString() }
+        }
+    }
     val todayRequest by vm.todayRequest.collectAsState()
     LaunchedEffect(todayRequest) { if(todayRequest > 0) { tab = 0; dateText = LocalDate.now().toString() } }
     var editor by rememberSaveable(stateSaver = OptionalRecordSaver) { mutableStateOf<Record?>(null) }
@@ -70,18 +78,18 @@ import java.time.format.DateTimeFormatter
     val notify: (String) -> Unit = { scope.launch { snack.showSnackbar(it) } }
     if(first) { Onboarding(vm); return@LifeTheme }
     BackHandler(enabled = tab != 0) { tab = 0 }
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).dismissKeyboardOnBackgroundTap()) {
         Box(Modifier.fillMaxSize().glassSource(backdrop)) {
             AppBackground()
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 pages.SaveableStateProvider(tab) {
                     when(tab) {
-                        0 -> Today(vm, snapshot, date, { dateText = it.toString() }, { detail = it }, { type -> editor = Record.create(type, date.epochAt()).apply {
+                        0 -> Today(vm, displaySnapshot, date, { dateText = it.toString() }, { detail = it }, { type -> editor = Record.create(type, date.epochAt()).apply {
                             if(type == RecordType.BODY) json.put("weight", snapshot.records.filter { it.type == RecordType.BODY }.maxByOrNull { it.date }?.json?.optDouble("weight") ?: snapshot.profile.optDouble("baselineWeight"))
                             if(type == RecordType.WORKOUT) { json.put("date", minOf(this.date, now())); json.put("endDate", minOf(this.date + 3600, now())) }
                         } }, notify, { editor = it.copy() },
                             { draft -> coachDraft = draft; tab = 2 }, { photos -> mealHistory = photos })
-                        1 -> Trends(vm, snapshot, { detail = it }, { draft -> tab = 2; coachDraft = draft }, notify, {editor=it.copy()})
+                        1 -> Trends(vm, displaySnapshot, { detail = it }, { draft -> tab = 2; coachDraft = draft }, notify, {editor=it.copy()})
                         2 -> Box(Modifier.fillMaxSize().padding(bottom = if(keyboardVisible) 0.dp else glassPageBottomPadding() - 16.dp)) {
                             Coach(vm, notify, coachDraft) { coachDraft = "" }
                         }
@@ -112,21 +120,15 @@ import java.time.format.DateTimeFormatter
 }
 
 @Composable fun PageTitle(title: String, subtitle: String, trailing: @Composable (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().heightIn(min=64.dp).semantics {contentDescription=subtitle},verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-            if(subtitle.isNotBlank()) Text(subtitle,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(title,Modifier.testTag("page-title").semantics {heading()},style=MaterialTheme.typography.headlineLarge)
-        }
+    Row(Modifier.fillMaxWidth().heightIn(min=72.dp).semantics {contentDescription=subtitle},
+        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        Text(title,Modifier.weight(1f).testTag("page-title").semantics {heading()},style=MaterialTheme.typography.headlineLarge)
         trailing?.invoke()
     }
 }
 @Composable fun Panel(modifier: Modifier = Modifier, tint:Color=MaterialTheme.colorScheme.primary, radius:androidx.compose.ui.unit.Dp=26.dp, content: @Composable ColumnScope.() -> Unit) {
-    val dark = MaterialTheme.colorScheme.background.luminance() < .2f
-    Surface(modifier.fillMaxWidth(),shape=RoundedCornerShape(radius),color=MaterialTheme.colorScheme.surface,
-        border=BorderStroke(.7.dp,tint.copy(alpha=if(dark) .18f else .10f))) {
-        Column(Modifier.background(Brush.linearGradient(listOf(tint.copy(alpha=if(dark) .09f else .035f),Color.Transparent)))
-            .padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
-    }
+    Column(modifier.fillMaxWidth().cardMaterial(tint, radius).padding(20.dp),
+        verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
 }
 @Composable fun Empty(title: String, text: String) { Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(title, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
 @Composable fun Today(vm: AppViewModel, s: Snapshot, date: LocalDate, select: (LocalDate) -> Unit, detail: (Record) -> Unit, add: (RecordType) -> Unit, notify: (String) -> Unit, edit: (Record) -> Unit, coach: (String) -> Unit, history: (Boolean) -> Unit) {
@@ -151,7 +153,7 @@ import java.time.format.DateTimeFormatter
     PullToRefreshBox(isRefreshing = syncing && refreshRequested, onRefresh = { refreshRequested = true; vm.sync() }, modifier = Modifier.fillMaxSize().testTag("today-pull-to-refresh")) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 20.dp, 16.dp, glassPageBottomPadding()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            val greeting = when { LocalTime.now().hour < 11 -> "早上好"; LocalTime.now().hour < 18 -> "下午好"; else -> "晚上好" }
+            val greeting = when { LocalTime.now().hour < 11 -> "早上好"; LocalTime.now().hour < 18 -> "今天状态如何"; else -> "晚上好" }
             val name = s.profile.optString("displayName")
             PageTitle(greeting + if(name.isBlank()) "" else "，$name", "${if(date==LocalDate.now()) "今日" else "回顾"} · ${date.format(DateTimeFormatter.ofPattern("M月d日 E",java.util.Locale.CHINA))}") {
                 Box {
@@ -164,7 +166,7 @@ import java.time.format.DateTimeFormatter
             }
         }
         item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp),verticalArrangement=Arrangement.spacedBy(11.dp)) {
+            Column(Modifier.fillMaxWidth().cardMaterial(radius=22.dp).padding(12.dp),verticalArrangement=Arrangement.spacedBy(11.dp)) {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha=.08f)).clickable {select(date.minusDays(1))},contentAlignment=Alignment.Center) { AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.onSurface,Modifier.size(18.dp).graphicsLayer {rotationZ=180f},"前一天") }
                     Row(Modifier.weight(1f).heightIn(min=44.dp).clickable {datePicker=true},horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
@@ -191,7 +193,7 @@ import java.time.format.DateTimeFormatter
                                 style=MaterialTheme.typography.labelSmall,color=if(selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
                             if (largeText) Text(d.dayOfMonth.toString(), style=MaterialTheme.typography.bodySmall, color=if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                             Box(Modifier.size(42.dp).clearAndSetSemantics {},contentAlignment=Alignment.Center) {
-                                Ring(Modifier.fillMaxSize(), listOf(protein.toFloat(),carbs.toFloat(),dayMeals.size/4f),3.5f)
+                                Ring(Modifier.fillMaxSize(), listOf(protein.toFloat(),carbs.toFloat(),dayMeals.size/4f),5f)
                                 if (!largeText) Text(d.dayOfMonth.toString(),fontSize=9.sp,fontWeight=FontWeight.Bold,color=if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -202,7 +204,7 @@ import java.time.format.DateTimeFormatter
         if(s.records.any {it.demo}) item {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha=.3f)).padding(12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                 AppIcon(Glyph.Archive,MaterialTheme.colorScheme.primary,Modifier.size(20.dp))
-                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {Text(if(preview) "正在体验示例数据" else "示例已隐藏，正在展示真实记录",style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold));Text("用于预览，不计入真实目标反馈",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {Text(if(preview) "正在体验示例数据" else "示例已隐藏，正在展示真实记录",style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold));Text(if(preview) "采用示例目标，不计入真实反馈" else "真实记录优先；示例仍可单独清除",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                 SoftButton(onClick={runCatching {vm.clearDemo()}.onFailure {notify(it.message.orEmpty())}},shape=RoundedCornerShape(50),contentPadding=PaddingValues(horizontal=10.dp,vertical=5.dp),modifier=Modifier.height(32.dp)) {Text("清除",style=MaterialTheme.typography.labelMedium)}
             }
         }
@@ -254,51 +256,62 @@ import java.time.format.DateTimeFormatter
     if(datePicker) RecordCalendar(date, s.records, { datePicker = false }, select)
 }
 @Composable private fun DailySummary(s:Snapshot,meals:List<Record>,body:Record?,today:Boolean) {
-    val calories=Insights.total(meals,"calories")
-    val goal=s.profile.optDouble("calorieGoal").coerceAtLeast(1.0)
-    val remaining=goal-calories
+    val calories=Insights.total(meals,"calories");val remaining=s.profile.optDouble("calorieGoal")-calories
     Panel {
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-            Text(if(today) "今日摄入" else "当日摄入",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
-            Text(s.profile.optString("fitnessGoal"),Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha=.09f)).padding(horizontal=10.dp,vertical=5.dp),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
+            AppIcon(Glyph.Target,MaterialTheme.colorScheme.primary,Modifier.size(19.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(s.profile.optString("fitnessGoal","维持"),Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,color=MaterialTheme.colorScheme.primary)
+            Text("每日目标",Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha=.12f)).padding(horizontal=10.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold))
         }
-        Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-            Text(String.format(java.util.Locale.US,"%,.0f",calories),fontSize=40.sp,lineHeight=46.sp,fontWeight=FontWeight.Bold,letterSpacing=(-1.5).sp)
-            Text("/ ${format(goal)} 千卡",Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        LinearProgressIndicator(progress={(calories/goal).toFloat().coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),color=MaterialTheme.colorScheme.primary,trackColor=MaterialTheme.colorScheme.primary.copy(alpha=.09f))
-        Text(if(remaining>=0) "距目标还差 ${format(remaining)} 千卡" else "已超出目标 ${format(-remaining)} 千卡",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        HorizontalDivider(color=MaterialTheme.colorScheme.onSurface.copy(alpha=.06f))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val stacked=maxWidth<300.dp || LocalDensity.current.fontScale>1.3f
+            val stacked=maxWidth<280.dp || LocalDensity.current.fontScale>1.3f
             val ring:@Composable ()->Unit={
-                Box(Modifier.size(88.dp).semantics {contentDescription="今日营养圆环，用餐 ${meals.size} 次";stateDescription="蛋白质 ${format(Insights.total(meals,"protein"))} / ${format(s.profile.optDouble("proteinGoal"))} 克，碳水 ${format(Insights.total(meals,"carbs"))} / ${format(s.profile.optDouble("carbsGoal"))} 克"},contentAlignment=Alignment.Center) {
-                    Ring(Modifier.fillMaxSize(),listOf((Insights.total(meals,"protein")/s.profile.optDouble("proteinGoal").coerceAtLeast(1.0)).toFloat(),(Insights.total(meals,"carbs")/s.profile.optDouble("carbsGoal").coerceAtLeast(1.0)).toFloat(),meals.size/4f),8f)
-                    Text("${meals.size} 餐",style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold))
+                Box(Modifier.size(116.dp).semantics {contentDescription="今日营养圆环，用餐 ${meals.size} 次";stateDescription="蛋白质 ${format(Insights.total(meals,"protein"))} / ${format(s.profile.optDouble("proteinGoal"))} 克，碳水 ${format(Insights.total(meals,"carbs"))} / ${format(s.profile.optDouble("carbsGoal"))} 克"},contentAlignment=Alignment.Center) {
+                    Ring(Modifier.fillMaxSize(),listOf((Insights.total(meals,"protein")/s.profile.optDouble("proteinGoal").coerceAtLeast(1.0)).toFloat(),(Insights.total(meals,"carbs")/s.profile.optDouble("carbsGoal").coerceAtLeast(1.0)).toFloat(),meals.size/4f),14f)
+                    Column(horizontalAlignment=Alignment.CenterHorizontally) {
+                        Text(meals.size.toString(),fontSize=20.sp,fontWeight=FontWeight.Bold,lineHeight=22.sp)
+                        Text("餐",fontSize=11.sp,lineHeight=14.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
             val metrics:@Composable ()->Unit={
                 Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     Metric("蛋白质","${format(Insights.total(meals,"protein"))} / ${format(s.profile.optDouble("proteinGoal"))} g",Protein)
                     Metric("碳水","${format(Insights.total(meals,"carbs"))} / ${format(s.profile.optDouble("carbsGoal"))} g",Carbs)
-                    Metric("餐次", "${meals.size} / 4 餐", Meals)
+                    Metric("体重",body?.let {"${format(it.json.optDouble("weight"))} kg"} ?: "暂无记录",MaterialTheme.colorScheme.primary)
                 }
             }
             if(stacked) Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {ring();metrics()}
-            else Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(24.dp)) {ring();Box(Modifier.weight(1f)) {metrics()}}
+            else Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) {ring();Box(Modifier.weight(1f)) {metrics()}}
         }
-        if(body!=null) Text("最近体重  ${String.format(java.util.Locale.ROOT,"%.1f",body.json.optDouble("weight"))} kg",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        HorizontalDivider(color=MaterialTheme.colorScheme.onSurface.copy(alpha=.08f))
+        val calorieStatus=if(remaining>=0) "还差 ${format(remaining)} 千卡" else "超出 ${format(-remaining)} 千卡"
+        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                Text(String.format(java.util.Locale.CHINA,"%,.0f",calories),style=AppTypography.number)
+                Text("千卡",Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(calorieStatus,Modifier.padding(top=14.dp),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 @Composable fun Metric(label:String,value:String,color:Color) {
     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
         Box(Modifier.size(9.dp).shadow(3.dp,CircleShape,ambientColor=color.copy(alpha=.3f),spotColor=color.copy(alpha=.3f)).background(color,CircleShape))
-        Column(verticalArrangement=Arrangement.spacedBy(1.dp)) {Text(label,style=MaterialTheme.typography.labelMedium.copy(fontWeight=FontWeight.SemiBold));Text(value,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
+            Text(label,style=MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.SemiBold))
+            Text(value,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 @Composable fun Ring(modifier: Modifier, values: List<Float>, thickness: Float) {
-    val surface = MaterialTheme.colorScheme.surface
-    val animated = values.mapIndexed { index, value -> animateFloatAsState(value.coerceIn(0f,1f), spring(dampingRatio=.88f,stiffness=380f),label="activity ring $index").value }
+    val motion = rememberMotionEnabled()
+    val animated = values.take(3).mapIndexed { index, value ->
+        animateFloatAsState(if(value.isFinite()) value.coerceIn(0f,1f) else 0f,
+            if(motion) spring(dampingRatio=.88f,stiffness=380f) else androidx.compose.animation.core.snap(),
+            label="activity ring $index").value
+    }
     Canvas(modifier) {
         val stroke = thickness.dp.toPx()
         animated.forEachIndexed { i, value ->
@@ -308,18 +321,34 @@ import java.time.format.DateTimeFormatter
                 val top = androidx.compose.ui.geometry.Offset(inset,inset); val dimensions = androidx.compose.ui.geometry.Size(diameter,diameter)
                 drawArc(color.copy(alpha=.13f),-90f,360f,false,top,dimensions,style=Stroke(stroke))
                 if(value>0) {
-                    drawArc(color,-90f,value*360f,false,top,dimensions,style=Stroke(stroke,cap=StrokeCap.Round))
+                    // Soft depth works on API 26 too, without another cached RenderEffect.
+                    for (halo in 4 downTo 1) {
+                        drawArc(Color.Black.copy(alpha=.025f),-90f,value*360f,false,
+                            top+androidx.compose.ui.geometry.Offset(1.2.dp.toPx(),2.2.dp.toPx()),dimensions,
+                            style=Stroke(stroke+halo*1.3.dp.toPx(),cap=StrokeCap.Round))
+                        drawArc(color.copy(alpha=.04f),-90f,value*360f,false,
+                            top+androidx.compose.ui.geometry.Offset(0f,1.dp.toPx()),dimensions,
+                            style=Stroke(stroke+halo*1.8.dp.toPx(),cap=StrokeCap.Round))
+                    }
+                    rotate(-90f) {
+                        drawArc(Brush.sweepGradient(listOf(color.copy(alpha=.72f),color,color.copy(alpha=.88f),color),center),
+                            0f,value*360f,false,top,dimensions,style=Stroke(stroke,cap=StrokeCap.Round))
+                    }
                 }
             }
         }
     }
 }
 @Composable fun ActionTile(title:String,subtitle:String,tint:Color,modifier:Modifier,action:()->Unit) {
-    Row(modifier.heightIn(min=88.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).clickable(onClick=action).padding(14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-        IconBadge(if(title=="记一餐") Glyph.Meal else Glyph.Weight,tint,36.dp)
-        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-            Text(title,style=MaterialTheme.typography.titleMedium)
-            Text(if(title=="记一餐") "拍照 / 手动" else "追踪变化",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(modifier.springClickable(role=androidx.compose.ui.semantics.Role.Button,onClick=action).cardMaterial(tint,22.dp).padding(17.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            IconBadge(if(title=="记一餐") Glyph.Meal else Glyph.Weight,tint)
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.size(26.dp).background(tint.copy(alpha=.08f),CircleShape),contentAlignment=Alignment.Center) {AppIcon(Glyph.Plus,tint,Modifier.size(12.dp))}
+        }
+        Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
+            Text(title,style=MaterialTheme.typography.titleLarge)
+            Text(subtitle,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

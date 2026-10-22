@@ -42,6 +42,32 @@ class GlassRenderingTest {
         verifyBlur(bands = true)
     }
 
+    @Test fun blurredPixelsFollowSourceLayerChangesAndNavigationReentry() {
+        Assume.assumeTrue(Build.VERSION.SDK_INT >= 31)
+        val blue=mutableStateOf(false)
+        val visible=mutableStateOf(true)
+        scenario.onActivity { activity -> activity.setContent {
+            LifeTheme {
+                val layer=rememberGraphicsLayer();val backdrop=remember(layer) {GlassBackdrop(layer)}
+                Box(Modifier.padding(24.dp).size(260.dp,300.dp).testTag("live-blur")) {
+                    Box(Modifier.fillMaxSize().glassSource(backdrop)) {
+                        Canvas(Modifier.fillMaxSize().graphicsLayer {translationX=if(blue.value) 1f else 0f}) {
+                            drawRect(if(blue.value) Color.Blue else Color.Red)
+                        }
+                    }
+                    if(visible.value) ProgressiveBackdrop(backdrop,Modifier.fillMaxSize(),blurEnabled=true)
+                }
+            }
+        }}
+        fun sample()=compose.onNodeWithTag("live-blur").captureToImage().toPixelMap().let {it[it.width/2,(it.height*.78f).toInt()]}
+        assertTrue(sample().red>.65f)
+        repeat(3) {
+            compose.runOnIdle {blue.value=true};assertTrue("Blur must repaint blue, including API31",sample().blue>.65f)
+            compose.runOnIdle {visible.value=false};sample()
+            compose.runOnIdle {blue.value=false;visible.value=true};assertTrue("No stale patch after reentry",sample().red>.65f)
+        }
+    }
+
     private fun verifyBlur(bands: Boolean) {
         val dark = mutableStateOf(false)
         val inverted = mutableStateOf(false)

@@ -1,15 +1,14 @@
 package ltd.apsonchian.liferecord.ui
 
 import android.os.Build
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -26,7 +25,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -45,7 +43,7 @@ class GlassBackdrop(val layer: GraphicsLayer) {
 }
 
 fun Modifier.glassSource(backdrop: GlassBackdrop): Modifier =
-    onGloballyPositioned { backdrop.origin = it.positionInRoot() }.drawWithContent {
+    onGloballyPositioned { backdrop.origin = it.positionInRoot() }.legacyBlurRedraw().drawWithContent {
         backdrop.layer.record { this@drawWithContent.drawContent() }
         drawLayer(backdrop.layer)
     }
@@ -54,7 +52,7 @@ fun Modifier.glassSource(backdrop: GlassBackdrop): Modifier =
 fun AppBackground(modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     Canvas(modifier.fillMaxSize()) {
-        drawRect(colors.background)
+        drawRect(Brush.verticalGradient(listOf(colors.background, lerp(colors.background, colors.primary, .075f), colors.background)))
     }
 }
 
@@ -93,34 +91,56 @@ fun GlassNavigationBar(backdrop: GlassBackdrop, selected: Int, select: (Int) -> 
     val colors = MaterialTheme.colorScheme
     val height = glassBarHeight()
     val motion = rememberMotionEnabled()
-    var dragPosition by remember { mutableStateOf<Float?>(null) }
+    val position = remember { Animatable(selected.toFloat()) }
+    var dragging by remember { mutableStateOf(false) }
+    var rawPosition by remember { mutableFloatStateOf(selected.toFloat()) }
+    var settleRequest by remember { mutableIntStateOf(0) }
+    var releaseVelocity by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(selected, motion, dragging, settleRequest) {
+        if (!dragging) {
+            val velocity = releaseVelocity
+            releaseVelocity = null
+            if (motion) position.animateTo(selected.toFloat(), if (velocity == null) SpringMotion.selection() else SpringMotion.release(), initialVelocity = velocity ?: position.velocity)
+            else position.snapTo(selected.toFloat())
+        }
+    }
     BoxWithConstraints(modifier.widthIn(max = 500.dp).fillMaxWidth()) {
         val tabWidth = (maxWidth - 12.dp) / 4
         val widthPx = with(LocalDensity.current) { tabWidth.toPx() }
-        val settledPosition by animateDpAsState(tabWidth * selected.toFloat(), spring(dampingRatio = 1f, stiffness = 700f), label = "glass selection")
-        val position = dragPosition?.let { tabWidth * it } ?: settledPosition
+        fun presentedPosition() = if (dragging) SpringMotion.resisted(rawPosition, 0f, 3f, 1f) else position.value
         val choose = rememberUpdatedState(select)
         GlassSurface(backdrop, Modifier.fillMaxWidth().height(height).testTag("glass-navigation")
-            .pointerInput(widthPx) {
-                detectHorizontalDragGestures(
-                    onDragStart = { dragPosition = ((it.x - 6.dp.toPx()) / widthPx - .5f).coerceIn(0f, 3f) },
-                    onHorizontalDrag = { change, amount -> change.consume(); dragPosition = ((dragPosition ?: selected.toFloat()) + amount / widthPx).coerceIn(0f, 3f) },
-                    onDragEnd = { dragPosition?.roundToInt()?.let { choose.value(it) }; dragPosition = null },
-                    onDragCancel = { dragPosition = null }
-                )
-            }) {
-            Box(Modifier.padding(6.dp).offset(x = position).width(tabWidth).fillMaxHeight()
+            .draggable(
+                state = rememberDraggableState { delta -> rawPosition += delta / widthPx },
+                orientation = Orientation.Horizontal,
+                startDragImmediately = position.isRunning,
+                onDragStarted = {
+                    // Freeze the presentation value, preserving where the finger grabbed it.
+                    position.stop()
+                    rawPosition = position.value
+                    dragging = true
+                },
+                onDragStopped = { velocity ->
+                    val current = presentedPosition()
+                    val normalized = velocity / widthPx
+                    val target = SpringMotion.projected(current, normalized).roundToInt().coerceIn(0, 3)
+                    position.snapTo(current)
+                    releaseVelocity = if (motion) normalized else 0f
+                    choose.value(target)
+                    dragging = false
+                    settleRequest++
+                }
+            )) {
+            Box(Modifier.padding(6.dp).graphicsLayer { translationX = presentedPosition() * widthPx }.width(tabWidth).fillMaxHeight().testTag("glass-selection")
                 .clip(RoundedCornerShape(50)).background(colors.primary.copy(alpha = .12f))
                 .border(.6.dp, Color.White.copy(alpha = if(colors.background.luminance()<.2f) .12f else .34f), RoundedCornerShape(50)))
             Row(Modifier.fillMaxSize().padding(6.dp).selectableGroup()) {
                 labels.forEachIndexed { index, label ->
                     val interactions = remember { MutableInteractionSource() }
-                    val pressed by interactions.collectIsPressedAsState()
-                    val scale by animateFloatAsState(if(pressed && motion) .94f else 1f, spring(stiffness = 900f), label = "tab press")
                     val color = if(selected == index) colors.primary else colors.onSurfaceVariant
                     Column(Modifier.weight(1f).fillMaxHeight().testTag("tab-$index").clip(RoundedCornerShape(50))
                         .selectable(selected == index, interactionSource = interactions, indication = null, role = Role.Tab, onClick = { select(index) })
-                        .graphicsLayer { scaleX = scale; scaleY = scale },
+                        .springPress(interactions, pressedScale=.97f),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
                     ) {
                         AppIcon(listOf(Glyph.Home,Glyph.Trend,Glyph.Coach,Glyph.Settings)[index],color,Modifier.size(24.dp),filled=selected==index && index!=1)

@@ -1,6 +1,7 @@
 package ltd.apsonchian.liferecord.ui
 
 import android.os.Build
+import androidx.compose.animation.core.Animatable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
@@ -21,6 +22,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -117,6 +120,11 @@ internal fun recordGallery(vm: AppViewModel, record: Record): List<GalleryPhoto>
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var swipe by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    val swipeAnimation = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var settleJob by remember { mutableStateOf<Job?>(null) }
+    val motion = rememberMotionEnabled()
     var extent by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val threshold = with(LocalDensity.current) { 96.dp.toPx() }
     val aspect = remember(bytes) {
@@ -131,8 +139,18 @@ internal fun recordGallery(vm: AppViewModel, record: Record): List<GalleryPhoto>
         catch (e: CancellationException) { throw e }
         catch (e: Exception) { error = "照片加载失败：${e.message.orEmpty()}" }
     }
-    LaunchedEffect(active) { if (!active) { scale = 1f; offset = Offset.Zero; swipe = 0f } }
+    LaunchedEffect(active) { if (!active) { settleJob?.cancel();scale = 1f; offset = Offset.Zero; swipe = 0f;dragging=false;swipeAnimation.snapTo(0f) } }
     LaunchedEffect(scale, active) { if (active) onZoom(scale > 1f) }
+    fun settle(velocity: Float, closing: Boolean) {
+        settleJob?.cancel()
+        settleJob = scope.launch(start=CoroutineStart.UNDISPATCHED) {
+            swipeAnimation.snapTo(swipe)
+            dragging = false
+            if (motion) swipeAnimation.animateTo(if(closing) extent.height.toFloat() else 0f, SpringMotion.release(), initialVelocity=velocity)
+            else swipeAnimation.snapTo(0f)
+            if (closing) dismiss()
+        }
+    }
     Box(Modifier.fillMaxSize().onSizeChanged { extent = it }.semantics {
             contentDescription = description
             stateDescription = if(scale>1f) "已放大 ${format(scale.toDouble())} 倍" else "原始比例"
@@ -149,12 +167,41 @@ internal fun recordGallery(vm: AppViewModel, record: Record): List<GalleryPhoto>
             val maxY = ((fittedHeight * scale - extent.height) / 2f).coerceAtLeast(0f)
             offset = if (scale > 1f) Offset((offset.x + pan.x).coerceIn(-maxX, maxX), (offset.y + pan.y).coerceIn(-maxY, maxY)) else Offset.Zero
         }, canPan = { scale > 1f })
+        .pointerInput(photo.key) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed=false,pass=PointerEventPass.Initial)
+                val grabbed=settleJob?.isActive==true
+                if(grabbed) {
+                    settleJob?.cancel()
+                    swipe=swipeAnimation.value
+                    dragging=true
+                }
+                // Observe without consuming: pinch, double-tap and paging keep priority.
+                do { val event=awaitPointerEvent(PointerEventPass.Final) } while(event.changes.any {it.pressed})
+                if(grabbed && dragging) settle(0f,false)
+            }
+        }
         .pointerInput(photo.key) { detectTapGestures(onDoubleTap = { scale = if (scale > 1f) 1f else 2f; offset = Offset.Zero }) }
-        .pointerInput(scale) {
-            if (scale <= 1f) detectVerticalDragGestures(onVerticalDrag = { change, delta -> change.consume(); swipe = (swipe + delta).coerceAtLeast(0f) },
-                onDragEnd = { if (swipe > threshold) dismiss() else swipe = 0f }, onDragCancel = { swipe = 0f })
+        .pointerInput(scale, motion) {
+            val velocity = VelocityTracker()
+            if (scale <= 1f) detectVerticalDragGestures(
+                onDragStart = {
+                    settleJob?.cancel()
+                    swipe = swipeAnimation.value
+                    dragging = true
+                    velocity.resetTracking()
+                },
+                onVerticalDrag = { change, delta ->
+                    change.consume()
+                    velocity.addPosition(change.uptimeMillis,change.position)
+                    swipe = (swipe + delta).coerceAtLeast(0f)
+                },
+                onDragEnd = {
+                    val speed=velocity.calculateVelocity().y
+                    settle(speed,SpringMotion.projected(swipe,speed)>threshold)
+                }, onDragCancel = { settle(0f,false) })
         }, contentAlignment = Alignment.Center) {
-        bytes?.let { PhotoBytes(it, Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y + swipe }, androidx.compose.ui.layout.ContentScale.Fit,maxDimension=2000) }
+        bytes?.let { PhotoBytes(it, Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y + if(dragging) swipe else swipeAnimation.value }.testTag("gallery-image-${photo.key}"), androidx.compose.ui.layout.ContentScale.Fit,maxDimension=2000) }
             ?: if (error.isBlank()) CircularProgressIndicator() else TextButton(onClick = { retry++ }) { Text("$error，点此重试", color = Color.White) }
     }
 }

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.*
 import ltd.apsonchian.liferecord.AppViewModel
@@ -39,6 +40,7 @@ import java.time.format.DateTimeFormatter
 @Composable private fun FormFrame(title: String, dismiss: () -> Unit, actions: @Composable RowScope.() -> Unit,
     dismissEnabled: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val close by rememberUpdatedState(dismiss)
     val canClose by rememberUpdatedState(dismissEnabled)
@@ -47,12 +49,12 @@ import java.time.format.DateTimeFormatter
     })
     ModalBottomSheet(onDismissRequest = { if (canClose) close() }, sheetState = sheet, containerColor = MaterialTheme.colorScheme.background) {
         Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.imePadding().widthIn(max = 760.dp)) {
+            Column(Modifier.imePadding().widthIn(max = 760.dp).dismissKeyboardOnBackgroundTap()) {
                 CenterAlignedTopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) },
                     navigationIcon = { TextButton(enabled = dismissEnabled, onClick = dismiss) { Text("取消") } },
                     actions = actions, windowInsets = WindowInsets(0, 0, 0, 0), colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent))
                 content()
-                if (keyboardVisible) TextButton(onClick = { keyboard?.hide() }, modifier = Modifier.align(Alignment.End)) { Text("收起键盘") }
+                if (keyboardVisible) TextButton(onClick = { focus.clearFocus(); keyboard?.hide() }, modifier = Modifier.align(Alignment.End)) { Text("收起键盘") }
             }
         }
     }

@@ -48,8 +48,9 @@ class AndroidParityTest {
     }
     private fun hideKeyboard() { androidx.test.espresso.Espresso.closeSoftKeyboard();compose.waitForIdle() }
     private fun field(label:String,value:String) { compose.onNodeWithContentDescription(label).performScrollTo().performTextReplacement(value) }
-    private fun screenshot(name:String) {
-        compose.waitForIdle();android.os.SystemClock.sleep(400)
+    private fun screenshot(name:String,awaitCompose:Boolean=true) {
+        if(awaitCompose) compose.waitForIdle()
+        android.os.SystemClock.sleep(400)
         val folder=java.io.File(app.filesDir,"parity-completed").apply {mkdirs()}
         val bitmap=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()!!
         java.io.File(folder,"$name.png").outputStream().use {bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()
@@ -85,6 +86,10 @@ class AndroidParityTest {
         compose.onNodeWithContentDescription("体重 kg").assertTextContains("73.4")
         compose.onNodeWithText("保存").performClick();compose.waitForIdle()
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("补记"))
+        val target=compose.onNodeWithText("补记").fetchSemanticsNode().boundsInRoot
+        val bar=compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
+        // Leave room for the navigation's touch target and rounded card shadows.
+        if(target.bottom>bar.top-240f) compose.onNode(hasScrollAction()).performTouchInput {swipeUp(startY=height*.75f,endY=height*.35f,durationMillis=250)}
         compose.onNodeWithText("补记").performClick()
         compose.onNodeWithText("具体动作与组数（可选）").performScrollTo().performClick()
         compose.onNodeWithText("添加动作").performScrollTo().performClick()
@@ -212,7 +217,11 @@ class AndroidParityTest {
         try {
             shell("dumpsys battery unplug");shell("dumpsys battery set level 30");shell("cmd power set-mode 1")
             compose.waitUntil(5000) {(app.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode}
-            compose.waitForIdle();screenshot("home-power-save")
+            // API31 power saving can suppress the next Choreographer draw that
+            // Compose's Espresso barrier waits for even when the app is idle.
+            // Request one frame and capture the device, without that test-only barrier.
+            scenario.onActivity {it.window.decorView.invalidate()}
+            screenshot("home-power-save",awaitCompose=false)
         } finally {shell("cmd power set-mode 0");shell("dumpsys battery reset")}
         compose.onNodeWithTag("tab-3").performClick();screenshot("settings-light")
         scenario.onActivity {vm.personalize("dark","purple")}

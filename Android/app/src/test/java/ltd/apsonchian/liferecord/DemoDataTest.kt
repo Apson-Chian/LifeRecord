@@ -13,7 +13,12 @@ class DemoDataTest {
         val meals = records.filter {it.type==RecordType.MEAL}
         val body = records.filter {it.type==RecordType.BODY}
         val workouts = records.filter {it.type==RecordType.WORKOUT}
-        assertEquals(106,meals.size); assertEquals(28,body.size); assertEquals(20,workouts.size)
+        assertTrue(meals.size in 95..115); assertEquals(29,body.size); assertTrue(workouts.size in 19..23)
+        assertTrue(meals.map {it.title}.distinct().size>=16)
+        assertTrue(meals.all {it.json.getString("inputText").isNotBlank()})
+        assertTrue(workouts.flatMap {it.json.getJSONArray("bodyParts").strings()}.distinct().size>=8)
+        assertTrue(records.none {it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) && it.date.day()==at.day()})
+        assertEquals(3,records.count {it.type==RecordType.FAVORITE});assertEquals(4,records.count {it.type==RecordType.EXERCISE})
         assertEquals(4,meals.map {it.json.getString("kind")}.distinct().size)
         assertTrue(records.all {it.demo && it.date<=at}); records.forEach(Validation::record)
         meals.forEach {r -> val j=r.json; assertEquals(j.getDouble("protein")*4+j.getDouble("carbs")*4+j.getDouble("fat")*9,j.getDouble("calories"),.001)}
@@ -29,9 +34,9 @@ class DemoDataTest {
         listOf("meals","bodyMetrics","workoutEntries").forEach {assertEquals(0,wire.getJSONArray(it).length())}
         assertTrue(RecordQuality.issues(records,at).isEmpty())
         assertTrue(BodyTrend.records(records,"weight",at).isEmpty())
-        assertEquals(28,BodyTrend.records(records,"weight",at,includeDemo=true).size)
+        assertEquals(27,BodyTrend.records(records,"weight",at,includeDemo=true).size)
         assertTrue(BodyOverview.summarize(records,at).points.isEmpty())
-        assertEquals(28,BodyOverview.summarize(records,at,includeDemo=true).points.size)
+        assertEquals(27,BodyOverview.summarize(records,at,includeDemo=true).points.size)
         assertEquals(0,Insights.streak(records,at.day()))
         val chats=DemoData.conversations(at)
         assertEquals(2,chats.size);assertTrue(chats.all {it.getBoolean("isDemo")})

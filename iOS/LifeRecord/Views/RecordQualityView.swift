@@ -80,7 +80,7 @@ struct RecordQualityView: View {
             }
         case .body:
             if let entry = bodyMetrics.first(where: { $0.id == id }) {
-                NavigationLink { QualityBodyDetailView(entry: entry) } label: {
+                NavigationLink { BodyMetricDetailView(entry: entry) } label: {
                     recordLabel("\(entry.weight.formatted()) kg", detail: "\(entry.date.formatted(date: .abbreviated, time: .shortened)) · 查看详情", symbol: AppSymbol.weight)
                 }.buttonStyle(.borderless)
             }
@@ -105,7 +105,7 @@ struct RecordQualityView: View {
     }
 }
 
-private struct QualityBodyDetailView: View {
+struct BodyMetricDetailView: View {
     let entry: BodyMetric
     @State private var isEditing = false
 
@@ -113,9 +113,9 @@ private struct QualityBodyDetailView: View {
         List {
             Section("测量数据") {
                 LabeledContent("时间", value: entry.date.formatted(date: .long, time: .shortened))
-                LabeledContent("体重", value: "\(entry.weight.formatted()) kg")
-                if let bodyFat = entry.bodyFat { LabeledContent("体脂率", value: "\(bodyFat.formatted()) %") }
-                if let waist = entry.waist { LabeledContent("腰围", value: "\(waist.formatted()) cm") }
+                LabeledContent("体重", value: "\(entry.weight.formatted(.number.precision(.fractionLength(1)))) kg")
+                if let bodyFat = entry.bodyFat { LabeledContent("体脂率", value: "\(bodyFat.formatted(.number.precision(.fractionLength(1)))) %") }
+                if let waist = entry.waist { LabeledContent("腰围", value: "\(waist.formatted(.number.precision(.fractionLength(1)))) cm") }
             }
             if !entry.note.isEmpty { Section("备注") { Text(entry.note).textSelection(.enabled) } }
         }

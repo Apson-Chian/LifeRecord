@@ -1,3 +1,5 @@
+2026-10-22：源码新增首页身体测量区，可按所选日期查看体重、体脂、腰围与备注，打开详情、编辑或全部历史。体脂显示去除浮点长尾，未修改的原始精度保留。[两端更新与验证](../Docs/android-compatibility-beta8.md)。需要使用本版源码重新构建安装；未发布 IPA 或 TestFlight。
+
 # LifeRecord iOS
 
 使用 SwiftUI、SwiftData 和 Swift Charts 构建的原生客户端，最低支持 iOS 17。支持离线记录饮食、训练与身体测量，并通过可选同步服务与 Android、网页端交换记录。

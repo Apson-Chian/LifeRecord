@@ -40,6 +40,8 @@ import kotlin.math.abs
 @Composable fun Trends(vm: AppViewModel,s:Snapshot,detail:(Record)->Unit,coach:(String)->Unit,notify:(String)->Unit,edit:(Record)->Unit=detail) {
     var range by rememberSaveable { mutableIntStateOf(30) }
     var details by rememberSaveable { mutableStateOf(false) }
+    var recordSearch by rememberSaveable { mutableStateOf("") }
+    var recordFilter by rememberSaveable { mutableStateOf<RecordType?>(null) }
     var measurement by rememberSaveable { mutableStateOf<String?>(null) }
     var quality by rememberSaveable { mutableStateOf(false) }
     var showReport by rememberSaveable { mutableStateOf(false) }
@@ -70,7 +72,7 @@ import kotlin.math.abs
     }; return }
     if(showCalendar) { WorkoutCalendarPage(chartRecords,{showCalendar=false},edit); return }
     if(workoutDetails) {WorkoutDetails(vm,workouts,{workoutDetails=false},edit,notify);return}
-    if(details) { RecordDataDetails(s,chartRecords.filter { it.date.day()>=start },{details=false},detail); return }
+    if(details) { RecordDataDetails(s,chartRecords.filter { it.date.day()>=start },{details=false},detail,recordSearch,{recordSearch=it},recordFilter,{recordFilter=it}); return }
     measurement?.let { field -> MeasurementDetail(chartRecords,field,start,{measurement=null},detail); return }
     if(quality) { QualityReview(vm,s,{quality=false},detail,notify); return }
     if(showReport) { SubPage("AI 周报",{showReport=false}) {
@@ -321,8 +323,8 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
     }
 }
 
-@Composable private fun RecordDataDetails(s:Snapshot,records:List<Record>,dismiss:()->Unit,detail:(Record)->Unit) {
-    var search by rememberSaveable { mutableStateOf("") };var filter by rememberSaveable { mutableStateOf<RecordType?>(null) }
+@Composable private fun RecordDataDetails(s:Snapshot,records:List<Record>,dismiss:()->Unit,detail:(Record)->Unit,
+    search:String,changeSearch:(String)->Unit,filter:RecordType?,changeFilter:(RecordType?)->Unit) {
     var bodyOverview by rememberSaveable { mutableStateOf(false) }
     var selectedDayText by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedDay=selectedDayText?.let(LocalDate::parse)
@@ -332,8 +334,8 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         item("overview") { Column(verticalArrangement=Arrangement.spacedBy(16.dp)) { RecordOverview(s,records,selectedDay,{selectedDayText=it?.toString()},{bodyOverview=true}) } }
         item { Text("连续记录 ${Insights.streak(s.records)} 天 · 当前时段 ${records.map { it.date.day() }.distinct().size} 个记录日",style=MaterialTheme.typography.titleMedium) }
         item { Text("全部记录",style=MaterialTheme.typography.titleLarge) }
-        item { OutlinedTextField(search,{search=it},Modifier.fillMaxWidth(),label={Text("搜索名称、备注与部位")},singleLine=true) }
-        item { ChoiceControl(listOf("" to "全部")+listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT).map {it.name to it.label},filter?.name.orEmpty(),{filter=it.takeIf {value -> value.isNotEmpty()}?.let(RecordType::valueOf)}) }
+        item { OutlinedTextField(search,changeSearch,Modifier.fillMaxWidth(),label={Text("搜索名称、备注与部位")},singleLine=true) }
+        item { ChoiceControl(listOf("" to "全部")+listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT).map {it.name to it.label},filter?.name.orEmpty(),{changeFilter(it.takeIf {value -> value.isNotEmpty()}?.let(RecordType::valueOf))}) }
         val visible=(if(selectedDay==null) records else s.records.filter {(preview || !it.demo) && it.date<=now()}).filter { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) && (filter==null || it.type==filter) && (selectedDay==null || it.date.day()==selectedDay) && (search.isBlank() || it.title.contains(search,true) || it.json.optString("note").contains(search,true) || it.json.optJSONArray("exercises")?.objects()?.any { ex -> ex.optString("name").contains(search,true) || ex.optString("bodyPart").contains(search,true) }==true) }.sortedByDescending { it.date }
         if(visible.isEmpty()) item("empty") { Empty("没有符合条件的记录","调整范围或搜索内容") }
         items(visible,key={"${it.type}:${it.id}"}) { r -> Panel { RecordRow(r) { detail(r) } } }

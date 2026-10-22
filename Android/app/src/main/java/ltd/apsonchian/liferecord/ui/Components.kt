@@ -1,7 +1,5 @@
 package ltd.apsonchian.liferecord.ui
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.*
 import androidx.compose.foundation.layout.*
@@ -23,10 +21,8 @@ import androidx.compose.ui.unit.*
 }
 @Composable private fun StyledButton(onClick:()->Unit,modifier:Modifier,enabled:Boolean,tint:Color,foreground:Color,shape:Shape,padding:PaddingValues,prominent:Boolean,content:@Composable RowScope.()->Unit) {
     val source=remember { MutableInteractionSource() };val pressed by source.collectIsPressedAsState()
-    val motion = rememberMotionEnabled()
-    val scale by animateFloatAsState(if(pressed && motion) .98f else 1f,spring(dampingRatio=1f,stiffness=850f),label="button press")
     val gradient=if(prominent) listOf(tint,tint) else listOf(tint.copy(alpha=.09f),tint.copy(alpha=.09f))
-    Row(modifier.graphicsLayer { scaleX=scale;scaleY=scale;alpha=if(!enabled) .45f else if(pressed) .8f else 1f }
+    Row(modifier.springPress(source,enabled).graphicsLayer { alpha=if(!enabled) .45f else if(pressed) .8f else 1f }
         .clip(shape).background(Brush.linearGradient(gradient)).border(.7.dp,if(prominent) Color.White.copy(alpha=.16f) else tint.copy(alpha=.16f),shape)
         .clickable(enabled=enabled,interactionSource=source,indication=ripple(),role=Role.Button,onClick=onClick)
         .defaultMinSize(minHeight=48.dp).padding(padding),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
@@ -38,11 +34,15 @@ import androidx.compose.ui.unit.*
         AppIcon(kind,tint,Modifier.size(size*.45f))
     }
 }
+@Composable internal fun SpringIconButton(onClick:()->Unit,modifier:Modifier=Modifier,enabled:Boolean=true,content:@Composable ()->Unit) {
+    val source=remember {MutableInteractionSource()}
+    IconButton(onClick=onClick,modifier=modifier.springPress(source,enabled,pressedScale=.97f),enabled=enabled,interactionSource=source,content=content)
+}
 @Composable fun SymbolButton(kind:Glyph,description:String,onClick:()->Unit,modifier:Modifier=Modifier) {
     val color=MaterialTheme.colorScheme.primary
     Box(modifier.size(44.dp).shadow(5.dp,RoundedCornerShape(50),ambientColor=Color.Black.copy(alpha=.04f),spotColor=Color.Black.copy(alpha=.04f))
-        .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surface.copy(alpha=.85f)).clickable(role=Role.Button,onClick=onClick),contentAlignment=Alignment.Center) {
-        if(kind==Glyph.Plus) Box(Modifier.size(44.dp).background(color,RoundedCornerShape(50)),contentAlignment=Alignment.Center) {AppIcon(kind,MaterialTheme.colorScheme.onPrimary,Modifier.size(23.dp),description)}
+        .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surface.copy(alpha=.85f)).springClickable(role=Role.Button,onClick=onClick),contentAlignment=Alignment.Center) {
+        if(kind==Glyph.Plus) Box(Modifier.size(44.dp).border(1.dp,color.copy(alpha=.24f),RoundedCornerShape(50)),contentAlignment=Alignment.Center) {AppIcon(kind,color,Modifier.size(23.dp),description)}
         else AppIcon(kind,color,Modifier.size(22.dp),description)
     }
 }

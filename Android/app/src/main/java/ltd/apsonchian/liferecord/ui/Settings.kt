@@ -96,7 +96,7 @@ import android.net.Uri
             SettingsRow("导出记录 JSON","包含照片编号；照片字节、对话和密钥不导出") {export.launch("LifeRecord-${java.time.LocalDate.now()}.json")}
             SettingsRow("重看引导","了解记录、AI 与私有同步") {page="";vm.onboarding.value=true}
             SettingsRow("清除本机数据","清除记录、对话、照片与密钥；云端记录保留") {reset=true}
-            SettingsRow("载入完整示例","近 30 天饮食、身体、训练和示例对话") {runCatching {vm.seedDemo();notify("示例已载入；有真实记录时，图表优先展示真实记录")}.onFailure {notify(it.message.orEmpty())}}
+            SettingsRow("载入完整示例","载入或更新 30 天示例；保留真实记录与个人目标") {runCatching {vm.seedDemo();notify("新版示例已载入；有真实记录时，图表优先展示真实记录")}.onFailure {notify(it.message.orEmpty())}}
             SettingsRow("清除示例数据","仅清除带有示例标记的记录和对话") {clear=true}
             Text("记录保存在本机，密钥由 Android Keystore 加密。使用 AI 时，记录上下文会发送至你选择的接口；启用同步后才会上传至私有服务器。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -132,7 +132,7 @@ import android.net.Uri
 @Composable private fun SettingsGroup(title:String,content:@Composable ColumnScope.()->Unit) {
     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(title,Modifier.padding(start=16.dp),style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface),content=content)
+        Column(Modifier.fillMaxWidth().cardMaterial(radius=22.dp),content=content)
     }
 }
 @Composable private fun DestinationRow(title:String,subtitle:String,kind:Glyph,tint:Color,onClick:()->Unit) {

@@ -10,14 +10,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /** Match the iOS lightweight heading/list/inline renderer without HTML or web content. */
-@Composable fun MarkdownText(content:String) {
-    Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
+@Composable fun MarkdownText(content:String, bodyStyle:TextStyle=MaterialTheme.typography.bodyLarge) {
+    Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
         content.replace("\r\n","\n").split('\n').forEach { line ->
             val trimmed=line.trim()
             val heading=trimmed.takeWhile { it=='#' }.length.takeIf { it in 1..6 && trimmed.getOrNull(it)==' ' }
             val display=when { heading!=null -> trimmed.drop(heading+1);trimmed.startsWith("- ") || trimmed.startsWith("* ") -> "• "+trimmed.drop(2);else -> line }
-            if(display.isBlank()) Spacer(Modifier.height(3.dp)) else {
-                val style=when(heading) { 1 -> MaterialTheme.typography.titleLarge;2,3 -> MaterialTheme.typography.titleMedium;else -> MaterialTheme.typography.bodyLarge }
+            if(display.isBlank()) Spacer(Modifier.height(2.dp)) else if(trimmed=="---" || trimmed=="***") HorizontalDivider() else {
+                val style=when(heading) { 1 -> MaterialTheme.typography.headlineSmall;2 -> MaterialTheme.typography.titleLarge;3 -> MaterialTheme.typography.bodyMedium.copy(fontWeight=FontWeight.SemiBold);else -> bodyStyle }
                 Text(inlineMarkdown(display),style=style)
             }
         }
