@@ -1,4 +1,4 @@
-"""Append-only, civil-day goal versions; current profile still uses its LWW stamp."""
+"""Civil-day targets with stable-ID corrections, independent of profile LWW."""
 import datetime
 import hashlib
 import json
@@ -29,22 +29,43 @@ def versions(profile):
             number = entry.get(key)
             if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number):
                 raise ValueError("invalid goal history number")
+        if "revisionAt" in entry:
+            revision = entry["revisionAt"]
+            if isinstance(revision, bool) or not isinstance(revision, (int, float)) or not math.isfinite(revision) or not 0 <= revision <= 4_102_444_800:
+                raise ValueError("invalid goal revision timestamp")
+        if "revisionID" in entry and (not isinstance(entry["revisionID"],str) or not entry["revisionID"]):
+            raise ValueError("invalid goal revision id")
         if not 0 <= entry["updatedAt"] <= 4_102_444_800:
             raise ValueError("invalid goal history timestamp")
     return result
 
 
+def rank(entry):
+    return (max(entry["updatedAt"],entry.get("revisionAt",0)),entry.get("revisionID",entry["id"]),entry["id"])
+
+
+def winner(items):
+    if all(item["effectiveDate"] == BASELINE for item in items):
+        revisions = [item for item in items if "revisionAt" in item]
+        if revisions:
+            return max(revisions,key=rank)
+        return min(items,key=lambda item:(item["updatedAt"],item["id"]))
+    return max(items,key=rank)
+
+
 def merged_history(*profiles):
-    result = {}
+    by_id = {}
     for profile in profiles:
         for entry in versions(profile):
-            day = entry["effectiveDate"]
-            previous = result.get(day)
-            candidate = (entry["updatedAt"], entry["id"])
-            old = (previous["updatedAt"], previous["id"]) if previous else None
-            if old is None or (candidate < old if day == BASELINE else candidate > old):
-                result[day] = dict(entry)
-    return [result[day] for day in sorted(result)]
+            by_id.setdefault(entry["id"],[]).append(entry)
+    return sorted((dict(winner(items)) for items in by_id.values()),key=lambda item:(item["effectiveDate"],rank(item)))
+
+
+def active(history):
+    days = {}
+    for entry in merged_history({"goalHistory":history}):
+        days.setdefault(entry["effectiveDate"],[]).append(entry)
+    return [winner(days[day]) for day in sorted(days)]
 
 
 def merge_profile(previous, incoming, stamp):
@@ -52,7 +73,7 @@ def merge_profile(previous, incoming, stamp):
     history = merged_history(previous, incoming)
     previous_stamp = previous.get("updatedAt", 0)
     candidate = {**previous, **incoming}
-    winner = candidate if stamp >= previous_stamp else dict(previous)
+    current = candidate if stamp >= previous_stamp else dict(previous)
     if previous and all(key in previous and key in candidate for key in FIELDS) and stamp >= previous_stamp and values(previous) != values(candidate):
         zone_name = incoming.get("goalTimeZone", previous.get("goalTimeZone", "UTC"))
         try:
@@ -62,12 +83,21 @@ def merge_profile(previous, incoming, stamp):
         day = datetime.datetime.fromtimestamp(stamp, zone).date().isoformat()
         if not history:
             history.append(dict(values(previous), id="baseline", effectiveDate=BASELINE, updatedAt=previous_stamp))
-        effective = next((v for v in reversed(history) if v["effectiveDate"] <= day), None)
+        effective = next((v for v in reversed(active(history)) if v["effectiveDate"] <= day), None)
         if effective is None or values(effective) != values(candidate):
             identity = hashlib.sha256(json.dumps([day, stamp, values(candidate)], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
             history.append(dict(values(candidate), id="legacy-" + identity, effectiveDate=day, updatedAt=stamp))
-        winner["goalTimeZone"] = zone_name
+        current["goalTimeZone"] = zone_name
     if history:
-        winner["goalHistory"] = merged_history({"goalHistory": history})
-    winner["updatedAt"] = max(stamp, previous_stamp)
-    return winner
+        current["goalHistory"] = merged_history({"goalHistory": history})
+    if any("revisionAt" in entry for entry in history):
+        try:
+            zone = ZoneInfo(current.get("goalTimeZone","UTC"))
+        except (ValueError,TypeError,KeyError):
+            raise ValueError("invalid goal timezone") from None
+        day = datetime.datetime.now(zone).date().isoformat()
+        applicable = active(history)
+        selected = next((v for v in reversed(applicable) if v["effectiveDate"]<=day),applicable[0])
+        current.update(values(selected))
+    current["updatedAt"] = max(stamp, previous_stamp)
+    return current

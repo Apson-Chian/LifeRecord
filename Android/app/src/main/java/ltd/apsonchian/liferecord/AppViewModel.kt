@@ -212,6 +212,9 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
         persist(snapshot.value.copy(records = snapshot.value.records.filterNot { it.id == r.id && it.type == r.type }, deletions = snapshot.value.deletions + if(syncable) listOf(tomb) else emptyList()))
         sync()
     }
+    fun reviseGoal(expected:JSONObject,next:JSONObject,day:java.time.LocalDate) {
+        persist(snapshot.value.copy(profile=GoalHistory.revised(snapshot.value.profile,expected,next,day)));sync()
+    }
     fun saveProfile(p: JSONObject) { require(p.optDouble("updatedAt") == snapshot.value.profile.optDouble("updatedAt")) { "档案已被同步更新，请重新打开编辑" }; Validation.profile(p); persist(snapshot.value.copy(profile = GoalHistory.changed(snapshot.value.profile,p))); sync() }
     fun saveConfig(c: JSONObject, apiKey: String?) {
         if(c.optString("provider") != "默认 AI 服务") validateHTTPS(c.optString("endpoint"))

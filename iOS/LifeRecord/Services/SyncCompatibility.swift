@@ -86,6 +86,9 @@ enum SyncCompatibility {
             // Goal versions merge independently of the current profile's stamp.
             // Keep raw legacy fields without discarding a newly merged offline timeline.
             for field in ["goalHistory","goalTimeZone"] where profile[field] != nil {preserved[field]=profile[field]}
+            if let history=profile["goalHistory"] as? [[String:Any]],history.contains(where:{$0["revisionAt"] != nil}) {
+                for field in ["fitnessGoal","baselineWeight","targetWeight","weeklyWeightTarget","calorieGoal","proteinGoal","carbsGoal","fatGoal"] {preserved[field]=profile[field]}
+            }
             now["settings"] = preserved
         }
         return try JSONSerialization.data(withJSONObject: now)

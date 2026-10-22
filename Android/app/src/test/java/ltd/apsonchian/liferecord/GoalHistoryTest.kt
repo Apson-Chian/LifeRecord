@@ -58,4 +58,48 @@ class GoalHistoryTest {
         assertEquals(150.0,GoalHistory.at(changed.profile,LocalDate.now()).getDouble("proteinGoal"),0.0)
         assertFalse(original.profile.has("goalHistory"))
     }
+    @Test fun correctingAnIntervalAndBaselineDoesNotChangeOtherIntervals() {
+        val first=GoalHistory.changed(defaultProfile(),defaultProfile().put("proteinGoal",120.0),stamp(day.minusDays(2)),day.minusDays(2))
+        val latest=GoalHistory.changed(first,first.copy().put("proteinGoal",180.0),stamp(day),day)
+        val expected=GoalHistory.versions(latest)[1]
+        val corrected=GoalHistory.revised(latest,expected,expected.copy().put("proteinGoal",140.0),day.minusDays(2),stamp(day)+10,day)
+        assertEquals(100.0,GoalHistory.at(corrected,day.minusDays(3)).getDouble("proteinGoal"),0.0)
+        assertEquals(140.0,GoalHistory.at(corrected,day.minusDays(1)).getDouble("proteinGoal"),0.0)
+        assertEquals(180.0,corrected.getDouble("proteinGoal"),0.0)
+        val base=GoalHistory.versions(corrected).first()
+        val fixedBase=GoalHistory.revised(corrected,base,base.copy().put("proteinGoal",90.0),LocalDate.parse(GoalHistory.baselineDay),stamp(day)+20,day)
+        val replay=GoalHistory.mergedProfile(fixedBase,latest)
+        assertEquals(90.0,GoalHistory.at(replay,day.minusDays(3)).getDouble("proteinGoal"),0.0)
+        assertEquals(140.0,GoalHistory.at(replay,day.minusDays(1)).getDouble("proteinGoal"),0.0)
+        assertEquals(GoalHistory.merge(fixedBase,latest).toString(),GoalHistory.merge(latest,fixedBase).toString())
+    }
+    @Test fun movingARecordKeepsItsIdentityAndAnOldSnapshotCannotResurrectTheOldDate() {
+        val original=GoalHistory.changed(defaultProfile(),defaultProfile().put("proteinGoal",150.0),stamp(day),day)
+        val entry=GoalHistory.versions(original).last()
+        val moved=GoalHistory.revised(original,entry,entry.copy().put("proteinGoal",130.0),day.minusDays(1),stamp(day)+10,day)
+        val replay=GoalHistory.mergedProfile(moved,original)
+        assertEquals(2,GoalHistory.versions(replay).size)
+        assertEquals(entry.getString("id"),GoalHistory.versions(replay).last().getString("id"))
+        assertEquals(day.minusDays(1).toString(),GoalHistory.versions(replay).last().getString("effectiveDate"))
+        assertEquals(130.0,replay.getDouble("proteinGoal"),0.0)
+        assertEquals(100.0,GoalHistory.at(replay,day.minusDays(2)).getDouble("proteinGoal"),0.0)
+        java.io.File("build/outputs/tests/goal-history-revised.json").apply {parentFile?.mkdirs();writeText(replay.toString(2))}
+    }
+    @Test fun correctionsRejectConflictingDatesInvalidValuesAndStaleDraftsWithoutMutation() {
+        val first=GoalHistory.changed(defaultProfile(),defaultProfile().put("proteinGoal",120.0),stamp(day.minusDays(1)),day.minusDays(1))
+        val profile=GoalHistory.changed(first,first.copy().put("proteinGoal",180.0),stamp(day),day)
+        val entry=GoalHistory.versions(profile).last();val before=profile.toString()
+        for((date,value) in listOf(day.minusDays(1) to 150.0,day.plusDays(1) to 150.0,day to 0.0)) {
+            assertThrows(IllegalArgumentException::class.java) {GoalHistory.revised(profile,entry,entry.copy().put("proteinGoal",value),date,stamp(day)+10,day)}
+        }
+        val corrected=GoalHistory.revised(profile,entry,entry.copy().put("proteinGoal",160.0),day,stamp(day)+10,day)
+        assertThrows(IllegalArgumentException::class.java) {GoalHistory.revised(corrected,entry,entry,day,stamp(day)+20,day)}
+        assertEquals(before,profile.toString())
+        val renamed=GoalHistory.changed(corrected,corrected.copy().put("displayName","新称呼"),stamp(day)+20,day)
+        assertEquals(160.0,GoalHistory.at(renamed,day).getDouble("proteinGoal"),0.0)
+        val changed=GoalHistory.changed(corrected,corrected.copy().put("proteinGoal",170.0),stamp(day)+20,day)
+        assertEquals(3,GoalHistory.versions(changed).size)
+        assertEquals(entry.getString("id"),GoalHistory.versions(changed).last().getString("id"))
+        assertEquals(170.0,GoalHistory.at(changed,day).getDouble("proteinGoal"),0.0)
+    }
 }

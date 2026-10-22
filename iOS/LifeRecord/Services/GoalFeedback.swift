@@ -65,7 +65,7 @@ enum GoalFeedback {
         let grouped = Dictionary(grouping: validMeals.filter { $0.date >= start }) { calendar.startOfDay(for: $0.date) }
         let nutrition = grouped.map { day,entries in
             let key=GoalHistory.dayKey(day,calendar:calendar)
-            let version=goals.history.filter {$0.effectiveDate<=key}.max {$0.effectiveDate<$1.effectiveDate} ?? goals.history.min {$0.effectiveDate<$1.effectiveDate}
+            let version=GoalHistory.active(goals.history).last {$0.effectiveDate<=key} ?? GoalHistory.active(goals.history).first
             return (calories: entries.reduce(0) { $0 + $1.calories }, protein: entries.reduce(0) { $0 + $1.protein },
                     calorieGoal: version?.values.calorieGoal ?? goals.calories, proteinGoal: version?.values.proteinGoal ?? goals.protein)
         }

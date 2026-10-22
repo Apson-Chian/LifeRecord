@@ -75,4 +75,31 @@ with tempfile.TemporaryDirectory(prefix="liferecord-goal-history-") as folder:
         server.validate_admin_record("settings", android)
         assert goal(android, "2026-10-21")["proteinGoal"] == 100
         assert goal(android, "2026-10-22")["proteinGoal"] == 150
+    # Correct an existing date by identity; stale snapshots must not bring it back.
+    history=current["goalHistory"]
+    expected=next(v for v in history if v["effectiveDate"]=="2026-10-22")
+    correction={**expected,"proteinGoal":135,"effectiveDate":"2026-10-20","revisionAt":stamp("2026-10-24"),"revisionID":"correction-a"}
+    corrected={**current,"goalHistory":[*history,correction],"updatedAt":stamp("2026-10-24")}
+    server.merge_snapshot({"settings":corrected})
+    moved=server.current_snapshot()["settings"]
+    assert len([v for v in moved["goalHistory"] if v["id"]==expected["id"]])==1
+    assert not any(v["effectiveDate"]=="2026-10-22" for v in moved["goalHistory"])
+    server.merge_snapshot({"settings":current})
+    replay=server.current_snapshot()["settings"]
+    active=server.goal_history.active(replay["goalHistory"])
+    assert next(v for v in active if v["id"]==expected["id"])["effectiveDate"]=="2026-10-20"
+    baseline=next(v for v in replay["goalHistory"] if v["effectiveDate"]=="1970-01-01")
+    fixed={**baseline,"proteinGoal":90,"revisionAt":stamp("2026-10-25"),"revisionID":"baseline-correction"}
+    server.merge_snapshot({"settings":{**replay,"goalHistory":[*replay["goalHistory"],fixed],"updatedAt":stamp("2026-10-25")}})
+    server.merge_snapshot({"settings":original})
+    final=server.current_snapshot()
+    assert server.goal_history.active(final["settings"]["goalHistory"])[0]["proteinGoal"]==90
+    malformed=copy.deepcopy(final["settings"]);malformed["goalHistory"][0]["revisionAt"]=True
+    try:
+        server.merge_snapshot({"settings":malformed,"bodyMetrics":[dict(id="revision-rollback",date=1,weight=70,updatedAt=1)]})
+        raise AssertionError("Boolean revision stamp accepted")
+    except ValueError: pass
+    after=server.current_snapshot()
+    assert {k:v for k,v in after.items() if k!="serverTime"}=={k:v for k,v in final.items() if k!="serverTime"}
+    assert server.goal_history.merged_history(current,corrected)==server.goal_history.merged_history(corrected,current)
     print("PASS: dated targets, local-midnight boundary, admin preview, older clients, offline history union, stale replay and atomic validation")

@@ -78,4 +78,44 @@ class GoalHistoryFlowTest {
         compose.onNodeWithContentDescription("前一天").performClick();ring("100")
         assertEquals(3,GoalHistory.versions(app.store.load().profile).size)
     }
+    @Test fun editingTargetsFromHistoryUpdatesOnlyTheirOwnPeriodAndSurvivesRestart() {
+        scenario.onActivity {ViewModelProvider(it)[AppViewModel::class.java].let {vm ->vm.saveProfile(vm.snapshot.value.profile.copy().put("proteinGoal",150.0))}}
+        compose.onNodeWithTag("tab-3").performClick();compose.onNodeWithText("目标历史").performClick()
+        compose.onNodeWithContentDescription("编辑目标 $today").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("蛋白质").performScrollTo().performClick().performTextReplacement("120")
+        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithText("热量 2000 kcal · 蛋白质 120 g").assertExists()
+        screenshot("corrected-history")
+        compose.onNodeWithContentDescription("编辑目标 1970-01-01").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("蛋白质").performScrollTo().performClick().performTextReplacement("90")
+        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithContentDescription("返回").performClick();compose.onNodeWithTag("tab-0").performClick();ring("120")
+        compose.onNodeWithContentDescription("前一天").performClick();ring("90")
+        screenshot("corrected-yesterday")
+        scenario.close();scenario=ActivityScenario.launch(MainActivity::class.java);ring("120")
+        compose.onNodeWithContentDescription("前一天").performClick();ring("90")
+        assertEquals(2,GoalHistory.versions(app.store.load().profile).size)
+    }
+    @Test fun correctingEffectiveDateWithTheNativePickerDoesNotLeaveAnOldVersion() {
+        scenario.onActivity {ViewModelProvider(it)[AppViewModel::class.java].let {vm ->vm.saveProfile(vm.snapshot.value.profile.copy().put("proteinGoal",150.0))}}
+        compose.onNodeWithTag("tab-3").performClick();compose.onNodeWithText("目标历史").performClick()
+        compose.onNodeWithContentDescription("编辑目标 $today").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("生效日期").performClick()
+        val yesterday=today.minusDays(1)
+        androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.DatePicker::class.java)).perform(object:androidx.test.espresso.ViewAction {
+            override fun getConstraints()=androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(android.widget.DatePicker::class.java)
+            override fun getDescription()="Choose the previous civil day in the native date picker"
+            override fun perform(ui:androidx.test.espresso.UiController,view:android.view.View) {(view as android.widget.DatePicker).updateDate(yesterday.year,yesterday.monthValue-1,yesterday.dayOfMonth);ui.loopMainThreadUntilIdle()}
+        })
+        androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(android.R.id.button1)).perform(androidx.test.espresso.action.ViewActions.click())
+        compose.onNodeWithText("生效日期：$yesterday").assertExists()
+        screenshot("correction-editor")
+        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithText("${yesterday} 起生效").assertExists()
+        compose.onNodeWithText("${today} 起生效").assertDoesNotExist()
+        compose.onNodeWithContentDescription("返回").performClick();compose.onNodeWithTag("tab-0").performClick()
+        compose.onNodeWithContentDescription("前一天").performClick();ring("150")
+        compose.onNodeWithContentDescription("前一天").performClick();ring("100")
+        assertEquals(2,GoalHistory.versions(app.store.load().profile).size)
+    }
 }

@@ -108,6 +108,20 @@ struct SyncedProfile: Codable {
         try settings.saveProfileDraft(importedDraft)
         precondition(settings.goalHistory.first?.values.proteinGoal==180)
         precondition(settings.goals(on:yesterday).proteinGoal==180)
+        let currentVersion=GoalHistory.active(settings.goalHistory).last!
+        var revisedValues=currentVersion.values;revisedValues.proteinGoal=190
+        try settings.reviseGoal(currentVersion,values:revisedValues,day:GoalHistory.dayKey(Date.now))
+        precondition(settings.proteinGoal==190 && settings.goals(on:yesterday).proteinGoal==180)
+        precondition(AppSettings(defaults:defaults).goalHistory==settings.goalHistory)
+        do {try settings.reviseGoal(currentVersion,values:revisedValues,day:GoalHistory.dayKey(Date.now));preconditionFailure("stale target edit accepted")} catch {}
+        var afterCorrection=settings.profileDraft();afterCorrection.displayName="纠错后立即保存"
+        try settings.saveProfileDraft(afterCorrection)
+        precondition(settings.displayName=="纠错后立即保存" && settings.proteinGoal==190)
+        let currentAfter=GoalHistory.active(settings.goalHistory).last!
+        revisedValues.proteinGoal=0
+        let beforeInvalid=defaults.dictionaryRepresentation() as NSDictionary
+        do {try settings.reviseGoal(currentAfter,values:revisedValues,day:currentAfter.effectiveDate);preconditionFailure("invalid target edit accepted")} catch {}
+        precondition(beforeInvalid==defaults.dictionaryRepresentation() as NSDictionary)
         defaults.set("Dots",forKey:"provider");defaults.set("https://legacy.test/v1/chat/completions",forKey:"endpoint");defaults.set("dots3-note-prev",forKey:"model")
         let migrated=AppSettings(defaults:defaults);precondition(migrated.provider == .custom && migrated.authStyle == .apiKey && !migrated.jsonMode && migrated.imageDetail=="medium")
         print("PASS: neutral defaults, opt-in sharing/writes, provider settings restore, isolated preferences, private settings reset")

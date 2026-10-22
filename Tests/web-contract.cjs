@@ -27,3 +27,13 @@ assert.equal(vm.runInContext("goals('2026-10-22').proteinGoal",goalContext),180)
 assert.equal(vm.runInContext("goals('2026-10-23').proteinGoal",goalContext),180);
 assert.equal(vm.runInContext("goals().proteinGoal",goalContext),180);
 console.log('PASS: actual Web resolver preserves prior-day targets and uses new targets from effective day');
+
+const oldVersion={...goalProfile.goalHistory[1]};
+goalProfile.goalHistory.push({...oldVersion,effectiveDate:'2026-10-20',proteinGoal:130,revisionAt:20,revisionID:'revision-a'});
+assert.equal(vm.runInContext("goals('2026-10-21').proteinGoal",goalContext),130);
+assert.equal(vm.runInContext("goals('2026-10-22').proteinGoal",goalContext),130);
+goalProfile.goalHistory.push(oldVersion);
+assert.equal(vm.runInContext("goals('2026-10-22').proteinGoal",goalContext),130);
+goalProfile.goalHistory.push({...goalProfile.goalHistory[0],proteinGoal:90,revisionAt:30,revisionID:'baseline-edit'});
+assert.equal(vm.runInContext("goals('2026-10-19').proteinGoal",goalContext),90);
+console.log('PASS: Web uses stable-ID corrections, moved dates and corrected baseline despite stale replay');

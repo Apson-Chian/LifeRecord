@@ -355,7 +355,8 @@ final class AppSettings {
         guard draft.originalUpdatedAt == profileUpdatedAt else {
             throw RecordInput.Invalid(field: "profile", reason: "目标已更新，请保留草稿并重新核对")
         }
-        let profile = SyncedProfile(updatedAt: Date.now.timeIntervalSince1970,
+        let savedAt=Date.now
+        let profile = SyncedProfile(updatedAt: max(savedAt.timeIntervalSince1970,profileUpdatedAt.timeIntervalSince1970+0.001,(goalHistory.map(GoalHistory.rank).max() ?? 0)+0.001),
             displayName: draft.displayName, fitnessGoal: draft.fitnessGoal.rawValue, height: draft.height,
             baselineWeight: draft.baselineWeight, targetWeight: draft.targetWeight,
             weeklyWeightTarget: draft.weeklyWeightTarget, calorieGoal: draft.calorieGoal,
@@ -363,7 +364,7 @@ final class AppSettings {
             goalHistory: GoalHistory.changed(from:currentGoals,to:GoalValues(fitnessGoal:draft.fitnessGoal.rawValue,
                 baselineWeight:draft.baselineWeight,targetWeight:draft.targetWeight,weeklyWeightTarget:draft.weeklyWeightTarget,
                 calorieGoal:draft.calorieGoal,proteinGoal:draft.proteinGoal,carbsGoal:draft.carbsGoal,fatGoal:draft.fatGoal),
-                history:goalHistory,previousUpdatedAt:profileUpdatedAt.timeIntervalSince1970),
+                history:goalHistory,previousUpdatedAt:profileUpdatedAt.timeIntervalSince1970,at:savedAt),
             goalTimeZone: TimeZone.current.identifier)
         applySyncedProfile(profile, updatedAt: Date(timeIntervalSince1970: profile.updatedAt))
     }
@@ -384,10 +385,37 @@ final class AppSettings {
         if shareWithLifeTrack { SharedProfileStore.publish(self) }
     }
 
+    func reviseGoal(_ expected:GoalVersion,values:GoalValues,day:String) throws {
+        var draft=profileDraft()
+        guard let mode=FitnessGoal(rawValue:values.fitnessGoal) else {throw RecordInput.Invalid(field:"目标",reason:"请选择健身目标")}
+        draft.fitnessGoal=mode;draft.baselineWeight=values.baselineWeight;draft.targetWeight=values.targetWeight
+        draft.weeklyWeightTarget=values.weeklyWeightTarget;draft.calorieGoal=values.calorieGoal
+        draft.proteinGoal=values.proteinGoal;draft.carbsGoal=values.carbsGoal;draft.fatGoal=values.fatGoal
+        try draft.validate()
+        let stamp=Date(timeIntervalSince1970:max(Date.now.timeIntervalSince1970,profileUpdatedAt.timeIntervalSince1970+0.001))
+        let history=try GoalHistory.revised(history:goalHistory,expected:expected,values:values,day:day,at:stamp)
+        let current=GoalHistory.values(on:Date.now,current:currentGoals,history:history)
+        let profile=SyncedProfile(updatedAt:max(stamp.timeIntervalSince1970,history.map(GoalHistory.rank).max() ?? 0),displayName:displayName,
+            fitnessGoal:current.fitnessGoal,height:height,baselineWeight:current.baselineWeight,targetWeight:current.targetWeight,
+            weeklyWeightTarget:current.weeklyWeightTarget,calorieGoal:current.calorieGoal,proteinGoal:current.proteinGoal,
+            carbsGoal:current.carbsGoal,fatGoal:current.fatGoal,goalHistory:history,goalTimeZone:TimeZone.current.identifier)
+        applySyncedProfile(profile,updatedAt:Date(timeIntervalSince1970:profile.updatedAt))
+    }
+    private func applyGoalValues(_ v:GoalValues) {
+        isApplyingSyncedProfile=true
+        fitnessGoal=FitnessGoal(rawValue:v.fitnessGoal) ?? fitnessGoal
+        baselineWeight=v.baselineWeight;targetWeight=v.targetWeight;weeklyWeightTarget=v.weeklyWeightTarget
+        calorieGoal=v.calorieGoal;proteinGoal=v.proteinGoal;carbsGoal=v.carbsGoal;fatGoal=v.fatGoal
+        isApplyingSyncedProfile=false;publishSharedProfile()
+    }
+
     func applySyncedProfile(_ profile: SyncedProfile, updatedAt: Date) {
         var mergedHistory=GoalHistory.merge(goalHistory,profile.goalHistory ?? [])
         guard updatedAt > profileUpdatedAt else {
-            if mergedHistory != goalHistory {goalHistory=mergedHistory;persistGoalHistory()}
+            if mergedHistory != goalHistory {
+                goalHistory=mergedHistory;persistGoalHistory()
+                if mergedHistory.contains(where:{$0.revisionAt != nil}) {applyGoalValues(GoalHistory.values(on:Date.now,current:currentGoals,history:mergedHistory))}
+            }
             return
         }
         let incoming=GoalValues(fitnessGoal:profile.fitnessGoal,baselineWeight:profile.baselineWeight,targetWeight:profile.targetWeight,
@@ -412,6 +440,7 @@ final class AppSettings {
         fatGoal = profile.fatGoal
         isApplyingSyncedProfile = false
         goalHistory=mergedHistory;goalTimeZone=profile.goalTimeZone ?? goalTimeZone;persistGoalHistory()
+        if mergedHistory.contains(where:{$0.revisionAt != nil}) {applyGoalValues(GoalHistory.values(on:Date.now,current:currentGoals,history:mergedHistory))}
         profileUpdatedAt = updatedAt
         save(updatedAt.timeIntervalSince1970, Key.profileUpdatedAt)
         publishSharedProfile()
@@ -424,7 +453,7 @@ final class AppSettings {
             goalHistory=GoalHistory.changed(from:previous,to:currentGoals,history:goalHistory,previousUpdatedAt:profileUpdatedAt.timeIntervalSince1970,at:changedAt)
             goalsBeforeChange=nil;goalTimeZone=TimeZone.current.identifier;persistGoalHistory()
         }
-        profileUpdatedAt = changedAt
+        profileUpdatedAt = Date(timeIntervalSince1970:max(changedAt.timeIntervalSince1970,profileUpdatedAt.timeIntervalSince1970+0.001,goalHistory.map(GoalHistory.rank).max() ?? 0))
         save(profileUpdatedAt.timeIntervalSince1970, Key.profileUpdatedAt)
     }
 

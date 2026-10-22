@@ -53,8 +53,19 @@ function cleanSnapshot(snapshot) {
 function goals(day) {
   const profile=state.settings || defaultSettings;
   if (!day) return profile;
-  const versions=(profile.goalHistory||[]).filter(item=>item.effectiveDate<=day).sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)||a.updatedAt-b.updatedAt||a.id.localeCompare(b.id));
-  const version=versions.at(-1) || [...(profile.goalHistory||[])].sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate))[0];
+  const rank=v=>[Math.max(v.updatedAt,v.revisionAt||0),v.revisionID||v.id,v.id];
+  const cmp=(a,b)=>{const x=rank(a),y=rank(b);return x[0]-y[0]||(x[1]<y[1]?-1:x[1]>y[1]?1:0)||(x[2]<y[2]?-1:x[2]>y[2]?1:0)};
+  const choose=items=>{
+    if(items.every(v=>v.effectiveDate==='1970-01-01')) {
+      const revised=items.filter(v=>v.revisionAt!==undefined);
+      return revised.length ? revised.sort(cmp).at(-1) : items.sort((a,b)=>a.updatedAt-b.updatedAt||(a.id<b.id?-1:a.id>b.id?1:0))[0];
+    }
+    return items.sort(cmp).at(-1);
+  };
+  const byID=new Map();for(const v of profile.goalHistory||[]) {const items=byID.get(v.id)||[];items.push(v);byID.set(v.id,items)}
+  const byDay=new Map();for(const items of byID.values()) {const v=choose(items),group=byDay.get(v.effectiveDate)||[];group.push(v);byDay.set(v.effectiveDate,group)}
+  const versions=[...byDay.values()].map(choose).sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate));
+  const version=versions.filter(v=>v.effectiveDate<=day).at(-1)||versions[0];
   if (!version) return profile;
   const fields=['fitnessGoal','baselineWeight','targetWeight','weeklyWeightTarget','calorieGoal','proteinGoal','carbsGoal','fatGoal'];
   return {...profile,...Object.fromEntries(fields.map(key=>[key,version[key]]))};

@@ -60,6 +60,13 @@ import Foundation
             original:JSONSerialization.data(withJSONObject:["settings":rawProfile]))
         let historicalProfile=(try JSONSerialization.jsonObject(with:withHistory) as! [String:Any])["settings"] as! [String:Any]
         precondition((historicalProfile["goalHistory"] as! [Any]).count==1 && historicalProfile["legacyExtension"] as? String=="keep")
+        var correction=version;correction.revisionAt=2;correction.revisionID="correction"
+        correction.values.proteinGoal=140
+        mergedProfile["goalHistory"]=try JSONSerialization.jsonObject(with:JSONEncoder().encode([correction]))
+        mergedProfile["proteinGoal"]=140
+        let correctedWire=try SyncCompatibility.preservingUnchanged(JSONSerialization.data(withJSONObject:["settings":mergedProfile]),original:JSONSerialization.data(withJSONObject:["settings":rawProfile]))
+        let correctedProfile=(try JSONSerialization.jsonObject(with:correctedWire) as! [String:Any])["settings"] as! [String:Any]
+        precondition(correctedProfile["proteinGoal"] as? Double==140 && correctedProfile["legacyExtension"] as? String=="keep")
         let limits = fixture["limits"] as! [String: [String: [Double]]]
         for (kind, fields) in limits {
             for (field, bounds) in fields {

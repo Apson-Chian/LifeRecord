@@ -32,6 +32,29 @@ import Foundation
             precondition(profile.goalHistory?.count==2 && profile.goalHistory?.last?.values.proteinGoal==150)
             if CommandLine.arguments.count>1 {try JSONEncoder().encode(profile).write(to:URL(fileURLWithPath:CommandLine.arguments[1]))}
         }
+        let expected=GoalHistory.active(revised).last!
+        let moved=try GoalHistory.revised(history:revised,expected:expected,values:next,day:"2026-10-21",at:today.addingTimeInterval(20),calendar:calendar)
+        let replay=GoalHistory.merge(moved,revised)
+        precondition(GoalHistory.active(replay).count==2 && GoalHistory.active(replay).last!.id==expected.id)
+        precondition(GoalHistory.active(replay).last!.effectiveDate=="2026-10-21")
+        precondition(GoalHistory.values(on:yesterday,current:second,history:replay,calendar:calendar)==next)
+        let baseline=GoalHistory.active(replay).first!
+        var fixed=original;fixed.proteinGoal=90
+        let fixedHistory=try GoalHistory.revised(history:replay,expected:baseline,values:fixed,day:GoalHistory.baselineDay,at:today.addingTimeInterval(30),calendar:calendar)
+        let full=GoalHistory.merge(fixedHistory,history)
+        precondition(GoalHistory.active(full).first!.values.proteinGoal==90)
+        precondition(GoalHistory.merge(history,fixedHistory)==full)
+        do {_ = try GoalHistory.revised(history:fixedHistory,expected:expected,values:next,day:"2026-10-21",at:today,calendar:calendar);preconditionFailure("stale correction accepted")} catch {}
+        do {_ = try GoalHistory.revised(history:fixedHistory,expected:GoalHistory.active(fixedHistory).last!,values:next,day:GoalHistory.baselineDay,at:today,calendar:calendar);preconditionFailure("occupied date accepted")} catch {}
+        do {_ = try GoalHistory.revised(history:fixedHistory,expected:GoalHistory.active(fixedHistory).last!,values:next,day:"2026-10-23",at:today,calendar:calendar);preconditionFailure("future correction accepted")} catch {}
+        let revisionFixture=URL(fileURLWithPath:"../Android/app/build/outputs/tests/goal-history-revised.json")
+        if FileManager.default.fileExists(atPath:revisionFixture.path) {
+            let profile=try JSONDecoder().decode(SyncedProfile.self,from:Data(contentsOf:revisionFixture))
+            precondition(GoalHistory.active(profile.goalHistory!).last!.revisionAt != nil)
+            precondition(GoalHistory.active(profile.goalHistory!).last!.values.proteinGoal==130)
+            let again=try JSONDecoder().decode(SyncedProfile.self,from:JSONEncoder().encode(profile))
+            precondition(again.goalHistory==profile.goalHistory)
+        }
         print("PASS: dated goals preserve closed historical rings, same-day edits, offline unions, daily feedback and Kotlin/Swift wire compatibility")
     }
 }

@@ -3,6 +3,9 @@ package ltd.apsonchian.liferecord.ui
 
 import android.Manifest
 import android.app.TimePickerDialog
+import android.app.DatePickerDialog
+import java.time.LocalDate
+import java.time.ZoneId
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,6 +49,7 @@ import android.net.Uri
 
 @Composable fun Settings(vm:AppViewModel,s:Snapshot,notify:(String)->Unit) {
     var page by rememberSaveable { mutableStateOf("") }; var clear by remember { mutableStateOf(false) }; var reset by remember { mutableStateOf(false) }
+    var goalEditing by rememberSaveable {mutableStateOf("")}
     val status by vm.status.collectAsState(); val context=LocalContext.current; val scope=rememberCoroutineScope()
     val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if(uri!=null) scope.launch {
         runCatching { val text=vm.export(); withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: error("无法写入文件") } }.onSuccess { notify("记录已导出") }.onFailure { notify(it.message.orEmpty()) }
@@ -83,10 +87,15 @@ import android.net.Uri
     when(page) {
         "profile" -> ProfileForm(vm,s.profile,{page=""},notify)
         "goal-history" -> SettingsForm("目标历史",{page=""}) {
-            Text("修改目标从保存当天起生效，更早日期使用原目标。此前未记录的目标变更无法自动还原。",style=MaterialTheme.typography.bodyMedium)
+            Text("新目标从保存当天起生效。记录有误时，可编辑历史目标和生效日期，对应期间的圆环与达标情况会重新计算。",style=MaterialTheme.typography.bodyMedium)
             val versions=GoalHistory.versions(s.profile).asReversed()
             if(versions.isEmpty()) Panel {Text("当前目标",style=MaterialTheme.typography.titleLarge);GoalHistoryValues(s.profile);Text("下次修改时会先保存当前目标作为历史基准。",style=MaterialTheme.typography.bodySmall)}
-            versions.forEach {v -> Panel {Text(if(v.getString("effectiveDate")=="1970-01-01") "最初保留的目标" else "${v.getString("effectiveDate")} 起生效",style=MaterialTheme.typography.titleLarge);GoalHistoryValues(v)} }
+            versions.forEach {v -> Panel {Text(if(v.getString("effectiveDate")=="1970-01-01") "最初保留的目标" else "${v.getString("effectiveDate")} 起生效",style=MaterialTheme.typography.titleLarge);GoalHistoryValues(v);TextButton(onClick={goalEditing=v.toString();page="goal-edit"},modifier=Modifier.semantics {contentDescription="编辑目标 ${v.getString("effectiveDate")}"}) {Text("编辑此记录")}} }
+        }
+        "goal-edit" -> {
+            val version=remember(goalEditing) {JSONObject(goalEditing)}
+            val profile=s.profile.copy().apply {GoalHistory.fields.forEach {put(it,version.get(it))}}
+            ProfileForm(vm,profile,{page="goal-history"},notify,version)
         }
         "recording" -> SettingsForm("记录与提醒",{page=""}) {
             SettingsGroup("常用记录") {
@@ -154,31 +163,46 @@ import android.net.Uri
 @Composable fun SettingsRow(title:String,subtitle:String,onClick:()->Unit) { Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title,style=MaterialTheme.typography.titleMedium); Spacer(Modifier.height(4.dp)); Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,title) } }
 @Composable private fun GoalHistoryValues(profile:JSONObject) {
     Text("${profile.optString("fitnessGoal")} · 目标体重 ${format(profile.optDouble("targetWeight"))} kg")
+    Text("起始体重 ${format(profile.optDouble("baselineWeight"))} kg · 每周变化 ${format(profile.optDouble("weeklyWeightTarget"))} kg",style=MaterialTheme.typography.bodyMedium)
     Text("热量 ${format(profile.optDouble("calorieGoal"))} kcal · 蛋白质 ${format(profile.optDouble("proteinGoal"))} g",style=MaterialTheme.typography.bodyMedium)
     Text("碳水 ${format(profile.optDouble("carbsGoal"))} g · 脂肪 ${format(profile.optDouble("fatGoal"))} g",style=MaterialTheme.typography.bodyMedium)
 }
 @Composable fun Toggle(title:String,subtitle:String="",checked:Boolean,onChange:(Boolean)->Unit) { Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); if(subtitle.isNotBlank()) Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked,onChange) } }
-@Composable fun ProfileForm(vm:AppViewModel,original:JSONObject,dismiss:()->Unit,notify:(String)->Unit) {
+@Composable fun ProfileForm(vm:AppViewModel,original:JSONObject,dismiss:()->Unit,notify:(String)->Unit,historyVersion:JSONObject?=null) {
     val originalText = rememberSaveable { original.toString() }
     val baseline = remember(originalText) { JSONObject(originalText) }
+    val historyText=rememberSaveable {historyVersion?.toString().orEmpty()}
+    val editing:JSONObject?=remember(historyText) {historyText.takeIf {it.isNotBlank()}?.let {JSONObject(it)}}
+    var effectiveDay by rememberSaveable {mutableStateOf(editing?.getString("effectiveDate").orEmpty())}
+    val context=LocalContext.current
     val feedback = rememberActionFeedback()
     val fields=rememberSaveable(saver=FieldMapSaver) { mutableStateMapOf<String,String>().apply { (listOf("displayName","height")+GoalHistory.fields).forEach { put(it,baseline.opt(it)?.toString().orEmpty()) } } }
     var error by remember { mutableStateOf("") }
     var discard by remember { mutableStateOf(false) }
     val initial = rememberSaveable { fields.toSortedMap().toString() }
-    val close = { if (fields.toSortedMap().toString() != initial) discard=true else dismiss() }
-    SettingsForm("个人与目标",close,{TextButton(onClick={runCatching {
-        val p=baseline.copy(); fields.forEach { (key,value) -> if(key in listOf("displayName","fitnessGoal","id")) p.put(key,value) else if(key!="updatedAt") p.put(key,value.toDouble()) }; vm.saveProfile(p); feedback(true); dismiss(); notify("目标已保存")
+    val close = { if (fields.toSortedMap().toString() != initial || effectiveDay!=editing?.getString("effectiveDate").orEmpty()) discard=true else dismiss() }
+    SettingsForm(if(editing==null) "个人与目标" else "编辑目标记录",close,{TextButton(onClick={runCatching {
+        val p=baseline.copy(); fields.forEach { (key,value) -> if(key in listOf("displayName","fitnessGoal","id")) p.put(key,value) else if(key!="updatedAt") p.put(key,value.toDouble()) }; if(editing==null) vm.saveProfile(p) else vm.reviseGoal(editing,p,LocalDate.parse(effectiveDay)); feedback(true); dismiss(); notify(if(editing==null) "目标已保存" else "历史目标已更新")
     }.onFailure { feedback(false); error=it.message.orEmpty() }}) { Text("保存") }}) {
         if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
-        Text("目标从保存当天起生效，之前日期的圆环和达标情况保留原目标。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        SettingsGroup("个人资料") {
-            Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        if(editing!=null) {
+            Text("保存会重新计算此记录生效日起、下一条目标生效前的圆环与达标情况。其他日期仍使用各自目标。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            if(editing.getString("effectiveDate")==GoalHistory.baselineDay) Text("生效范围：最初保留的目标")
+            else SoftButton(onClick={
+                val current=LocalDate.parse(effectiveDay)
+                DatePickerDialog(context,{_,year,month,day ->effectiveDay=LocalDate.of(year,month+1,day).toString()},current.year,current.monthValue-1,current.dayOfMonth).apply {
+                    datePicker.minDate=LocalDate.of(1970,1,2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    datePicker.maxDate=System.currentTimeMillis()
+                }.show()
+            },modifier=Modifier.fillMaxWidth().semantics {contentDescription="生效日期"}) {Text("生效日期：$effectiveDay")}
+        } else Text("目标从保存当天起生效，之前日期的圆环和达标情况保留原目标。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        SettingsGroup(if(editing==null) "个人资料" else "目标") {
+            if(editing==null) Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Text("称呼",style=MaterialTheme.typography.bodyLarge)
                 BasicTextField(fields["displayName"].orEmpty(),{fields["displayName"]=it},Modifier.weight(1f).semantics {contentDescription="称呼"},textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface,textAlign=TextAlign.End),cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),singleLine=true,
                     decorationBox={inner -> Box(contentAlignment=Alignment.CenterEnd) {if(fields["displayName"].isNullOrEmpty()) Text("可选",style=MaterialTheme.typography.bodyLarge,color=MaterialTheme.colorScheme.onSurfaceVariant);inner()}})
             }
-            FieldDivider()
+            if(editing==null) FieldDivider()
             Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Text("当前目标",style=MaterialTheme.typography.bodyLarge)
                 ChoiceControl(listOf("增肌","减脂","维持").map {it to it},fields["fitnessGoal"].orEmpty(),{fields["fitnessGoal"]=it})
@@ -189,7 +213,7 @@ import android.net.Uri
             "每日营养目标" to listOf(Triple("calorieGoal","热量","kcal"),Triple("proteinGoal","蛋白质","g"),Triple("carbsGoal","碳水","g"),Triple("fatGoal","脂肪","g"))
         )
         groups.forEach { (heading,entries) -> SettingsGroup(heading) {
-            entries.forEachIndexed {index,(key,title,unit) ->
+            entries.filter {editing==null || it.first!="height"}.forEachIndexed {index,(key,title,unit) ->
                 if(index>0) FieldDivider()
                 Row(Modifier.fillMaxWidth().heightIn(min=52.dp).padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     Text(title,Modifier.weight(1f),style=MaterialTheme.typography.bodyLarge)
