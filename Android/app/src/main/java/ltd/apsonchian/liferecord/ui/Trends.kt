@@ -204,8 +204,8 @@ import kotlin.math.abs
             summary.distance?.let { FeedbackRow("距目标体重","${format(it)} kg") }
             summary.period?.let { period -> Text("比较 ${period.baseline.format(dateFormat)} 至最近测量的趋势体重；参考值按每周目标和实际测量跨度换算。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
             summary.weeklyChange?.let { FeedbackRow("平均每周变化","${signed(it)} kg") }
-            FeedbackRow("热量在目标 ±10% 内",if(goals.optDouble("calorieGoal")>0) "${summary.calorieDays} / ${summary.mealDays} 个记录日" else "请核对目标")
-            FeedbackRow("蛋白质达到目标",if(goals.optDouble("proteinGoal")>0) "${summary.proteinDays} / ${summary.mealDays} 个记录日" else "请核对目标")
+            FeedbackRow("热量在当日目标 ±10% 内",if(goals.optDouble("calorieGoal")>0) "${summary.calorieDays} / ${summary.mealDays} 个记录日" else "请核对目标")
+            FeedbackRow("蛋白质达到当日目标",if(goals.optDouble("proteinGoal")>0) "${summary.proteinDays} / ${summary.mealDays} 个记录日" else "请核对目标")
             summary.calories?.let { FeedbackRow("记录日均热量","${format(it)} kcal") }
             summary.protein?.let { FeedbackRow("记录日均蛋白质","${format(it)} g") }
             Text("仅统计真实有效记录，缺失日期不按零计算。体重变化不等同于增肌或减脂成果。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)

@@ -22,6 +22,9 @@ struct SettingsView: View {
                     NavigationLink { ProfileSettingsView() } label: {
                         SettingsDestinationLabel(title: "个人与目标", subtitle: "\(settings.fitnessGoal.rawValue) · 身体与营养", symbol: "person", tint: AppTheme.accent)
                     }
+                    NavigationLink { GoalHistoryView() } label: {
+                        SettingsDestinationLabel(title:"目标历史",subtitle:"按生效日期保留历史圆环",symbol:"calendar",tint:AppTheme.accent)
+                    }
                     NavigationLink { RecordingSettingsView() } label: {
                         SettingsDestinationLabel(title: "记录与提醒", symbol: AppSymbol.workout, tint: .teal)
                     }
@@ -111,7 +114,7 @@ private struct ProfileSettingsView: View {
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                 }
             } footer: {
-                Text("模板只作为起点。请根据连续 2–3 周的体重趋势调整目标。")
+                Text("目标从保存当天起生效，之前日期的圆环和达标情况保留原目标。模板只作为起点，请按连续趋势调整。")
             }
         }
         .navigationTitle("个人与目标")

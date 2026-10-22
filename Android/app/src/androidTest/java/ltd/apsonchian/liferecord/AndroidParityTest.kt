@@ -220,6 +220,7 @@ class AndroidParityTest {
             // API31 power saving can suppress the next Choreographer draw that
             // Compose's Espresso barrier waits for even when the app is idle.
             // Request one frame and capture the device, without that test-only barrier.
+            compose.mainClock.advanceTimeBy(64)
             scenario.onActivity {it.window.decorView.invalidate()}
             screenshot("home-power-save",awaitCompose=false)
         } finally {shell("cmd power set-mode 0");shell("dumpsys battery reset")}

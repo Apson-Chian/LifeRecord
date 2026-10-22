@@ -66,6 +66,8 @@ import android.net.Uri
         item {SettingsGroup("日常使用") {
             DestinationRow("个人与目标","${s.profile.optString("fitnessGoal")} · 身体与营养",Glyph.Person,MaterialTheme.colorScheme.primary) {page="profile"}
             GroupDivider()
+            DestinationRow("目标历史","按生效日期保留历史圆环",Glyph.Calendar,MaterialTheme.colorScheme.primary) {page="goal-history"}
+            GroupDivider()
             DestinationRow("记录与提醒","",Glyph.Workout,Color(0xFF31B8C4)) {page="recording"}
             GroupDivider()
             DestinationRow("教练与 AI",ai.optString("provider"),Glyph.Coach,MaterialTheme.colorScheme.primary) {page="coach"}
@@ -80,6 +82,12 @@ import android.net.Uri
     }
     when(page) {
         "profile" -> ProfileForm(vm,s.profile,{page=""},notify)
+        "goal-history" -> SettingsForm("目标历史",{page=""}) {
+            Text("修改目标从保存当天起生效，更早日期使用原目标。此前未记录的目标变更无法自动还原。",style=MaterialTheme.typography.bodyMedium)
+            val versions=GoalHistory.versions(s.profile).asReversed()
+            if(versions.isEmpty()) Panel {Text("当前目标",style=MaterialTheme.typography.titleLarge);GoalHistoryValues(s.profile);Text("下次修改时会先保存当前目标作为历史基准。",style=MaterialTheme.typography.bodySmall)}
+            versions.forEach {v -> Panel {Text(if(v.getString("effectiveDate")=="1970-01-01") "最初保留的目标" else "${v.getString("effectiveDate")} 起生效",style=MaterialTheme.typography.titleLarge);GoalHistoryValues(v)} }
+        }
         "recording" -> SettingsForm("记录与提醒",{page=""}) {
             SettingsGroup("常用记录") {
                 DestinationRow("常用餐食","",Glyph.Meal,Carbs) {page="favorites"}
@@ -144,12 +152,17 @@ import android.net.Uri
 }
 @Composable private fun GroupDivider() {HorizontalDivider(Modifier.padding(start=73.dp,end=16.dp),color=MaterialTheme.colorScheme.onSurface.copy(alpha=.08f),thickness=.5.dp)}
 @Composable fun SettingsRow(title:String,subtitle:String,onClick:()->Unit) { Row(Modifier.fillMaxWidth().clickable(onClick=onClick).padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title,style=MaterialTheme.typography.titleMedium); Spacer(Modifier.height(4.dp)); Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,title) } }
+@Composable private fun GoalHistoryValues(profile:JSONObject) {
+    Text("${profile.optString("fitnessGoal")} · 目标体重 ${format(profile.optDouble("targetWeight"))} kg")
+    Text("热量 ${format(profile.optDouble("calorieGoal"))} kcal · 蛋白质 ${format(profile.optDouble("proteinGoal"))} g",style=MaterialTheme.typography.bodyMedium)
+    Text("碳水 ${format(profile.optDouble("carbsGoal"))} g · 脂肪 ${format(profile.optDouble("fatGoal"))} g",style=MaterialTheme.typography.bodyMedium)
+}
 @Composable fun Toggle(title:String,subtitle:String="",checked:Boolean,onChange:(Boolean)->Unit) { Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); if(subtitle.isNotBlank()) Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked,onChange) } }
 @Composable fun ProfileForm(vm:AppViewModel,original:JSONObject,dismiss:()->Unit,notify:(String)->Unit) {
     val originalText = rememberSaveable { original.toString() }
     val baseline = remember(originalText) { JSONObject(originalText) }
     val feedback = rememberActionFeedback()
-    val fields=rememberSaveable(saver=FieldMapSaver) { mutableStateMapOf<String,String>().apply { baseline.keys().forEach { put(it,baseline.opt(it)?.toString().orEmpty()) } } }
+    val fields=rememberSaveable(saver=FieldMapSaver) { mutableStateMapOf<String,String>().apply { (listOf("displayName","height")+GoalHistory.fields).forEach { put(it,baseline.opt(it)?.toString().orEmpty()) } } }
     var error by remember { mutableStateOf("") }
     var discard by remember { mutableStateOf(false) }
     val initial = rememberSaveable { fields.toSortedMap().toString() }
@@ -158,6 +171,7 @@ import android.net.Uri
         val p=baseline.copy(); fields.forEach { (key,value) -> if(key in listOf("displayName","fitnessGoal","id")) p.put(key,value) else if(key!="updatedAt") p.put(key,value.toDouble()) }; vm.saveProfile(p); feedback(true); dismiss(); notify("目标已保存")
     }.onFailure { feedback(false); error=it.message.orEmpty() }}) { Text("保存") }}) {
         if(error.isNotBlank()) Text(error,color=MaterialTheme.colorScheme.error)
+        Text("目标从保存当天起生效，之前日期的圆环和达标情况保留原目标。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         SettingsGroup("个人资料") {
             Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Text("称呼",style=MaterialTheme.typography.bodyLarge)

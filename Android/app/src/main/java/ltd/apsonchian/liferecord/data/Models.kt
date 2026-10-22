@@ -118,6 +118,7 @@ object Validation {
             require(j.opt(key) is Number && j.optDouble(key, Double.NaN).isFinite()) { "settings profile: $key 类型无效；请保留诊断导出并人工核对" }
         }
         require(j.opt("fitnessGoal") is String && j.opt("displayName") is String) { "settings profile: 文本字段类型无效" }
+        GoalHistory.validate(j)
     }
     fun profile(j: JSONObject) {
         require(j.optString("fitnessGoal") in listOf("增肌", "减脂", "维持")) { "请选择健身目标" }
@@ -147,7 +148,7 @@ object Merge {
             }
         }
         tombs.forEach { (key, d) -> if ((records[key]?.updated ?: Double.MAX_VALUE) <= d.getDouble("deletedAt")) records.remove(key) }
-        val profile = remote.optJSONObject("settings")?.takeIf { it.optDouble("updatedAt") > local.profile.optDouble("updatedAt") }?.also { Validation.historicalProfile(it) } ?: local.profile
+        val profile = remote.optJSONObject("settings")?.also { Validation.historicalProfile(it) }?.let {GoalHistory.mergedProfile(local.profile,it)} ?: local.profile
         return Snapshot(records.values.toList(), profile.copy(), tombs.values.toList())
     }
     fun wire(s: Snapshot) = JSONObject().apply {

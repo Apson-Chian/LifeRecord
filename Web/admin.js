@@ -23,7 +23,8 @@ async function saveAdminActions(actions) {
   try {
     while (syncInFlight) await new Promise(resolve => setTimeout(resolve, 30));
     syncInFlight = true;
-    const result = await api('/admin', {method:'POST', body:JSON.stringify({actions})});
+    const datedActions=actions.map(action=>action.recordType==='settings' ? {...action,goalTimeZone:Intl.DateTimeFormat().resolvedOptions().timeZone} : action);
+    const result = await api('/admin', {method:'POST', body:JSON.stringify({actions:datedActions})});
     state = cleanSnapshot(result); snapshotETag='';nextSyncAt=Date.now()+15000;
     touchLocalState();
     render();

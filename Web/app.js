@@ -50,7 +50,15 @@ function cleanSnapshot(snapshot) {
   return snapshot;
 }
 
-function goals() { return state.settings || defaultSettings; }
+function goals(day) {
+  const profile=state.settings || defaultSettings;
+  if (!day) return profile;
+  const versions=(profile.goalHistory||[]).filter(item=>item.effectiveDate<=day).sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)||a.updatedAt-b.updatedAt||a.id.localeCompare(b.id));
+  const version=versions.at(-1) || [...(profile.goalHistory||[])].sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate))[0];
+  if (!version) return profile;
+  const fields=['fitnessGoal','baselineWeight','targetWeight','weeklyWeightTarget','calorieGoal','proteinGoal','carbsGoal','fatGoal'];
+  return {...profile,...Object.fromEntries(fields.map(key=>[key,version[key]]))};
+}
 function selectedMeals() { return state.meals.filter(item => recordDateKey(item) === selectedDate); }
 function totals() {
   return selectedMeals().reduce((sum, item) => ({ calories: sum.calories + item.calories, protein: sum.protein + item.protein, carbs: sum.carbs + item.carbs, fat: sum.fat + item.fat }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
@@ -147,7 +155,7 @@ function render() {
   const date = parseDate(selectedDate);
   const meals = selectedMeals();
   const nutrition = totals();
-  const target = goals();
+  const target = goals(selectedDate);
   $("#dateLabel").textContent = fmtDate(date);
   $("#toolbarDateLabel").textContent = relativeDateLabel(date);
   $("#mealTitle").textContent = selectedDate === dateKey(new Date()) ? "餐食记录" : `${date.getMonth() + 1} 月 ${date.getDate()} 日记录`;
@@ -213,12 +221,12 @@ function renderWeekRings() {
   const mondayOffset = (selected.getDay() + 6) % 7;
   const monday = new Date(selected);
   monday.setDate(selected.getDate() - mondayOffset);
-  const target = goals();
   const labels = ["一", "二", "三", "四", "五", "六", "日"];
   const html = [];
   for (let index = 0; index < 7; index++) {
     const date = new Date(monday); date.setDate(monday.getDate() + index);
     const key = dateKey(date);
+    const target = goals(key);
     const meals = state.meals.filter(item => recordDateKey(item) === key);
     const protein = meals.reduce((sum, item) => sum + Number(item.protein || 0), 0);
     const carbs = meals.reduce((sum, item) => sum + Number(item.carbs || 0), 0);
@@ -323,7 +331,7 @@ function mealSourceRows(meals, key, unit) {
 
 function showColumnDetail(type) {
   const meals = selectedMeals();
-  const target = goals();
+  const target = goals(selectedDate);
   const nutrition = totals();
   const date = fmtDate(parseDate(selectedDate));
   if (type === "calories") {

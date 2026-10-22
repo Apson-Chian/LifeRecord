@@ -34,6 +34,6 @@ import SwiftData
 bridge=bridge.replace('explicitlyRequestedDate:nil)', 'explicitlyRequestedDate:nil'+extra_defaults+')')
 with tempfile.TemporaryDirectory(prefix='liferecord-coach-atomic-') as folder:
     directory=Path(folder); (directory/'Writer.swift').write_text(bridge)
-    sources=['Services/WorkoutDetails.swift','Models/HealthModels.swift','Services/AppSettings.swift','Services/RecordInput.swift','Services/AIAuthentication.swift','Services/CoachActions.swift']
+    sources=['Services/GoalHistory.swift','Services/WorkoutDetails.swift','Models/HealthModels.swift','Services/AppSettings.swift','Services/RecordInput.swift','Services/AIAuthentication.swift','Services/CoachActions.swift']
     subprocess.run(['xcrun','swiftc','-module-cache-path',str(directory/'cache'),*[str(root/'iOS/LifeRecord'/s) for s in sources],str(directory/'Writer.swift'),str(root/'iOS/Tests/coach-atomicity.swift'),'-o',str(directory/'check')],check=True)
     subprocess.run([str(directory/'check')],check=True)

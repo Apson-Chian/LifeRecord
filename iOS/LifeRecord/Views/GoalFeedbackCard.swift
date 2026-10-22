@@ -49,8 +49,8 @@ struct GoalFeedbackCard: View {
                             Text("比较 \(period.baselineDate.formatted(.dateTime.month().day())) 至最近测量的趋势体重；参考值按设定的每周目标和实际测量跨度换算。")
                         }
                         if let change = summary.weeklyChange { row("平均每周变化", "\(signed(change)) kg") }
-                        row("热量在目标 ±10% 内", goals.calories.isFinite && goals.calories > 0 ? "\(summary.calorieGoalDays) / \(summary.mealDays) 个记录日" : "请核对目标")
-                        row("蛋白质达到目标", goals.protein.isFinite && goals.protein > 0 ? "\(summary.proteinGoalDays) / \(summary.mealDays) 个记录日" : "请核对目标")
+                        row("热量在当日目标 ±10% 内", goals.calories.isFinite && goals.calories > 0 ? "\(summary.calorieGoalDays) / \(summary.mealDays) 个记录日" : "请核对目标")
+                        row("蛋白质达到当日目标", goals.protein.isFinite && goals.protein > 0 ? "\(summary.proteinGoalDays) / \(summary.mealDays) 个记录日" : "请核对目标")
                         if let calories = summary.averageCalories, let protein = summary.averageProtein {
                             row("记录日均热量", "\(calories.formatted(.number.precision(.fractionLength(0)))) kcal")
                             row("记录日均蛋白质", "\(protein.formatted(.number.precision(.fractionLength(0)))) g")

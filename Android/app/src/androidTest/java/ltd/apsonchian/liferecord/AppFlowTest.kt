@@ -423,11 +423,11 @@ class AppFlowTest {
         scenario=ActivityScenario.launch(MainActivity::class.java)
         compose.onNodeWithTag("tab-1").performClick()
         expose("和教练复盘")
-        compose.onNodeWithText("热量在目标 ±10% 内").assertDoesNotExist()
+        compose.onNodeWithText("热量在当日目标 ±10% 内").assertDoesNotExist()
         capture("feedback-compact-oct15")
         compose.onNodeWithTag("feedback-details").performClick()
-        expose("热量在目标 ±10% 内")
-        compose.onNodeWithText("热量在目标 ±10% 内").assertExists()
+        expose("热量在当日目标 ±10% 内")
+        compose.onNodeWithText("热量在当日目标 ±10% 内").assertExists()
     }
 
     @Test fun coachIdentityCanBeEditedCanceledAndSurvivesRelaunchWithoutBeingExported() {

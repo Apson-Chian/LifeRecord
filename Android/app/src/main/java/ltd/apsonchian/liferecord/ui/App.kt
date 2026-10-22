@@ -137,6 +137,7 @@ import java.time.format.DateTimeFormatter
     val preview = s.records.none { !it.demo && it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) }
     val visible = s.records.filter { !it.demo || preview }
     val meals = Insights.daily(visible, date)
+    val dayGoals = GoalHistory.at(s.profile,date)
     val body = visible.filter { it.type == RecordType.BODY }.maxByOrNull { it.date }
     val workouts = visible.filter { it.type == RecordType.WORKOUT && it.date.day() == date }.sortedByDescending { it.date }
     val status by vm.status.collectAsState()
@@ -180,8 +181,9 @@ import java.time.format.DateTimeFormatter
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(2.dp)) {
                     (0L..6L).forEach { i -> val d=monday.plusDays(i);val entries=Insights.daily(visible,d);val selected=d==date
                         val dayMeals = entries.filter { it.type == RecordType.MEAL }
-                        val protein = Insights.total(dayMeals, "protein") / s.profile.optDouble("proteinGoal").coerceAtLeast(1.0)
-                        val carbs = Insights.total(dayMeals, "carbs") / s.profile.optDouble("carbsGoal").coerceAtLeast(1.0)
+                        val ringGoals = GoalHistory.at(s.profile,d)
+                        val protein = Insights.total(dayMeals, "protein") / ringGoals.optDouble("proteinGoal").coerceAtLeast(1.0)
+                        val carbs = Insights.total(dayMeals, "carbs") / ringGoals.optDouble("carbsGoal").coerceAtLeast(1.0)
                         val largeText = LocalDensity.current.fontScale > 1.3f
                         Column(Modifier.weight(1f).selectable(selected,role=Role.Tab,onClick={select(d)})
                             .semantics(mergeDescendants = true) {
@@ -208,7 +210,7 @@ import java.time.format.DateTimeFormatter
                 SoftButton(onClick={runCatching {vm.clearDemo()}.onFailure {notify(it.message.orEmpty())}},shape=RoundedCornerShape(50),contentPadding=PaddingValues(horizontal=10.dp,vertical=5.dp),modifier=Modifier.height(32.dp)) {Text("清除",style=MaterialTheme.typography.labelMedium)}
             }
         }
-        item { DailySummary(s, meals, body, date==LocalDate.now()) }
+        item { DailySummary(s.copy(profile=dayGoals), meals, body, date==LocalDate.now()) }
         item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ActionTile("记一餐", "拍照识别 · 手动记录", MaterialTheme.colorScheme.primary, Modifier.weight(1f)) { add(RecordType.MEAL) }
             ActionTile("记体重", "追踪趋势", Protein, Modifier.weight(1f)) { add(RecordType.BODY) }
@@ -230,7 +232,7 @@ import java.time.format.DateTimeFormatter
         item { Panel {
             Text("营养目标", style = MaterialTheme.typography.titleLarge)
             listOf(Triple("蛋白质", "protein", Protein), Triple("碳水", "carbs", Carbs), Triple("脂肪", "fat", Fat)).forEach { (label, key, color) ->
-                val value = Insights.total(meals, key); val goal = s.profile.optDouble("${key}Goal")
+                val value = Insights.total(meals, key); val goal = dayGoals.optDouble("${key}Goal")
                 Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, style = MaterialTheme.typography.bodySmall); Text("${format(value)} / ${format(goal)} g", style = MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                 LinearProgressIndicator(progress = { (value / goal).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(4.dp)), color = color, trackColor = color.copy(alpha = .12f))

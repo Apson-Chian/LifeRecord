@@ -141,18 +141,34 @@ final class AppSettings {
         static let profileUpdatedAt = "sync.profileUpdatedAt"
     }
 
-    var calorieGoal: Double { didSet { save(calorieGoal, Key.calorieGoal); publishSharedProfile(); markProfileChanged() } }
-    var proteinGoal: Double { didSet { save(proteinGoal, Key.proteinGoal); publishSharedProfile(); markProfileChanged() } }
-    var carbsGoal: Double { didSet { save(carbsGoal, Key.carbsGoal); publishSharedProfile(); markProfileChanged() } }
-    var fatGoal: Double { didSet { save(fatGoal, Key.fatGoal); publishSharedProfile(); markProfileChanged() } }
-    var targetWeight: Double { didSet { save(targetWeight, Key.targetWeight); publishSharedProfile(); markProfileChanged() } }
+    var calorieGoal: Double { willSet { if newValue != calorieGoal { captureGoalBaseline() } } didSet { save(calorieGoal, Key.calorieGoal); publishSharedProfile(); markProfileChanged() } }
+    var proteinGoal: Double { willSet { if newValue != proteinGoal { captureGoalBaseline() } } didSet { save(proteinGoal, Key.proteinGoal); publishSharedProfile(); markProfileChanged() } }
+    var carbsGoal: Double { willSet { if newValue != carbsGoal { captureGoalBaseline() } } didSet { save(carbsGoal, Key.carbsGoal); publishSharedProfile(); markProfileChanged() } }
+    var fatGoal: Double { willSet { if newValue != fatGoal { captureGoalBaseline() } } didSet { save(fatGoal, Key.fatGoal); publishSharedProfile(); markProfileChanged() } }
+    var targetWeight: Double { willSet { if newValue != targetWeight { captureGoalBaseline() } } didSet { save(targetWeight, Key.targetWeight); publishSharedProfile(); markProfileChanged() } }
     var height: Double { didSet { save(height, Key.height); publishSharedProfile(); markProfileChanged() } }
-    var baselineWeight: Double { didSet { save(baselineWeight, Key.baselineWeight); publishSharedProfile(); markProfileChanged() } }
-    var weeklyWeightTarget: Double { didSet { save(weeklyWeightTarget, Key.weeklyWeightTarget); markProfileChanged() } }
-    var fitnessGoal: FitnessGoal { didSet { save(fitnessGoal.rawValue, Key.fitnessGoal); publishSharedProfile(); markProfileChanged() } }
+    var baselineWeight: Double { willSet { if newValue != baselineWeight { captureGoalBaseline() } } didSet { save(baselineWeight, Key.baselineWeight); publishSharedProfile(); markProfileChanged() } }
+    var weeklyWeightTarget: Double { willSet { if newValue != weeklyWeightTarget { captureGoalBaseline() } } didSet { save(weeklyWeightTarget, Key.weeklyWeightTarget); markProfileChanged() } }
+    var fitnessGoal: FitnessGoal { willSet { if newValue != fitnessGoal { captureGoalBaseline() } } didSet { save(fitnessGoal.rawValue, Key.fitnessGoal); publishSharedProfile(); markProfileChanged() } }
     var displayName: String { didSet { save(displayName, Key.displayName); markProfileChanged() } }
     private(set) var profileUpdatedAt: Date
     private var isApplyingSyncedProfile = false
+    private(set) var goalHistory: [GoalVersion]
+    private(set) var goalTimeZone: String
+    private var goalsBeforeChange: GoalValues?
+    var currentGoals: GoalValues {
+        GoalValues(fitnessGoal:fitnessGoal.rawValue,baselineWeight:baselineWeight,targetWeight:targetWeight,
+                   weeklyWeightTarget:weeklyWeightTarget,calorieGoal:calorieGoal,proteinGoal:proteinGoal,carbsGoal:carbsGoal,fatGoal:fatGoal)
+    }
+    func goals(on date:Date,calendar:Calendar = .current)->GoalValues {
+        GoalHistory.values(on:date,current:currentGoals,history:goalHistory,calendar:calendar)
+    }
+    private func persistGoalHistory() {
+        defaults.set(try? JSONEncoder().encode(goalHistory),forKey:"goals.history")
+        defaults.set(goalTimeZone,forKey:"goals.timeZone")
+    }
+    private func captureGoalBaseline() {if !isApplyingSyncedProfile {goalsBeforeChange=currentGoals}}
+
     var provider: AIProvider {
         didSet {
             save(provider.rawValue, Key.provider)
@@ -257,6 +273,8 @@ final class AppSettings {
         sendTemperature = defaults.object(forKey: "ai.sendTemperature") as? Bool ?? true
         extraBody = defaults.string(forKey: "ai.extraBody") ?? "{}"
         // Neutral placeholders; users should fill their own measurements and goals.
+        goalHistory = defaults.data(forKey:"goals.history").flatMap {try? JSONDecoder().decode([GoalVersion].self,from:$0)} ?? []
+        goalTimeZone = defaults.string(forKey:"goals.timeZone") ?? TimeZone.current.identifier
         calorieGoal = defaults.object(forKey: Key.calorieGoal) as? Double ?? 2000
         proteinGoal = defaults.object(forKey: Key.proteinGoal) as? Double ?? 100
         carbsGoal = defaults.object(forKey: Key.carbsGoal) as? Double ?? 250
@@ -321,6 +339,7 @@ final class AppSettings {
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("ai.profile.") { defaults.removeObject(forKey:key) }
         defaults.removeObject(forKey:"ai.migratedLegacyEndpoint")
         profileUpdatedAt=Date(timeIntervalSince1970:1);save(1.0,Key.profileUpdatedAt)
+        goalHistory=[];goalTimeZone=TimeZone.current.identifier;goalsBeforeChange=nil;persistGoalHistory()
         isApplyingSyncedProfile=false
     }
 
@@ -340,7 +359,12 @@ final class AppSettings {
             displayName: draft.displayName, fitnessGoal: draft.fitnessGoal.rawValue, height: draft.height,
             baselineWeight: draft.baselineWeight, targetWeight: draft.targetWeight,
             weeklyWeightTarget: draft.weeklyWeightTarget, calorieGoal: draft.calorieGoal,
-            proteinGoal: draft.proteinGoal, carbsGoal: draft.carbsGoal, fatGoal: draft.fatGoal)
+            proteinGoal: draft.proteinGoal, carbsGoal: draft.carbsGoal, fatGoal: draft.fatGoal,
+            goalHistory: GoalHistory.changed(from:currentGoals,to:GoalValues(fitnessGoal:draft.fitnessGoal.rawValue,
+                baselineWeight:draft.baselineWeight,targetWeight:draft.targetWeight,weeklyWeightTarget:draft.weeklyWeightTarget,
+                calorieGoal:draft.calorieGoal,proteinGoal:draft.proteinGoal,carbsGoal:draft.carbsGoal,fatGoal:draft.fatGoal),
+                history:goalHistory,previousUpdatedAt:profileUpdatedAt.timeIntervalSince1970),
+            goalTimeZone: TimeZone.current.identifier)
         applySyncedProfile(profile, updatedAt: Date(timeIntervalSince1970: profile.updatedAt))
     }
 
@@ -361,7 +385,20 @@ final class AppSettings {
     }
 
     func applySyncedProfile(_ profile: SyncedProfile, updatedAt: Date) {
-        guard updatedAt > profileUpdatedAt else { return }
+        var mergedHistory=GoalHistory.merge(goalHistory,profile.goalHistory ?? [])
+        guard updatedAt > profileUpdatedAt else {
+            if mergedHistory != goalHistory {goalHistory=mergedHistory;persistGoalHistory()}
+            return
+        }
+        let incoming=GoalValues(fitnessGoal:profile.fitnessGoal,baselineWeight:profile.baselineWeight,targetWeight:profile.targetWeight,
+            weeklyWeightTarget:profile.weeklyWeightTarget,calorieGoal:profile.calorieGoal,proteinGoal:profile.proteinGoal,carbsGoal:profile.carbsGoal,fatGoal:profile.fatGoal)
+        // A first sync imports the account's existing target. Neutral install
+        // defaults are not a real historical target and must never be uploaded
+        // as the earliest baseline on another device.
+        if profile.goalHistory == nil && profileUpdatedAt.timeIntervalSince1970 > 1 {
+            mergedHistory=GoalHistory.changed(from:currentGoals,to:incoming,history:mergedHistory,
+                previousUpdatedAt:profileUpdatedAt.timeIntervalSince1970,at:updatedAt)
+        }
         isApplyingSyncedProfile = true
         displayName = profile.displayName
         fitnessGoal = FitnessGoal(rawValue: profile.fitnessGoal) ?? fitnessGoal
@@ -374,6 +411,7 @@ final class AppSettings {
         carbsGoal = profile.carbsGoal
         fatGoal = profile.fatGoal
         isApplyingSyncedProfile = false
+        goalHistory=mergedHistory;goalTimeZone=profile.goalTimeZone ?? goalTimeZone;persistGoalHistory()
         profileUpdatedAt = updatedAt
         save(updatedAt.timeIntervalSince1970, Key.profileUpdatedAt)
         publishSharedProfile()
@@ -381,7 +419,12 @@ final class AppSettings {
 
     private func markProfileChanged() {
         guard !isApplyingSyncedProfile else { return }
-        profileUpdatedAt = .now
+        let changedAt=Date.now
+        if let previous=goalsBeforeChange {
+            goalHistory=GoalHistory.changed(from:previous,to:currentGoals,history:goalHistory,previousUpdatedAt:profileUpdatedAt.timeIntervalSince1970,at:changedAt)
+            goalsBeforeChange=nil;goalTimeZone=TimeZone.current.identifier;persistGoalHistory()
+        }
+        profileUpdatedAt = changedAt
         save(profileUpdatedAt.timeIntervalSince1970, Key.profileUpdatedAt)
     }
 

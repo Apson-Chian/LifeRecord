@@ -4,9 +4,20 @@ import SwiftData
 // Network and shared-profile effects are forbidden in this writer regression.
 enum SharedProfileStore { @MainActor static func publish(_ settings: AppSettings) {}; static func clear() {} }
 struct SyncedProfile: Codable {
-    var id="profile"; var updatedAt:Double; var displayName:String;var fitnessGoal:String
-    var height:Double;var baselineWeight:Double;var targetWeight:Double;var weeklyWeightTarget:Double
-    var calorieGoal:Double;var proteinGoal:Double;var carbsGoal:Double;var fatGoal:Double
+    var id = "profile"
+    var updatedAt: Double
+    var displayName: String
+    var fitnessGoal: String
+    var height: Double
+    var baselineWeight: Double
+    var targetWeight: Double
+    var weeklyWeightTarget: Double
+    var calorieGoal: Double
+    var proteinGoal: Double
+    var carbsGoal: Double
+    var fatGoal: Double
+    var goalHistory: [GoalVersion]? = nil
+    var goalTimeZone: String? = nil
 }
 @MainActor final class SyncCoordinator {
     func uploadMealPhotos(_ images:[Data],mealID:UUID) async throws->[String] { preconditionFailure("test network is forbidden") }

@@ -120,7 +120,7 @@ object AgentActions {
             if(operation == "update_goals") {
                 val p = result.profile.copy()
                 listOf("displayName", "fitnessGoal", "height", "baselineWeight", "targetWeight", "weeklyWeightTarget", "calorieGoal", "proteinGoal", "carbsGoal", "fatGoal").forEach { if(a.has(it)) p.put(it, a.get(it)) }
-                Validation.profile(p); p.put("updatedAt", now()); result = result.copy(profile = p)
+                Validation.profile(p); result = result.copy(profile = GoalHistory.changed(result.profile,p))
             } else {
                 val type = when(operation.substringAfter('_')) { "meal" -> RecordType.MEAL; "weight" -> RecordType.BODY; "workout" -> RecordType.WORKOUT; "exercise_template" -> RecordType.EXERCISE; else -> error("不支持的操作：$operation") }
                 val mode = operation.substringBefore('_'); require(mode in listOf("add", "update", "delete"))

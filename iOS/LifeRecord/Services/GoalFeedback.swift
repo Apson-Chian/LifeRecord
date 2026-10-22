@@ -10,6 +10,7 @@ enum GoalFeedback {
         var weeklyWeightChange: Double
         var calories: Double
         var protein: Double
+        var history: [GoalVersion] = []
     }
     struct PeriodProgress {
         var start: Date
@@ -45,7 +46,7 @@ enum GoalFeedback {
             let protein = averageProtein.map { String(format: "%.0f", $0) } ?? "无记录"
             let weight = trendWeight.map { String(format: "%.1f", $0) } ?? "无记录"
             let rate = weeklyChange.map { String(format: "%.2f", $0) } ?? "数据不足"
-            return "统计 \(days) 天；饮食记录 \(mealDays) 天，热量在设定目标 ±10% 内 \(calorieGoalDays) 天，蛋白质达到设定目标 \(proteinGoalDays) 天；已记录日均热量 \(calories) kcal、蛋白质 \(protein) g；测量 \(measurementDays) 天，最近趋势体重 \(weight) kg，区间变化折算 \(rate) kg/周；完成训练 \(completedWorkouts) 次；区间内待核对 \(qualityIssueCount) 项。反馈：\(headline)。下一步：\(actions.joined(separator: "；"))。"
+            return "统计 \(days) 天；饮食记录 \(mealDays) 天，热量在当日目标 ±10% 内 \(calorieGoalDays) 天，蛋白质达到当日目标 \(proteinGoalDays) 天；已记录日均热量 \(calories) kcal、蛋白质 \(protein) g；测量 \(measurementDays) 天，最近趋势体重 \(weight) kg，区间变化折算 \(rate) kg/周；完成训练 \(completedWorkouts) 次；区间内待核对 \(qualityIssueCount) 项。反馈：\(headline)。下一步：\(actions.joined(separator: "；"))。"
         }
     }
 
@@ -62,9 +63,14 @@ enum GoalFeedback {
             ?? calendar.startOfDay(for: dates.min() ?? now)
         let days = max(1, (calendar.dateComponents([.day], from: start, to: today).day ?? 0) + 1)
         let grouped = Dictionary(grouping: validMeals.filter { $0.date >= start }) { calendar.startOfDay(for: $0.date) }
-        let nutrition = grouped.values.map { entries in
-            (calories: entries.reduce(0) { $0 + $1.calories }, protein: entries.reduce(0) { $0 + $1.protein })
+        let nutrition = grouped.map { day,entries in
+            let key=GoalHistory.dayKey(day,calendar:calendar)
+            let version=goals.history.filter {$0.effectiveDate<=key}.max {$0.effectiveDate<$1.effectiveDate} ?? goals.history.min {$0.effectiveDate<$1.effectiveDate}
+            return (calories: entries.reduce(0) { $0 + $1.calories }, protein: entries.reduce(0) { $0 + $1.protein },
+                    calorieGoal: version?.values.calorieGoal ?? goals.calories, proteinGoal: version?.values.proteinGoal ?? goals.protein)
         }
+        let calorieDays=nutrition.filter {$0.calorieGoal.isFinite && $0.calorieGoal>0 && abs($0.calories-$0.calorieGoal)<=$0.calorieGoal*0.1}.count
+        let proteinDays=nutrition.filter {$0.proteinGoal.isFinite && $0.proteinGoal>0 && $0.protein >= $0.proteinGoal}.count
         let calorieValid = goals.calories.isFinite && goals.calories > 0
         let proteinValid = goals.protein.isFinite && goals.protein > 0
         let series = BodyTrend.series(validBody.map { .init(date: $0.date, value: $0.weight) }, calendar: calendar)
@@ -84,14 +90,15 @@ enum GoalFeedback {
             ? current.map { min(1, max(0, ($0.trend - goals.baselineWeight) / targetDelta)) } : nil
         let stale = current.map { (calendar.dateComponents([.day], from: $0.date, to: today).day ?? 0) > 7 } ?? true
         // Review the selected historical range; the reference goal covers only the measured span.
-        let baseline = recent.first
+        let planStart=max(start,GoalHistory.weightStageStart(history:goals.history,on:today,calendar:calendar) ?? start)
+        let baseline = recent.first {$0.date>=planStart}
         var periodProgress: PeriodProgress?
         if goals.mode != .maintain, weightConfigurationValid, abs(goals.weeklyWeightChange) > 0,
            let baseline, let current, !stale, current.date > baseline.date {
             let change = current.trend - baseline.trend
             let measuredDays = calendar.dateComponents([.day], from: baseline.date, to: current.date).day ?? 0
             let targetChange = goals.weeklyWeightChange * Double(measuredDays) / 7
-            periodProgress = PeriodProgress(start: start, end: today, baselineDate: baseline.date,
+            periodProgress = PeriodProgress(start: planStart, end: today, baselineDate: baseline.date,
                                             change: change, targetChange: targetChange,
                                             fraction: min(1, max(0, change / targetChange)))
         }
@@ -119,10 +126,10 @@ enum GoalFeedback {
         if stale { actions.append("补充一次身体测量，再判断当前与目标的距离。") }
         else if weekly == nil { actions.append("在相近条件下继续测量；至少 3 个测量日、跨度 7 天后再比较每周节奏。") }
         if Double(grouped.count) / Double(days) < 0.7 { actions.append("接下来优先连续记录每日餐食；缺失日期不会按零摄入计算。") }
-        else if calorieValid && nutrition.contains(where: { abs($0.calories - goals.calories) > goals.calories * 0.1 }) {
+        else if calorieValid && calorieDays < nutrition.count {
             actions.append("回看未落在热量目标 ±10% 内的日期，先确认餐食是否记全，再对照自己设定的份量计划。")
         }
-        if proteinValid && !nutrition.isEmpty && nutrition.filter({ $0.protein >= goals.protein }).count < nutrition.count {
+        if proteinValid && proteinDays < nutrition.count {
             actions.append("回看蛋白质未达到设定目标的日期，核对份量与漏记情况。")
         }
         if !weightConfigurationValid || (goals.mode != .maintain && abs(targetDelta) < 0.2) {
@@ -137,8 +144,8 @@ enum GoalFeedback {
             return end >= entry.date && end <= now
         }.count
         return Summary(start: start, end: now, days: days, mealDays: grouped.count,
-                       calorieGoalDays: calorieValid ? nutrition.filter { abs($0.calories - goals.calories) <= goals.calories * 0.1 }.count : 0,
-                       proteinGoalDays: proteinValid ? nutrition.filter { $0.protein >= goals.protein }.count : 0,
+                       calorieGoalDays: calorieDays,
+                       proteinGoalDays: proteinDays,
                        averageCalories: nutrition.isEmpty ? nil : nutrition.reduce(0) { $0 + $1.calories } / Double(nutrition.count),
                        averageProtein: nutrition.isEmpty ? nil : nutrition.reduce(0) { $0 + $1.protein } / Double(nutrition.count),
                        measurementDays: recent.count, latestMeasurement: current?.date, trendWeight: current?.trend, progress: progress,

@@ -39,6 +39,8 @@ struct TodayView: View {
             .sorted { $0.date > $1.date }
     }
 
+    private var dayGoals: GoalValues { settings.goals(on:selectedDate) }
+
     private var nutrition: DailyNutrition {
         selectedMeals.reduce(into: DailyNutrition()) { $0.add($1) }
     }
@@ -61,8 +63,7 @@ struct TodayView: View {
                             selectedDate: $selectedDate,
                             recordedDates: recordedDates,
                             meals: meals,
-                            proteinGoal: settings.proteinGoal,
-                            carbsGoal: settings.carbsGoal
+                            goals: {settings.goals(on:$0)}
                         )
                         demoDataBanner
                         goalHero
@@ -169,7 +170,7 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 17) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Label(settings.fitnessGoal.rawValue, systemImage: settings.fitnessGoal.symbol)
+                        Label(dayGoals.fitnessGoal, systemImage: (FitnessGoal(rawValue:dayGoals.fitnessGoal) ?? .maintain).symbol)
                             .font(.headline)
                             .foregroundStyle(AppTheme.accent)
                     }
@@ -185,21 +186,21 @@ struct TodayView: View {
                     NutritionActivityRings(
                         mealCount: selectedMeals.count,
                         protein: nutrition.protein,
-                        proteinGoal: settings.proteinGoal,
+                        proteinGoal: dayGoals.proteinGoal,
                         carbs: nutrition.carbs,
-                        carbsGoal: settings.carbsGoal
+                        carbsGoal: dayGoals.carbsGoal
                     )
                     .frame(width: 116, height: 116)
 
                     VStack(alignment: .leading, spacing: 10) {
                         RingLegend(
                             title: "蛋白质",
-                            value: "\(Int(nutrition.protein)) / \(Int(settings.proteinGoal)) g",
+                            value: "\(Int(nutrition.protein)) / \(Int(dayGoals.proteinGoal)) g",
                             color: AppTheme.protein
                         )
                         RingLegend(
                             title: "碳水",
-                            value: "\(Int(nutrition.carbs)) / \(Int(settings.carbsGoal)) g",
+                            value: "\(Int(nutrition.carbs)) / \(Int(dayGoals.carbsGoal)) g",
                             color: AppTheme.carbs
                         )
                         RingLegend(
@@ -223,7 +224,7 @@ struct TodayView: View {
     }
 
     private var calorieStatusText: String {
-        let remaining = settings.calorieGoal - nutrition.calories
+        let remaining = dayGoals.calorieGoal - nutrition.calories
         if remaining >= 0 { return "还差 \(Int(remaining)) 千卡" }
         return "超出 \(Int(abs(remaining))) 千卡"
     }
@@ -279,9 +280,9 @@ struct TodayView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 16) {
                 Text("营养目标").font(.headline)
-                MacroProgressView(title: "蛋白质", value: nutrition.protein, goal: settings.proteinGoal, color: AppTheme.protein)
-                MacroProgressView(title: "碳水", value: nutrition.carbs, goal: settings.carbsGoal, color: AppTheme.carbs)
-                MacroProgressView(title: "脂肪", value: nutrition.fat, goal: settings.fatGoal, color: AppTheme.fat)
+                MacroProgressView(title: "蛋白质", value: nutrition.protein, goal: dayGoals.proteinGoal, color: AppTheme.protein)
+                MacroProgressView(title: "碳水", value: nutrition.carbs, goal: dayGoals.carbsGoal, color: AppTheme.carbs)
+                MacroProgressView(title: "脂肪", value: nutrition.fat, goal: dayGoals.fatGoal, color: AppTheme.fat)
             }
         }
     }
@@ -414,16 +415,16 @@ struct TodayView: View {
 
     private var localInsight: String {
         guard !selectedMeals.isEmpty else {
-            return settings.fitnessGoal == .gainMuscle
+            return FitnessGoal(rawValue:dayGoals.fitnessGoal) == .gainMuscle
                 ? "你目前偏瘦，增肌期优先保证持续的热量盈余和力量训练。先记录真实摄入，连续两周再根据体重均值调整。"
                 : "先记录真实情况，不追求完美。连续记录比单日数字更有分析价值。"
         }
-        if nutrition.protein < settings.proteinGoal * 0.55 {
-            return settings.fitnessGoal == .gainMuscle
+        if nutrition.protein < dayGoals.proteinGoal * 0.55 {
+            return FitnessGoal(rawValue:dayGoals.fitnessGoal) == .gainMuscle
                 ? "蛋白质进度偏慢。下一餐先补一份 30–40g 蛋白质，同时搭配足量主食，增肌期不要只吃蛋白而忽略总热量。"
                 : "蛋白质进度偏慢。下一餐可以优先安排一份易估量的优质蛋白。"
         }
-        if nutrition.calories > settings.calorieGoal {
+        if nutrition.calories > dayGoals.calorieGoal {
             return "今天已超过设定热量，但无需用极端节食补偿。保持正常训练与作息，关注一周平均值。"
         }
         return "今天的宏量营养进度比较平稳。晚些时候结合饥饿感和训练安排决定是否需要加餐。"
@@ -434,8 +435,7 @@ private struct DateNavigator: View {
     @Binding var selectedDate: Date
     let recordedDates: Set<Date>
     let meals: [MealEntry]
-    let proteinGoal: Double
-    let carbsGoal: Double
+    let goals: (Date)->GoalValues
     private let calendar = RecordWeek.calendar()
     @State private var isShowingCalendar = false
 
@@ -504,8 +504,7 @@ private struct DateNavigator: View {
                 selectedDate: $selectedDate,
                 recordedDates: recordedDates,
                 meals: meals,
-                proteinGoal: proteinGoal,
-                carbsGoal: carbsGoal
+                goals: goals
             )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -535,8 +534,8 @@ private struct DateNavigator: View {
                     .background(isSelected ? AppTheme.meals : Color.clear, in: Circle())
                 MiniNutritionRings(
                     mealCount: dayMeals.count,
-                    proteinProgress: protein / max(proteinGoal, 1),
-                    carbsProgress: carbs / max(carbsGoal, 1),
+                    proteinProgress: protein / max(goals(date).proteinGoal, 1),
+                    carbsProgress: carbs / max(goals(date).carbsGoal, 1),
                     day: calendar.component(.day, from: date)
                 )
                 .frame(width: 42, height: 42)
@@ -657,8 +656,7 @@ private struct RecordCalendarView: View {
     @Binding var selectedDate: Date
     let recordedDates: Set<Date>
     let meals: [MealEntry]
-    let proteinGoal: Double
-    let carbsGoal: Double
+    let goals: (Date)->GoalValues
 
     private let calendar = RecordWeek.calendar()
     @State private var visibleMonth: Date
@@ -667,14 +665,12 @@ private struct RecordCalendarView: View {
         selectedDate: Binding<Date>,
         recordedDates: Set<Date>,
         meals: [MealEntry],
-        proteinGoal: Double,
-        carbsGoal: Double
+        goals: @escaping (Date)->GoalValues
     ) {
         _selectedDate = selectedDate
         self.recordedDates = recordedDates
         self.meals = meals
-        self.proteinGoal = proteinGoal
-        self.carbsGoal = carbsGoal
+        self.goals = goals
         _visibleMonth = State(
             initialValue: Calendar.current.dateInterval(of: .month, for: selectedDate.wrappedValue)?.start
                 ?? selectedDate.wrappedValue
@@ -778,8 +774,8 @@ private struct RecordCalendarView: View {
                     }
                     MiniNutritionRings(
                         mealCount: dayMeals.count,
-                        proteinProgress: protein / max(proteinGoal, 1),
-                        carbsProgress: carbs / max(carbsGoal, 1),
+                        proteinProgress: protein / max(goals(date).proteinGoal, 1),
+                        carbsProgress: carbs / max(goals(date).carbsGoal, 1),
                         day: calendar.component(.day, from: date),
                         dayColor: isSelected ? .white : .primary
                     )

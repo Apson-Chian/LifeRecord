@@ -212,7 +212,7 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
         persist(snapshot.value.copy(records = snapshot.value.records.filterNot { it.id == r.id && it.type == r.type }, deletions = snapshot.value.deletions + if(syncable) listOf(tomb) else emptyList()))
         sync()
     }
-    fun saveProfile(p: JSONObject) { require(p.optDouble("updatedAt") == snapshot.value.profile.optDouble("updatedAt")) { "档案已被同步更新，请重新打开编辑" }; Validation.profile(p); persist(snapshot.value.copy(profile = p.copy().put("updatedAt", now()))); sync() }
+    fun saveProfile(p: JSONObject) { require(p.optDouble("updatedAt") == snapshot.value.profile.optDouble("updatedAt")) { "档案已被同步更新，请重新打开编辑" }; Validation.profile(p); persist(snapshot.value.copy(profile = GoalHistory.changed(snapshot.value.profile,p))); sync() }
     fun saveConfig(c: JSONObject, apiKey: String?) {
         if(c.optString("provider") != "默认 AI 服务") validateHTTPS(c.optString("endpoint"))
         require(c.optString("provider") == "默认 AI 服务" || c.optString("model").isNotBlank()) { "请填写模型名" }
@@ -507,7 +507,7 @@ ${focus?.let {"仅限当前属于「$it」分组的清单记录。"} ?: "仅限�
         persist(AgentActions.apply(snapshot.value, p.actions, p.user, p.conversation)); proposal.value = null
         append(p.conversation, "assistant", "已保存 ${p.actions.size} 项操作，可在记录页面核对。"); sync()
     }
-    private fun fingerprint(s: Snapshot) = s.records.sortedBy { it.id }.joinToString { "${it.type}:${it.id}:${it.updated}" } + s.profile.optDouble("updatedAt") + JSONArray(s.deletions)
+    private fun fingerprint(s: Snapshot) = s.records.sortedBy { it.id }.joinToString { "${it.type}:${it.id}:${it.updated}" } + s.profile.optDouble("updatedAt") + GoalHistory.merge(s.profile).toString() + JSONArray(s.deletions)
     fun completeOnboarding() { app.store.set("onboarded", "yes"); onboarding.value = false }
     fun seedDemo() {
         require(!aiBusy.value) { "请先等待教练回答结束，再载入示例" }

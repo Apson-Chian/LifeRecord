@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix='liferecord-contract-roundtrip-') as fol
     response=server.current_snapshot()
     input_file=directory/'server.json'; input_file.write_text(json.dumps(response,ensure_ascii=False))
     swift=root/'iOS'
-    sources=['Services/SyncCompatibility.swift','Services/RecordInput.swift','Services/SyncModels.swift','Services/WorkoutDetails.swift']
+    sources=['Services/GoalHistory.swift','Services/SyncCompatibility.swift','Services/RecordInput.swift','Services/SyncModels.swift','Services/WorkoutDetails.swift']
     executable=directory/'codec'
     subprocess.run(['xcrun','swiftc','-module-cache-path',str(directory/'cache'),*[str(swift/'LifeRecord'/s) for s in sources],str(swift/'Tests/data-contract.swift'),'-o',str(executable)],check=True)
     output=directory/'swift.json'

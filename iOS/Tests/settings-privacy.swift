@@ -17,6 +17,8 @@ struct SyncedProfile: Codable {
     var proteinGoal: Double
     var carbsGoal: Double
     var fatGoal: Double
+    var goalHistory: [GoalVersion]? = nil
+    var goalTimeZone: String? = nil
 }
 
 
@@ -55,6 +57,15 @@ struct SyncedProfile: Codable {
         settings.targetWeight = 71
         do { try settings.saveProfileDraft(staleDraft); preconditionFailure("stale draft saved") } catch { }
         precondition(settings.targetWeight == 71)
+        let historyBefore=settings.goalHistory
+        let yesterday=Calendar.current.date(byAdding:.day,value:-1,to:Date.now)!
+        let yesterdayGoal=settings.goals(on:yesterday)
+        var changedGoals=settings.profileDraft();changedGoals.proteinGoal=175
+        try settings.saveProfileDraft(changedGoals)
+        precondition(settings.goals(on:yesterday)==yesterdayGoal)
+        precondition(settings.goals(on:Date.now).proteinGoal==175)
+        precondition(AppSettings(defaults:defaults).goalHistory==settings.goalHistory)
+        precondition(settings.goalHistory.count==historyBefore.count)
         // Draft editing happens in the view; only an explicit save changes the persisted identity.
         try settings.updateCoachIdentity(name: "小满教练", avatarData: nil)
         precondition(AppSettings(defaults: defaults).coachAvatarData == nil)
@@ -87,6 +98,16 @@ struct SyncedProfile: Codable {
         precondition(settings.coachName == AppSettings.defaultCoachName && settings.coachAvatarData == nil)
         let resetCoach = AppSettings(defaults: defaults)
         precondition(resetCoach.coachName == AppSettings.defaultCoachName && resetCoach.coachAvatarData == nil)
+        let imported=SyncedProfile(updatedAt:Date.now.addingTimeInterval(-86400).timeIntervalSince1970,
+            displayName:"同步测试",fitnessGoal:"维持",height:170,baselineWeight:70,targetWeight:70,
+            weeklyWeightTarget:0,calorieGoal:2000,proteinGoal:180,carbsGoal:250,fatGoal:60)
+        settings.applySyncedProfile(imported,updatedAt:Date(timeIntervalSince1970:imported.updatedAt))
+        precondition(settings.goalHistory.isEmpty, "First sync must not invent history from neutral install defaults")
+        precondition(settings.goals(on:yesterday).proteinGoal==180)
+        var importedDraft=settings.profileDraft();importedDraft.proteinGoal=200
+        try settings.saveProfileDraft(importedDraft)
+        precondition(settings.goalHistory.first?.values.proteinGoal==180)
+        precondition(settings.goals(on:yesterday).proteinGoal==180)
         defaults.set("Dots",forKey:"provider");defaults.set("https://legacy.test/v1/chat/completions",forKey:"endpoint");defaults.set("dots3-note-prev",forKey:"model")
         let migrated=AppSettings(defaults:defaults);precondition(migrated.provider == .custom && migrated.authStyle == .apiKey && !migrated.jsonMode && migrated.imageDetail=="medium")
         print("PASS: neutral defaults, opt-in sharing/writes, provider settings restore, isolated preferences, private settings reset")

@@ -49,6 +49,17 @@ import Foundation
         let preservedLegacy = try JSONSerialization.jsonObject(with: unchanged) as! [String: Any]
         let originalLegacy = fixture["legacyMeal"] as! NSDictionary
         precondition((preservedLegacy["meals"] as! [NSDictionary])[0] == originalLegacy)
+        var rawProfile=(fixture["snapshot"] as! [String:Any])["settings"] as! [String:Any]
+        rawProfile["legacyExtension"]="keep"
+        var mergedProfile=rawProfile
+        let version=GoalVersion(id:"offline",effectiveDate:"2026-10-21",updatedAt:1,
+            values:GoalValues(fitnessGoal:"维持",baselineWeight:70,targetWeight:70,weeklyWeightTarget:0,
+                              calorieGoal:2000,proteinGoal:100,carbsGoal:250,fatGoal:60))
+        mergedProfile["goalHistory"]=try JSONSerialization.jsonObject(with:JSONEncoder().encode([version]))
+        let withHistory=try SyncCompatibility.preservingUnchanged(JSONSerialization.data(withJSONObject:["settings":mergedProfile]),
+            original:JSONSerialization.data(withJSONObject:["settings":rawProfile]))
+        let historicalProfile=(try JSONSerialization.jsonObject(with:withHistory) as! [String:Any])["settings"] as! [String:Any]
+        precondition((historicalProfile["goalHistory"] as! [Any]).count==1 && historicalProfile["legacyExtension"] as? String=="keep")
         let limits = fixture["limits"] as! [String: [String: [Double]]]
         for (kind, fields) in limits {
             for (field, bounds) in fields {

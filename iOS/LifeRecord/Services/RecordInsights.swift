@@ -26,6 +26,6 @@ extension GoalFeedback.Goals {
         case .maintain: .maintain
         }
         self.init(mode: mode, baselineWeight: settings.baselineWeight, targetWeight: settings.targetWeight,
-                  weeklyWeightChange: settings.weeklyWeightTarget, calories: settings.calorieGoal, protein: settings.proteinGoal)
+                  weeklyWeightChange: settings.weeklyWeightTarget, calories: settings.calorieGoal, protein: settings.proteinGoal, history: settings.goalHistory)
     }
 }

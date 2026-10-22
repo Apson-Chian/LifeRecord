@@ -242,6 +242,8 @@ final class SyncCoordinator {
             proteinGoal: settings.proteinGoal,
             carbsGoal: settings.carbsGoal,
             fatGoal: settings.fatGoal,
+            goalHistory: settings.goalHistory,
+            goalTimeZone: settings.goalTimeZone,
         )
         return SyncSnapshot(
             meals: meals,

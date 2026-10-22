@@ -1,6 +1,8 @@
-默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载[beta.8](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.8)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
+默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载[beta.9](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.9)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
 
 # LifeRecord Android
+
+Android 1.4.0-beta.9（2026-10-22）：新增按日期生效的目标历史，保留更早日期圆环与达标统计；手动与 AI 修改共用历史，支持离线版本合并。[发布与下载](../Docs/android-release-1.4-beta9.md) · [行为与验证](../Docs/goal-history.md)。
 
 Android 1.4.0-beta.8（2026-10-22）：修复 Android 12 模糊残影与点空白收键盘；更新示例、明确 AI 数据范围，按 iOS 校准字体、首页、圆环、卡片与教练对话比例；统一按压弹簧，导航和照片拖动支持跟手、速度交接与途中打断。[发布与下载](../Docs/android-release-1.4-beta8.md) · [实现与验证](../Docs/android-compatibility-beta8.md)。旧示例可在“设置 → 隐私、数据与帮助 → 载入完整示例”更新。
 
@@ -59,7 +61,7 @@ python3 ../Tests/android-isolation.py app/build/outputs/apk/sandbox/app-sandbox.
 
 首页顺序、蓝紫主题、蛋白质/碳水/餐次配色、添加菜单、记录日历、餐次分组、照片入口、训练结束后编辑、默认收起的动作组数，以及「问 AI」先填草稿的操作已对齐 iOS。切换标签保留日期、滚动位置、趋势范围、搜索和未发送文字。详细变化与 GitHub 参考见[对齐记录](../Docs/android-ios-parity.md)。
 
-在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.8) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.8.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4/5/6/7 用户直接覆盖安装即可。**beta.3 及更早版本的签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
+在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.9) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.9.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4/5/6/7/8 用户直接覆盖安装即可。**beta.3 及更早版本的签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
 
 照片识别、智能教练与周报需要联网并配置服务。预设和自定义接口的连接、密钥保存与常见错误见[接口设置](../Docs/api-settings.md)。
 

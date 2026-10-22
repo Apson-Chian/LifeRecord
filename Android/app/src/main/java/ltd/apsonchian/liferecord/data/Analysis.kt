@@ -92,7 +92,7 @@ object GoalFeedback {
     data class Summary(val start: LocalDate, val end: LocalDate, val days: Int, val mealDays: Int, val calorieDays: Int, val proteinDays: Int,
         val calories: Double?, val protein: Double?, val measurementDays: Int, val latest: BodyTrend.Point?, val distance: Double?,
         val weeklyChange: Double?, val completedWorkouts: Int, val qualityCount: Int, val headline: String, val actions: List<String>, val period: Period?) {
-        val context: String get() = "统计 $days 天；饮食记录 $mealDays 天，热量在设定目标 ±10% 内 $calorieDays 天，蛋白质达到设定目标 $proteinDays 天；已记录日均热量 ${calories?.let(::format) ?: "无记录"} kcal、蛋白质 ${protein?.let(::format) ?: "无记录"} g；测量 $measurementDays 天，最近趋势体重 ${latest?.trend?.let(::format) ?: "无记录"} kg，区间变化折算 ${weeklyChange?.let(::format) ?: "数据不足"} kg/周；完成训练 $completedWorkouts 次；区间内待核对 $qualityCount 项。反馈：$headline。下一步：${actions.joinToString("；")}。"
+        val context: String get() = "统计 $days 天；饮食记录 $mealDays 天，热量在当日目标 ±10% 内 $calorieDays 天，蛋白质达到当日目标 $proteinDays 天；已记录日均热量 ${calories?.let(::format) ?: "无记录"} kcal、蛋白质 ${protein?.let(::format) ?: "无记录"} g；测量 $measurementDays 天，最近趋势体重 ${latest?.trend?.let(::format) ?: "无记录"} kg，区间变化折算 ${weeklyChange?.let(::format) ?: "数据不足"} kg/周；完成训练 $completedWorkouts 次；区间内待核对 $qualityCount 项。反馈：$headline。下一步：${actions.joinToString("；")}。"
     }
     fun summarize(records: List<Record>, goals: JSONObject, range: Int, at: Double = now(), acknowledged: Set<String> = emptySet()): Summary {
         val today = at.day()
@@ -102,25 +102,33 @@ object GoalFeedback {
         val workouts = real.filter { it.type == RecordType.WORKOUT && !it.json.isNull("endDate") && it.json.optDouble("endDate") in it.date..at }
         val start = if(range > 0) today.minusDays(range.coerceAtLeast(1).toLong() - 1) else (meals + body + workouts).minByOrNull { it.date }?.date?.day() ?: today
         val days = ChronoUnit.DAYS.between(start, today).toInt().coerceAtLeast(0) + 1
-        val nutrition = meals.filter { it.date.day() >= start }.groupBy { it.date.day() }.values.map { Insights.total(it, "calories") to Insights.total(it, "protein") }
-        val calorieGoal = goals.optDouble("calorieGoal"); val proteinGoal = goals.optDouble("proteinGoal")
+        val daily = meals.filter { it.date.day() >= start }.groupBy { it.date.day() }.map { (day,entries) ->
+            Triple(Insights.total(entries,"calories"),Insights.total(entries,"protein"),GoalHistory.at(goals,day))
+        }
+        val nutrition=daily.map {it.first to it.second}
+        val calorieDays=daily.count { val target=it.third.optDouble("calorieGoal");target.isFinite() && target>0 && abs(it.first-target)<=target*.1 }
+        val proteinDays=daily.count { val target=it.third.optDouble("proteinGoal");target.isFinite() && target>0 && it.second>=target }
+        val activeGoals=GoalHistory.at(goals,today)
+        val calorieGoal = activeGoals.optDouble("calorieGoal"); val proteinGoal = activeGoals.optDouble("proteinGoal")
         val calorieValid = calorieGoal.isFinite() && calorieGoal > 0; val proteinValid = proteinGoal.isFinite() && proteinGoal > 0
         val series = BodyTrend.records(body, "weight", at); val latest = series.lastOrNull()
         val recent = series.filter { it.day >= start }; val rate = series.filter { it.day >= if(range == 7) today.minusDays(7) else start }
         val span = if(rate.size > 1) ChronoUnit.DAYS.between(rate.first().day, rate.last().day) else 0
         val weekly = if(span >= 7 && rate.size >= 3) (rate.last().trend - rate.first().trend) * 7 / span else null
-        val baseline = goals.optDouble("baselineWeight"); val target = goals.optDouble("targetWeight"); val expected = goals.optDouble("weeklyWeightTarget")
-        val mode = goals.optString("fitnessGoal"); val targetDelta = target - baseline
+        val baseline = activeGoals.optDouble("baselineWeight"); val target = activeGoals.optDouble("targetWeight"); val expected = activeGoals.optDouble("weeklyWeightTarget")
+        val mode = activeGoals.optString("fitnessGoal"); val targetDelta = target - baseline
         val weightValid = baseline.isFinite() && target.isFinite() && baseline in 20.0..400.0 && target in 20.0..400.0
         val directionValid = mode == "维持" || (mode == "增肌" && targetDelta > 0 && expected >= 0) || (mode == "减脂" && targetDelta < 0 && expected <= 0)
         val configValid = weightValid && directionValid && expected.isFinite()
         val distance = if(weightValid) latest?.let { abs(it.trend - target) } else null
         val stale = latest?.let { ChronoUnit.DAYS.between(it.day, today) > 7 } ?: true
-        val anchor = recent.firstOrNull()
+        val effectiveDay=GoalHistory.weightStageStart(goals,today)
+        val planStart=maxOf(start,effectiveDay ?: start)
+        val anchor = recent.firstOrNull {it.day>=planStart}
         val period = if(mode != "维持" && configValid && !stale && abs(expected) > 0 && anchor != null && latest != null && latest.day > anchor.day) {
             val change = latest.trend - anchor.trend
             val targetChange = expected * ChronoUnit.DAYS.between(anchor.day, latest.day) / 7
-            Period(start, today, anchor.day, change, targetChange, (change / targetChange).coerceIn(0.0, 1.0))
+            Period(planStart, today, anchor.day, change, targetChange, (change / targetChange).coerceIn(0.0, 1.0))
         } else null
         var headline = when {
             latest == null -> "先积累真实记录"
@@ -141,13 +149,13 @@ object GoalFeedback {
         if(stale) actions += "补充一次身体测量，再判断当前与目标的距离。"
         else if(weekly == null) actions += "在相近条件下继续测量；至少 3 个测量日、跨度 7 天后再比较每周节奏。"
         if(nutrition.size.toDouble() / days < .7) actions += "接下来优先连续记录每日餐食；缺失日期不会按零摄入计算。"
-        else if(calorieValid && nutrition.any { abs(it.first - calorieGoal) > calorieGoal * .1 }) actions += "回看未落在热量目标 ±10% 内的日期，先确认餐食是否记全，再对照自己设定的份量计划。"
-        if(proteinValid && nutrition.any { it.second < proteinGoal }) actions += "回看蛋白质未达到设定目标的日期，核对份量与漏记情况。"
+        else if(calorieValid && calorieDays < nutrition.size) actions += "回看未落在热量目标 ±10% 内的日期，先确认餐食是否记全，再对照自己设定的份量计划。"
+        if(proteinValid && proteinDays < nutrition.size) actions += "回看蛋白质未达到设定目标的日期，核对份量与漏记情况。"
         if(!configValid || (mode != "维持" && abs(targetDelta) < .2)) actions.add(0, "核对起始体重、目标体重与增肌/减脂方向是否一致。")
         if(!calorieValid || !proteinValid) actions.add(0, "核对每日热量和蛋白质目标，目标应为有效的正数。")
         if(actions.isEmpty()) actions += "继续按当前目标记录和执行，下周再比较趋势；不根据单日波动调整目标。"
-        return Summary(start, today, days, nutrition.size, if(calorieValid) nutrition.count { abs(it.first - calorieGoal) <= calorieGoal * .1 } else 0,
-            if(proteinValid) nutrition.count { it.second >= proteinGoal } else 0, nutrition.takeIf { it.isNotEmpty() }?.map { it.first }?.average(),
+        return Summary(start, today, days, nutrition.size, calorieDays,
+            proteinDays, nutrition.takeIf { it.isNotEmpty() }?.map { it.first }?.average(),
             nutrition.takeIf { it.isNotEmpty() }?.map { it.second }?.average(), recent.size, latest, distance, weekly, workouts.count { it.date.day() >= start }, issues.size, headline, actions.take(3), period)
     }
 }

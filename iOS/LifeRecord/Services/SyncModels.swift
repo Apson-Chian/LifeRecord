@@ -13,6 +13,8 @@ struct SyncedProfile: Codable {
     var proteinGoal: Double
     var carbsGoal: Double
     var fatGoal: Double
+    var goalHistory: [GoalVersion]? = nil
+    var goalTimeZone: String? = nil
 }
 
 struct SyncedMeal: Codable {

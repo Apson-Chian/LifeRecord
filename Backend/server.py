@@ -28,6 +28,7 @@ from contextvars import ContextVar
 from contextlib import closing
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import database
+import goal_history
 import ai_transport
 import default_ai
 
@@ -251,7 +252,11 @@ def merge_snapshot(snapshot: dict) -> None:
             if not deleted:
                 # Keep extension and omitted optional fields from installed clients.
                 # Explicit values (including [] and null) still override the old field.
-                incoming = {**previous, **incoming}
+                if kind == "settings":
+                    incoming = goal_history.merge_profile(previous, incoming, stamp)
+                    stamp = incoming["updatedAt"]
+                else:
+                    incoming = {**previous, **incoming}
                 if same_json_value(incoming, previous):
                     # An unchanged legacy value is a read/replay, not a new write.
                     # Do not rewrite it or block other records in a full snapshot.
@@ -411,6 +416,7 @@ def validate_admin_record(kind: str, item: dict) -> None:
             if item.get(key) is not None and not valid_number(item[key], low, high):
                 raise ValueError(f"invalid {key}")
     if kind == "settings":
+        goal_history.versions(item)
         if item.get("fitnessGoal") not in ("增肌", "减脂", "维持"):
             raise ValueError("invalid fitnessGoal")
         for key, low, high in (("height", 50, 300), ("baselineWeight", 20, 400), ("targetWeight", 20, 400),
@@ -461,6 +467,13 @@ def prepare_admin_actions(actions: list, snapshot: dict, check_versions: bool = 
                 "workout": dict(date=stamp, endDate=None, note=""),
             }[kind]
             after = {**defaults, **(existing or {}), **fields, "id": record_id, "updatedAt": stamp}
+            if kind == "settings":
+                if "goalTimeZone" in action:
+                    zone = action["goalTimeZone"]
+                    try: goal_history.ZoneInfo(zone)
+                    except (ValueError, TypeError, KeyError): raise ValueError("invalid goal timezone") from None
+                    after["goalTimeZone"] = zone
+                after = goal_history.merge_profile(existing or {}, after, stamp)
             validate_admin_record(kind, after)
             if kind == "settings":
                 changes["settings"] = after

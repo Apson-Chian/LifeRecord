@@ -81,7 +81,13 @@ enum SyncCompatibility {
             }
         }
         if let profile = now["settings"] as? [String: Any], let previous = old["settings"] as? [String: Any],
-           let stamp = profile["updatedAt"] as? Double, stamp == previous["updatedAt"] as? Double { now["settings"] = previous }
+           let stamp = profile["updatedAt"] as? Double, stamp == previous["updatedAt"] as? Double {
+            var preserved=previous
+            // Goal versions merge independently of the current profile's stamp.
+            // Keep raw legacy fields without discarding a newly merged offline timeline.
+            for field in ["goalHistory","goalTimeZone"] where profile[field] != nil {preserved[field]=profile[field]}
+            now["settings"] = preserved
+        }
         return try JSONSerialization.data(withJSONObject: now)
     }
 

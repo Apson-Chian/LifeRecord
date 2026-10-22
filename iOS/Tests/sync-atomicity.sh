@@ -20,7 +20,7 @@ cat >> "$test_directory/SyncService.swift" <<'SWIFT'
 SWIFT
 xcrun swiftc -module-cache-path "$test_directory/cache" \
   LifeRecord/Services/WorkoutDetails.swift LifeRecord/Models/HealthModels.swift \
-  LifeRecord/Services/AppSettings.swift LifeRecord/Services/RecordInput.swift \
+  LifeRecord/Services/GoalHistory.swift LifeRecord/Services/AppSettings.swift LifeRecord/Services/RecordInput.swift \
   LifeRecord/Services/AIAuthentication.swift LifeRecord/Services/MealPhotoStore.swift \
   LifeRecord/Services/SyncFailureDescription.swift LifeRecord/Services/SyncModels.swift \
   LifeRecord/Services/SyncCompatibility.swift "$test_directory/SyncService.swift" \
