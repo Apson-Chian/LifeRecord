@@ -397,7 +397,7 @@ import android.net.Uri
         Text("密码只用于登录，不保存在本机。登录凭据由 Android Keystore 加密保存；会话到期后重新登录。离线记录会在联网后继续同步。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         if(vm.app.secrets.get("sync").isNotBlank()) TextButton(enabled=!busy,onClick={disable=true}) {Text("关闭同步",color=MaterialTheme.colorScheme.error)}
     }
-    if(disable) AlertDialog(onDismissRequest={disable=false},title={Text("关闭同步？")},text={Text("本机记录会保留。恢复时请使用原账号登录或填写原同步密钥。")},confirmButton={TextButton(onClick={runCatching {vm.saveSyncKey("");disable=false}.onFailure {error=it.message.orEmpty()}}) {Text("关闭同步")}},dismissButton={TextButton(onClick={disable=false}) {Text("取消")}})
+    if(disable) GlassAlertDialog(onDismissRequest={disable=false},title={Text("关闭同步？")},text={Text("本机记录会保留。恢复时请使用原账号登录或填写原同步密钥。")},confirmButton={TextButton(onClick={runCatching {vm.saveSyncKey("");disable=false}.onFailure {error=it.message.orEmpty()}}) {Text("关闭同步")}},dismissButton={TextButton(onClick={disable=false}) {Text("取消")}})
 }
 @Composable private fun AccountSecretField(label:String,value:String,change:(String)->Unit,enabled:Boolean) {
     var visible by remember { mutableStateOf(false) }

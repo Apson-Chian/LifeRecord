@@ -470,7 +470,7 @@ class AppFlowTest {
         compose.onNodeWithText("回到本月").performClick()
         capture("workout-calendar-beta2")
         compose.onNodeWithTag("workout-day-$day").performClick()
-        compose.onNodeWithText("40 kg × 8 次",substring=true).assertExists()
+        compose.onNodeWithText("40 kg × 8 次",substring=true).assertIsDisplayed()
         capture("workout-calendar-day-beta2")
         compose.onNodeWithText("月历训练检查",substring=true).performClick()
         compose.onNodeWithText("编辑训练").assertExists()

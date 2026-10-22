@@ -70,6 +70,19 @@ class CompatibilityTest {
         compose.onNodeWithText("餐食名称").performTouchInput {click()}
         keyboard(false)
         compose.onNodeWithContentDescription("餐食名称").assertTextContains("没有丢失")
+        // IME insets can settle before the dialog's next presented frame on
+        // API31. Verify actual foreground pixels, not only surviving semantics.
+        compose.waitUntil(3000) {
+            val bitmap=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()!!
+            var ink=0
+            for(y in bitmap.height/10 until bitmap.height*4/5 step 4) {
+                for(x in bitmap.width/10 until bitmap.width*9/10 step 4) {
+                    val pixel=bitmap.getPixel(x,y)
+                    if(android.graphics.Color.red(pixel)<150 && android.graphics.Color.green(pixel)<150 && android.graphics.Color.blue(pixel)<150) ink++
+                }
+            }
+            bitmap.recycle();ink>100
+        }
         screenshot("form-keyboard-dismissed")
         compose.onNodeWithContentDescription("热量 kcal").performScrollTo().performClick()
         keyboard(true)

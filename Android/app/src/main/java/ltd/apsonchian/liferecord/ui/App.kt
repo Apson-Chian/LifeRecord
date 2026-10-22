@@ -71,6 +71,8 @@ import java.time.format.DateTimeFormatter
     val pages = key(generation) { rememberSaveableStateHolder() }
     val sourceLayer = rememberGraphicsLayer()
     val backdrop = remember(sourceLayer) { GlassBackdrop(sourceLayer) }
+    val ambientLayer=rememberGraphicsLayer()
+    val ambient=remember(ambientLayer) {GlassBackdrop(ambientLayer)}
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -78,9 +80,10 @@ import java.time.format.DateTimeFormatter
     val notify: (String) -> Unit = { scope.launch { snack.showSnackbar(it) } }
     if(first) { Onboarding(vm); return@LifeTheme }
     BackHandler(enabled = tab != 0) { tab = 0 }
+    CompositionLocalProvider(LocalGlassAmbient provides ambient,LocalGlassPage provides backdrop) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).dismissKeyboardOnBackgroundTap()) {
         Box(Modifier.fillMaxSize().glassSource(backdrop)) {
-            AppBackground()
+            AppBackground(Modifier.glassSource(ambient))
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 pages.SaveableStateProvider(tab) {
                     when(tab) {
@@ -116,6 +119,7 @@ import java.time.format.DateTimeFormatter
         if(current == null) { detail = null } else RecordDetail(vm, current, { detail = null }, { detail = null; editor = current.copy() }, notify)
     }
     editor?.let { RecordEditor(vm, it, { editor = null }, notify) }
+    }
 }
 }
 

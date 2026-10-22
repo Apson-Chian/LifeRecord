@@ -27,7 +27,9 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -40,43 +42,39 @@ import kotlin.math.roundToInt
 @Stable
 class GlassBackdrop(val layer: GraphicsLayer) {
     var origin by mutableStateOf(Offset.Zero)
+    var screenOrigin by mutableStateOf(Offset.Zero)
+    var ownerView by mutableStateOf<android.view.View?>(null)
 }
 
-fun Modifier.glassSource(backdrop: GlassBackdrop): Modifier =
-    onGloballyPositioned { backdrop.origin = it.positionInRoot() }.legacyBlurRedraw().drawWithContent {
-        backdrop.layer.record { this@drawWithContent.drawContent() }
+@Composable
+fun Modifier.glassSource(backdrop: GlassBackdrop): Modifier {
+    val view=LocalView.current
+    DisposableEffect(backdrop,view) {
+        backdrop.ownerView=view
+        onDispose {if(backdrop.ownerView===view) backdrop.ownerView=null}
+    }
+    return onGloballyPositioned {backdrop.origin=it.positionInRoot();backdrop.screenOrigin=it.positionOnScreen()}.legacyBlurRedraw(force=true).drawWithContent {
+        backdrop.layer.record {this@drawWithContent.drawContent()}
         drawLayer(backdrop.layer)
     }
+}
 
 @Composable
 fun AppBackground(modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
+    val dark=colors.background.luminance()<.2f
     Canvas(modifier.fillMaxSize()) {
-        drawRect(Brush.verticalGradient(listOf(colors.background, lerp(colors.background, colors.primary, .075f), colors.background)))
+        drawRect(Brush.verticalGradient(listOf(colors.background,lerp(colors.background,colors.primary,if(dark) .035f else .035f),colors.background)))
+        drawRect(Brush.radialGradient(listOf(colors.secondary.copy(alpha=if(dark) .14f else .12f),Color.Transparent),Offset(size.width*.03f,size.height*.10f),size.width*1.15f))
+        drawRect(Brush.radialGradient(listOf(colors.primary.copy(alpha=if(dark) .12f else .08f),Color.Transparent),Offset(size.width*1.04f,size.height*.47f),size.width*.95f))
+        drawRect(Brush.radialGradient(listOf(Color(0xFF8CCBC6).copy(alpha=if(dark) .05f else .065f),Color.Transparent),Offset(size.width*.10f,size.height*.93f),size.width))
     }
 }
 
-/** Quiet frosted material over the scroll edge; keep labels on a sharp layer. */
+/** Floating clear glass; optical treatment never filters its labels. */
 @Composable
-fun GlassSurface(backdrop: GlassBackdrop, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < .2f
-    val blurEnabled = rememberBackdropBlurEnabled()
-    val shape = RoundedCornerShape(50)
-    Box(modifier
-        .shadow(8.dp, shape, ambientColor = Color.Black.copy(alpha = .05f), spotColor = Color.Black.copy(alpha = .08f))
-        .clip(shape)
-        .border(.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = if(dark) .16f else .55f), colors.outlineVariant.copy(alpha = .16f))), shape)
-    ) {
-        if (blurEnabled && Build.VERSION.SDK_INT >= 31) {
-            BackdropLayer(backdrop, Modifier.matchParentSize(), 18.dp) { _, _, radius ->
-                ProgressiveBlurEffects.uniform(radius)
-            }
-        }
-        Box(Modifier.matchParentSize().background(colors.surface.copy(alpha = if (!blurEnabled) .97f else if (dark) .58f else .38f)))
-        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.White.copy(alpha = if (dark) .025f else .08f), Color.Transparent))))
-        content()
-    }
+fun GlassSurface(backdrop:GlassBackdrop,modifier:Modifier=Modifier,content:@Composable BoxScope.()->Unit) {
+    Box(modifier.liquidMaterial(backdrop,GlassKind.Floating),content=content)
 }
 
 @Composable fun glassBarHeight(): Dp = if(LocalDensity.current.fontScale > 1.3f) 82.dp else 68.dp
@@ -132,8 +130,9 @@ fun GlassNavigationBar(backdrop: GlassBackdrop, selected: Int, select: (Int) -> 
                 }
             )) {
             Box(Modifier.padding(6.dp).graphicsLayer { translationX = presentedPosition() * widthPx }.width(tabWidth).fillMaxHeight().testTag("glass-selection")
-                .clip(RoundedCornerShape(50)).background(colors.primary.copy(alpha = .12f))
-                .border(.6.dp, Color.White.copy(alpha = if(colors.background.luminance()<.2f) .12f else .34f), RoundedCornerShape(50)))
+                .shadow(2.dp,RoundedCornerShape(50),ambientColor=Color.Black.copy(alpha=.035f),spotColor=Color.Black.copy(alpha=.07f))
+                .clip(RoundedCornerShape(50)).background(colors.primary.copy(alpha=.11f))
+                .liquidFinish(GlassKind.Control,RoundedCornerShape(50),colors.primary,colors.background.luminance()<.2f))
             Row(Modifier.fillMaxSize().padding(6.dp).selectableGroup()) {
                 labels.forEachIndexed { index, label ->
                     val interactions = remember { MutableInteractionSource() }

@@ -133,7 +133,7 @@ import ltd.apsonchian.liferecord.data.*
                 AppIcon(Glyph.Chevron,MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(10.dp).then(Modifier.rotate(90f)))
             }
             SymbolButton(Glyph.Sidebar,"对话列表",{keyboard?.hide();scope.launch {drawer.open()}},Modifier.align(Alignment.CenterStart))
-            Row(Modifier.align(Alignment.CenterEnd).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surface.copy(alpha=.85f))) {
+            Row(Modifier.align(Alignment.CenterEnd).liquidMaterial(LocalGlassAmbient.current,GlassKind.Control,22.dp)) {
                 SpringIconButton(onClick={favorites=true}) {AppIcon(Glyph.Meal,MaterialTheme.colorScheme.primary,Modifier.size(21.dp),"选择常用餐食")}
                 SpringIconButton(onClick=vm::newConversation) {AppIcon(Glyph.Compose,MaterialTheme.colorScheme.primary,Modifier.size(21.dp),"新对话")}
             }
@@ -148,7 +148,7 @@ import ltd.apsonchian.liferecord.data.*
                 val prompts=listOf("分析最近的身体趋势","分析今天是否适合加餐","看看这张配料表")
                 prompts.chunked(2).forEach { row -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     row.forEach { prompt ->
-                        Box(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha=.6f)).springClickable {text=prompt;inputFocus.requestFocus();keyboard?.show()}.defaultMinSize(minHeight=52.dp).padding(horizontal=11.dp,vertical=8.dp),contentAlignment=Alignment.CenterStart) {
+                        Box(Modifier.weight(1f).cardMaterial(radius=15.dp).springClickable {text=prompt;inputFocus.requestFocus();keyboard?.show()}.defaultMinSize(minHeight=52.dp).padding(horizontal=11.dp,vertical=8.dp),contentAlignment=Alignment.CenterStart) {
                             Text(prompt,style=MaterialTheme.typography.bodySmall.copy(fontWeight=FontWeight.Medium))
                         }
                     }
@@ -171,7 +171,7 @@ import ltd.apsonchian.liferecord.data.*
             }
             Switch(!dataScope.demo && config.optBoolean("canWrite"),{runCatching {vm.setCoachWrites(it)}.onFailure {notify(it.message.orEmpty())}},enabled=!dataScope.demo && tasks.isEmpty(),modifier=Modifier.testTag("coach-write-toggle"))
         }
-        Surface(shape=RoundedCornerShape(25.dp),color=MaterialTheme.colorScheme.surface.copy(alpha=.8f),border=BorderStroke(.7.dp,Color.White.copy(alpha=.2f)),modifier=Modifier.padding(horizontal=13.dp,vertical=8.dp).testTag("coach-composer")) {
+        Surface(shape=RoundedCornerShape(25.dp),color=Color.Transparent,modifier=Modifier.padding(horizontal=13.dp,vertical=8.dp).liquidMaterial(LocalGlassAmbient.current,GlassKind.Card,25.dp).testTag("coach-composer")) {
             Column(Modifier.padding(7.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 if(images.isNotEmpty()) {
                     Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -205,7 +205,7 @@ import ltd.apsonchian.liferecord.data.*
         }
 
     }
-    if(showDataScope) AlertDialog(onDismissRequest={showDataScope=false},title={Text("AI 可以看到什么")},text={
+    if(showDataScope) GlassAlertDialog(onDismissRequest={showDataScope=false},title={Text("AI 可以看到什么")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text(if(dataScope.demo) "当前使用合成示例与示例目标；不代表你的身体情况，不执行记录修改。" else "每次提问读取本机全部真实记录，不受当前页面日期或图表范围限制。")
             Text(RecordType.entries.joinToString("\n") {type -> "${type.label}：${dataScope.records.count {it.type==type}} 条"})

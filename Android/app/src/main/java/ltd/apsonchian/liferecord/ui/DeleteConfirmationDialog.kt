@@ -27,7 +27,7 @@ fun DeleteConfirmationDialog(
         focus.clearFocus(force = true)
         keyboard?.hide()
     }
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(message) },

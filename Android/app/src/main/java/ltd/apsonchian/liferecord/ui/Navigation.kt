@@ -33,7 +33,7 @@ import java.time.YearMonth
     var monthText by rememberSaveable { mutableStateOf(YearMonth.from(selected).toString()) }
     val month=YearMonth.parse(monthText)
     val recorded=records.filter { it.type in listOf(RecordType.MEAL,RecordType.BODY,RecordType.WORKOUT) }.map { it.date.day() }.toSet()
-    ModalBottomSheet(onDismissRequest=dismiss) {
+    GlassBottomSheet(onDismissRequest=dismiss) {
         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                 TextButton(onClick={monthText=month.minusMonths(1).toString()}) { Text("上个月") }

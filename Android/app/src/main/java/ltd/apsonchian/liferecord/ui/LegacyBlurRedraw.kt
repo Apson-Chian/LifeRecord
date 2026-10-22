@@ -13,10 +13,11 @@ import kotlinx.coroutines.launch
 
 /** Android 12 does not reliably invalidate effects that read another RenderNode.
  * Invalidate both capture and filter display lists after snapshot changes, without
- * changing Compose state or scheduling a permanent idle animation loop.
+ * changing Compose state or scheduling a permanent idle animation loop. Forced
+ * capture invalidation also keeps separate dialog-window renderers up to date.
  */
-internal fun Modifier.legacyBlurRedraw(): Modifier =
-    if (Build.VERSION.SDK_INT in 31..32) then(LegacyBlurRedrawElement) else this
+internal fun Modifier.legacyBlurRedraw(force:Boolean=false): Modifier =
+    if (force || Build.VERSION.SDK_INT in 31..32) then(LegacyBlurRedrawElement) else this
 
 private object LegacyBlurRedrawElement : ModifierNodeElement<LegacyBlurRedrawNode>() {
     override fun create() = LegacyBlurRedrawNode()

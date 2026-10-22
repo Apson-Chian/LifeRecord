@@ -43,19 +43,19 @@ iOS 真机截图。[更多 iOS 界面](iOS/README.md#界面预览)
     <th>智能教练</th>
   </tr>
   <tr>
-    <td><img src="Android/screenshots/today-light.png" width="240" alt="今日页的营养圆环、日期和快捷记录入口"></td>
+    <td><img src="Android/screenshots/liquid-glass-api35/home-light.png" width="240" alt="今日页的营养圆环、日期和快捷记录入口"></td>
     <td><img src="Android/screenshots/training-beta4.png" width="240" alt="训练时长柱状图与训练日历入口"></td>
-    <td><img src="Android/screenshots/coach-light.png" width="240" alt="智能教练的对话、图片输入与记录权限开关"></td>
+    <td><img src="Android/screenshots/liquid-glass-api35/coach-conversation.png" width="240" alt="智能教练的对话、图片输入与记录权限开关"></td>
   </tr>
 </table>
 
-Android 预览使用示例或合成记录。
+Android 预览使用示例或合成记录。[beta.11 液态玻璃与两版系统截图](Docs/android-liquid-glass.md)。
 
 ## 下载与体验
 
 | 平台 | 使用方式 |
 | --- | --- |
-| Android 8.0+ | [下载 beta.10](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.10) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
+| Android 8.0+ | [下载 beta.11](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.11) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
 | iOS 17+ | 使用 Xcode 构建 [iOS 工程](iOS/README.md)，目前尚未提供 TestFlight 下载 |
 | Web | [网页体验](https://apsonchian.ltd/liferecord-default/) |
 
@@ -63,7 +63,7 @@ Android 预览使用示例或合成记录。
 
 首次使用可以直接从空白记录开始，填写自己的目标；照片识别和智能教练需要联网并配置服务。当前 iOS 源码、Android 和网页支持用户自行注册账号密码，无需管理员分配；旧同步密钥继续兼容。Android 账号客户端已包含在 beta.6，iOS 需安装新源码构建；账号后端已于 2026-10-20 部署并通过公网验收；旧密钥继续兼容。[账号与同步说明](Docs/public-beta.md)
 
-**版本升级**：beta.10 可直接覆盖 beta.4/5/6/7/8/9，保留本机数据；beta.3 及更早版本需先核对同步记录、另存本机内容，再卸载重装，本机对话和部分照片不参与同步。[本版更新说明](Docs/android-release-1.4-beta10.md) · [旧版本迁移](Docs/android-release-1.4-beta4.md#签名与发布状态)
+**版本升级**：beta.11 可直接覆盖 beta.4/5/6/7/8/9/10，保留本机数据；beta.3 及更早版本需先核对同步记录、另存本机内容，再卸载重装，本机对话和部分照片不参与同步。[本版更新说明](Docs/android-release-1.4-beta11.md) · [旧版本迁移](Docs/android-release-1.4-beta4.md#签名与发布状态)
 
 ## 技术与目录
 

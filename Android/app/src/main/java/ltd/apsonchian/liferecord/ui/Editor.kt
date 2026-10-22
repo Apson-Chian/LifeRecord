@@ -47,8 +47,8 @@ import java.time.format.DateTimeFormatter
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = {
         if (it == SheetValue.Hidden) { if (canClose) close(); false } else true
     })
-    ModalBottomSheet(onDismissRequest = { if (canClose) close() }, sheetState = sheet, containerColor = MaterialTheme.colorScheme.background) {
-        Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f), color = MaterialTheme.colorScheme.background) {
+    GlassBottomSheet(onDismissRequest = { if (canClose) close() }, sheetState = sheet) {
+        Surface(Modifier.fillMaxWidth().fillMaxHeight(.96f), color = Color.Transparent) {
             Column(Modifier.imePadding().widthIn(max = 760.dp).dismissKeyboardOnBackgroundTap()) {
                 CenterAlignedTopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) },
                     navigationIcon = { TextButton(enabled = dismissEnabled, onClick = dismiss) { Text("取消") } },
@@ -71,7 +71,7 @@ import java.time.format.DateTimeFormatter
     }
 }
 @Composable internal fun DiscardChangesDialog(dismiss: () -> Unit, discard: () -> Unit) {
-    AlertDialog(onDismissRequest = dismiss, title = { Text("放弃未保存的更改？") },
+    GlassAlertDialog(onDismissRequest = dismiss, title = { Text("放弃未保存的更改？") },
         text = { Text("已填写的内容和本次添加的照片将被清除。") },
         confirmButton = { TextButton(onClick = discard) { Text("放弃更改", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = dismiss) { Text("继续编辑") } })

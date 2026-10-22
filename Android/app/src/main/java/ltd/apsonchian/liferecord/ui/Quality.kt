@@ -36,7 +36,7 @@ import kotlinx.coroutines.delay
         } }
         Text("“确认无误”仅隐藏当前版本的提示，保存在本机；记录被修改或同步更新后会重新检查。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    confirming?.let { issue -> AlertDialog(onDismissRequest = { confirming = null }, title = { Text("确认记录无误？") }, text = { Text("只隐藏这条核对提示，原始记录保持不变。") },
+    confirming?.let { issue -> GlassAlertDialog(onDismissRequest = { confirming = null }, title = { Text("确认记录无误？") }, text = { Text("只隐藏这条核对提示，原始记录保持不变。") },
         confirmButton = { TextButton(onClick = { runCatching { vm.confirmQuality(issue, true) }.onFailure { notify(it.message.orEmpty()) }; confirming = null }) { Text("确认无误") } },
         dismissButton = { TextButton(onClick = { confirming = null }) { Text("取消") } }) }
 }

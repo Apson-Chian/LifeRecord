@@ -108,7 +108,7 @@ import kotlin.math.sin
             }
         }
     }
-    error?.let { message -> AlertDialog(onDismissRequest={error=null},title={Text("暂时无法开始")},text={Text(message)},confirmButton={TextButton(onClick={error=null}) {Text("好")}}) }
+    error?.let { message -> GlassAlertDialog(onDismissRequest={error=null},title={Text("暂时无法开始")},text={Text(message)},confirmButton={TextButton(onClick={error=null}) {Text("好")}}) }
 }
 
 @Composable private fun PreviewTitle(title:String) {

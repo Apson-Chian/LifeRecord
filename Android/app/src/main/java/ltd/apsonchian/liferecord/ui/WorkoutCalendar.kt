@@ -59,7 +59,7 @@ import kotlinx.coroutines.delay
         Text("绿色数字：记录训练量（kg·次）",style=MaterialTheme.typography.bodySmall,color=green)
         Text("按已填写的负重 × 次数累加；未填写数值不估算。点击日期查看完整内容，跨午夜训练归入开始日。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    if(showDay) ModalBottomSheet(onDismissRequest={showDay=false}) {
+    if(showDay) GlassBottomSheet(onDismissRequest={showDay=false}) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp).navigationBarsPadding(),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {Text("当天训练",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge);TextButton(onClick={showDay=false}) {Text("完成")}}
             Text(selected.toString(),style=MaterialTheme.typography.titleMedium)
