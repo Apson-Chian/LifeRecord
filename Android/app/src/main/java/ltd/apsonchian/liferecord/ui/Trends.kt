@@ -117,13 +117,13 @@ import kotlin.math.abs
         item { Panel {
             ChartHeading("体重趋势",Glyph.Weight,MaterialTheme.colorScheme.primary,"weight-detail") {measurement="weight"}
             if(weights.isEmpty()) Empty("等待第一次测量","记下体重，慢慢看见变化") else {
-                TrendChart(weights,"kg",MaterialTheme.colorScheme.primary,goal=s.profile.optDouble("targetWeight"),inspectionControls=false)
+                TrendChart(weights,"kg",MaterialTheme.colorScheme.primary,goal=s.profile.optDouble("targetWeight"),inspectionControls=false,samples=BodyTrend.recordSamples(chartRecords,"weight",at,includeDemo=preview))
                 ChartFooter {measurement="weight"}
             }
         } }
         item { Panel(tint=Fat) {
             ChartHeading("体脂趋势",Glyph.Percent,Fat,"fat-detail") {measurement="bodyFat"}
-            if(fat.isEmpty()) Empty("暂无体脂记录","测量后即可查看数值和变化") else {TrendChart(fat,"%",Fat,inspectionControls=false);ChartFooter {measurement="bodyFat"}}
+            if(fat.isEmpty()) Empty("暂无体脂记录","测量后即可查看数值和变化") else {TrendChart(fat,"%",Fat,inspectionControls=false,samples=BodyTrend.recordSamples(chartRecords,"bodyFat",at,includeDemo=preview));ChartFooter {measurement="bodyFat"}}
         } }
         item { Panel(tint=Color(0xFFFF9500)) {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
@@ -230,7 +230,7 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         TextButton(onClick=open,contentPadding=PaddingValues(0.dp)) {Text("查看详情",style=MaterialTheme.typography.bodySmall)}
     }
 }
-@Composable fun TrendChart(points:List<BodyTrend.Point>,unit:String,color:Color,smooth:Boolean=false,goal:Double?=null,inspectionControls:Boolean=true,dualSeries:Boolean=false) {
+@Composable fun TrendChart(points:List<BodyTrend.Point>,unit:String,color:Color,smooth:Boolean=false,goal:Double?=null,inspectionControls:Boolean=true,dualSeries:Boolean=false,samples:List<BodyTrend.Sample>?=null) {
     if(points.isEmpty()) return
     var selectedDay by rememberSaveable(points.map {it.day}.toString()) {mutableStateOf<String?>(null)}
     var width by remember {mutableIntStateOf(1)}
@@ -252,7 +252,7 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         Text(unit,Modifier.padding(bottom=5.dp),style=MaterialTheme.typography.bodyLarge,color=labelColor)
         Spacer(Modifier.weight(1f));Text(if(selectedDay==null) "最新" else "已选中",style=MaterialTheme.typography.labelSmall,color=color)
     }
-    Canvas(Modifier.fillMaxWidth().height(210.dp).onSizeChanged {width=it.width.coerceAtLeast(1)}
+    Canvas(Modifier.fillMaxWidth().height(210.dp).testTag("measurement-chart-$unit").onSizeChanged {width=it.width.coerceAtLeast(1)}
         .semantics {
             contentDescription=if(dualSeries) "体重走势，虚线为每日中位数，实线为趋势体重" else "横轴日期，纵轴$unit。点击或横向拖动查看数据。"
             stateDescription="${selected.day}，中位数 ${format(selected.value)} $unit，趋势 ${format(selected.trend)} $unit，${selected.count} 次测量"
@@ -296,6 +296,21 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         }
     }
     if(selectedDay!=null) Text("${selected.day} · 中位数 ${format(selected.value)} $unit · 趋势 ${format(selected.trend)} $unit · ${selected.count} 次测量",style=MaterialTheme.typography.bodySmall)
+    if(samples!=null) {
+        if(selectedDay==null) TextButton(onClick={selectedDay=selected.day.toString()}) { Text("查看当日每次测量") }
+        else Column(Modifier.fillMaxWidth().testTag("daily-measurements"),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            val measurements=BodyTrend.measurements(selected.day,samples)
+            HorizontalDivider()
+            Text("当日测量（${measurements.size}）",style=MaterialTheme.typography.titleSmall)
+            measurements.forEach { sample ->
+                Row(Modifier.fillMaxWidth().semantics(mergeDescendants=true) {},horizontalArrangement=Arrangement.SpaceBetween) {
+                    Text(Instant.ofEpochMilli((sample.date*1000).toLong()).atZone(ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),style=MaterialTheme.typography.bodyMedium,color=labelColor)
+                    Text("${format(sample.value)} $unit",style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Medium)
+                }
+            }
+            TextButton(onClick={selectedDay=null}) { Text("收起详情") }
+        }
+    }
     if(inspectionControls) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
         val index=points.indexOf(selected)
         IconButton(enabled=index>0,onClick={selectedDay=points[index-1].day.toString()}) {Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft,"上一日测量")}
@@ -307,7 +322,7 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
 @Composable private fun MeasurementDetail(records:List<Record>,field:String,start:LocalDate,dismiss:()->Unit,detail:(Record)->Unit) {
     var period by rememberSaveable { mutableIntStateOf(0) }; var smooth by rememberSaveable { mutableStateOf(false) }
     val unit=if(field=="weight") "kg" else "%"
-    val matching=records.filter { it.type==RecordType.BODY && !it.json.isNull(field) && (if(field=="weight") RecordQuality.validWeight(it) else it.json.optDouble(field) in 1.0..80.0) }.filter {
+    val matching=records.filter { it.date<=now() && it.type==RecordType.BODY && !it.json.isNull(field) && (if(field=="weight") RecordQuality.validWeight(it) else it.json.optDouble(field) in 1.0..80.0) }.filter {
         val hour=Instant.ofEpochMilli((it.date*1000).toLong()).atZone(ZoneId.systemDefault()).hour
         when(period) { 1 -> hour in 5..11; 2 -> hour in 12..17; 3 -> hour in 18..23; 4 -> hour in 0..4; else -> true }
     }
@@ -317,7 +332,7 @@ internal fun signed(value:Double)=(if(value>=0) "+" else "")+String.format(java.
         item { Text("早上 05–12 时 · 下午 12–18 时 · 晚上 18–24 时 · 凌晨 00–05 时",style=MaterialTheme.typography.bodySmall) }
         item { Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Text("平滑趋势",modifier=Modifier.weight(1f));Switch(smooth,{smooth=it}) } }
         item { Text("筛选时段后重新计算；缺测不补零。平滑趋势仅供观察长期变化。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-        item { if(points.isEmpty()) Empty("此时段暂无测量","调整测量时段或添加记录") else Panel { TrendChart(points,unit,if(field=="weight") MaterialTheme.colorScheme.primary else Fat,smooth) } }
+        item { if(points.isEmpty()) Empty("此时段暂无测量","调整测量时段或添加记录") else Panel { TrendChart(points,unit,if(field=="weight") MaterialTheme.colorScheme.primary else Fat,smooth,samples=matching.map {BodyTrend.Sample(it.date,it.json.optDouble(field))}) } }
         item { Text("原始测量",style=MaterialTheme.typography.titleMedium) }
         items(matching.filter { it.date.day()>=start }.sortedByDescending { it.date },key={it.id}) { r -> TextButton(onClick={detail(r)}) { Text("${r.date.localText()} · ${format(r.json.optDouble(field))} $unit") } }
     }

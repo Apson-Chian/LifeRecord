@@ -324,6 +324,50 @@ class AppFlowTest {
         assertEquals("[]",app.store.get("conversations","[]"))
     }
 
+    @Test fun selectingWeightDayShowsEveryMeasurementOnOverviewAndFilteredDetail() {
+        fun selectWeightDay() {
+            val chart=compose.onNodeWithTag("measurement-chart-kg")
+            chart.performScrollTo()
+            val bar=compose.onNodeWithTag("glass-navigation").fetchSemanticsNode().boundsInRoot
+            if(chart.fetchSemanticsNode().boundsInRoot.bottom>bar.top) {
+                compose.onNode(hasScrollAction()).performTouchInput { swipeUp(startY=height*.8f,endY=height*.5f,durationMillis=200) }
+            }
+            chart.performTouchInput { click(center) }
+        }
+        scenario.close()
+        val day=java.time.LocalDate.now().minusDays(1)
+        val records=listOf(8 to 70.0,12 to 71.0,20 to 72.0).map { (hour,weight) ->
+            Record.create(RecordType.BODY,day.epochAt(java.time.LocalTime.of(hour,0))).apply {
+                json.put("weight",weight);json.put("bodyFat",20.0+hour*.1)
+            }
+        }
+        app.store.commit(Snapshot(records,defaultProfile(),emptyList()))
+        scenario=ActivityScenario.launch(MainActivity::class.java)
+        compose.onNodeWithTag("tab-1").performClick()
+        selectWeightDay()
+        compose.onNodeWithText("当日测量（3）").performScrollTo().assertIsDisplayed()
+        for(time in listOf("08:00","12:00","20:00")) compose.onNodeWithText(time).assertExists()
+        for(value in listOf("70 kg","71 kg","72 kg")) compose.onNodeWithText(value).assertExists()
+        expose("收起详情")
+        compose.onNodeWithText("08:00").assertIsDisplayed()
+        compose.onNodeWithText("20:00").assertIsDisplayed()
+        capture("weight-day-measurements")
+        compose.onNodeWithText("收起详情").performScrollTo().performClick()
+        compose.onNodeWithTag("daily-measurements").assertDoesNotExist()
+        compose.onAllNodesWithText("查看当日每次测量").onFirst().performScrollTo().performClick()
+        compose.onNodeWithText("当日测量（3）").assertExists()
+        compose.onNodeWithTag("weight-detail").performScrollTo().performClick()
+        compose.onNodeWithText("早上",useUnmergedTree=true).performClick()
+        compose.onNode(isToggleable()).performClick()
+        selectWeightDay()
+        compose.onNodeWithText("当日测量（1）").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("08:00").assertExists()
+        compose.onNodeWithText("70 kg").assertExists()
+        compose.onNodeWithText("12:00").assertDoesNotExist()
+        compose.onNodeWithText("20:00").assertDoesNotExist()
+        capture("weight-day-filtered-measurements")
+    }
+
     @Test fun measurementDetailFiltersPeriodAndRecalculatesSmoothTrend() {
         scenario.close()
         val records=(1L..8L).flatMap { offset ->

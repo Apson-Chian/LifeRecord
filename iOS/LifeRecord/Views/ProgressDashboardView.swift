@@ -218,12 +218,12 @@ struct ProgressDashboardView: View {
     private var weightChart: some View {
         InspectableTrendCard(title: "体重趋势", unit: "kg", tint: AppTheme.accent,
             points: dailyMetrics.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1)))) kg · \($0.count) 次测量") },
-            goal: settings.targetWeight, samples: bodyMetrics.map { .init(date: $0.date, value: $0.weight) }, cutoff: cutoff)
+            goal: settings.targetWeight, samples: bodyMetrics.filter { $0.date <= .now }.map { .init(date: $0.date, value: $0.weight) }, cutoff: cutoff)
     }
 
     private var bodyCompositionCard: some View {
         InspectableTrendCard(title: "体脂趋势", unit: "%", tint: AppTheme.fat,
-            points: bodyFatPoints.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1))))% · \($0.count) 次测量") }, samples: bodyMetrics.compactMap { metric in metric.bodyFat.flatMap { (1...80).contains($0) ? BodyTrend.Sample(date: metric.date, value: $0) : nil } }, cutoff: cutoff)
+            points: bodyFatPoints.map { TrendPoint(id: $0.date.description, date: $0.date, value: $0.value, note: "当日中位数 \($0.value.formatted(.number.precision(.fractionLength(1))))% · \($0.count) 次测量") }, samples: bodyMetrics.filter { $0.date <= .now }.compactMap { metric in metric.bodyFat.flatMap { (1...80).contains($0) ? BodyTrend.Sample(date: metric.date, value: $0) : nil } }, cutoff: cutoff)
     }
 
     private var measurementList: some View {
@@ -682,9 +682,29 @@ private struct InspectableTrendCard: View {
                             Text((bars ? selection ?? selected.date : selected.date).formatted(date: .abbreviated, time: .omitted)).font(.subheadline.weight(.medium))
                             if !hasSelectedData { Text("当天未记录餐食，不按零摄入计算。").font(.subheadline).foregroundStyle(.secondary) }
                             else if !selected.note.isEmpty { Text(selected.note).font(.subheadline).foregroundStyle(.secondary) }
+                            if let samples {
+                                let measurements = BodyTrend.measurements(on: selected.date, in: samples)
+                                Divider()
+                                Text("当日测量（\(measurements.count)）").font(.subheadline.weight(.medium))
+                                ForEach(Array(measurements.enumerated()), id: \.offset) { _, sample in
+                                    HStack {
+                                        Text(sample.date.formatted(date: .omitted, time: .shortened))
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        Text("\(sample.value.formatted(.number.precision(.fractionLength(1...2)))) \(unit)")
+                                            .fontWeight(.medium)
+                                    }
+                                    .font(.subheadline).monospacedDigit()
+                                    .accessibilityElement(children: .combine)
+                                }
+                            }
                             if let goal { Text("目标 \(goal.formatted()) \(unit)").font(.caption).foregroundStyle(.secondary) }
                             Button("收起详情") { selection = nil }.font(.caption)
                         }
+                    }
+                    if samples != nil && selection == nil {
+                        Button("查看当日每次测量") { selection = selected.date }
+                            .font(.subheadline)
                     }
                     HStack {
                         Text(bars ? "每日合计" : (smoothed ? "每日中位数 · 指数平滑" : "每日中位数"))
@@ -724,7 +744,7 @@ private struct TrendDetailView: View {
     @State private var smooth = false
 
     private var matching: [BodyTrend.Sample] {
-        (samples ?? []).filter { period.includes($0.date) }
+        (samples ?? []).filter { $0.date <= .now && $0.value.isFinite && $0.value > 0 && period.includes($0.date) }
     }
     private var visibleSamples: [BodyTrend.Sample] {
         matching.filter { cutoff == nil || $0.date >= cutoff! }.sorted { $0.date > $1.date }
@@ -753,7 +773,7 @@ private struct TrendDetailView: View {
                         }
                     }
                 }
-                InspectableTrendCard(title: smooth ? "平滑趋势" : title, unit: unit, tint: tint, points: displayed, goal: goal, bars: bars, isDetail: true, smoothed: smooth)
+                InspectableTrendCard(title: smooth ? "平滑趋势" : title, unit: unit, tint: tint, points: displayed, goal: goal, bars: bars, samples: samples == nil ? nil : visibleSamples, cutoff: cutoff, isDetail: true, smoothed: smooth)
                 GlassCard(tint: tint) {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(samples == nil ? "每日明细" : "原始测量").font(.headline)

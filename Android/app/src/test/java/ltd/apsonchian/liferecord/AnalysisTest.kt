@@ -28,6 +28,20 @@ class AnalysisTest {
             assertEquals(61.9,points.last().trend,1e-9)
         } finally { TimeZone.setDefault(before) }
     }
+    @Test fun inspectionPreservesEveryMeasurementAndUsesLocalDayBoundaries() {
+        val before=TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"))
+            val samples=listOf(BodyTrend.Sample(date("2026-10-02",0),73.0),BodyTrend.Sample(date("2026-10-01",23),72.0),
+                BodyTrend.Sample(date("2026-10-01",0),69.0),BodyTrend.Sample(date("2026-10-01",8),70.0),
+                BodyTrend.Sample(date("2026-10-01",8),70.5),BodyTrend.Sample(date("2026-10-01"),Double.NaN))
+            val measurements=BodyTrend.measurements(LocalDate.parse("2026-10-01"),samples)
+            assertEquals(listOf(69.0,70.0,70.5,72.0),measurements.map {it.value})
+            assertEquals(measurements.map {it.date}.sorted(),measurements.map {it.date})
+            assertTrue(BodyTrend.measurements(LocalDate.parse("2026-10-03"),samples).isEmpty())
+            assertEquals(4,BodyTrend.series(measurements).single().count)
+        } finally { TimeZone.setDefault(before) }
+    }
     @Test fun bodyChartFiltersDemoFutureAndInvalidWeightAndFat() {
         val records=listOf(body("2026-10-13",70.0),body("2026-10-15",72.0),body("2026-10-13",75.0).apply { json.put("isDemo",true) },body("2026-10-13",10.0))
         assertEquals(70.0,BodyTrend.records(records,"weight",at).single().value,0.0)

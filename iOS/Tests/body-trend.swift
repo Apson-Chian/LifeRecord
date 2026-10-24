@@ -34,6 +34,17 @@ struct BodyTrendChecks {
         }
         let morning = samples.filter { BodyTrend.Period.morning.includes($0.date, calendar: calendar) }
         assert(BodyTrend.series(morning, calendar: calendar)[0].value == 70)
+        // Inspection preserves every original measurement, in time order, including equal timestamps.
+        let inspectionSamples = [sample(1, 0, 73), sample(0, 23, 72), sample(0, 0, 69),
+                                 sample(0, 8, 70), sample(0, 8, 70.5), sample(0, 12, .nan), sample(0, 14, 0)]
+        let measurements = BodyTrend.measurements(on: sample(0, 15, 1).date, in: inspectionSamples, calendar: calendar)
+        assert(measurements.map(\.value) == [69, 70, 70.5, 72])
+        assert(measurements.map(\.date) == measurements.map(\.date).sorted())
+        assert(BodyTrend.measurements(on: sample(2, 0, 1).date, in: inspectionSamples, calendar: calendar).isEmpty)
+        let morningMeasurements = BodyTrend.measurements(on: start, in: inspectionSamples.filter {
+            BodyTrend.Period.morning.includes($0.date, calendar: calendar)
+        }, calendar: calendar)
+        assert(morningMeasurements.map(\.value) == [70, 70.5])
         print("BodyTrend: all checks passed")
     }
 }

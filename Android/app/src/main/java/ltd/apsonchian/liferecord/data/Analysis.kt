@@ -10,6 +10,9 @@ import org.json.JSONObject
 object BodyTrend {
     data class Sample(val date: Double, val value: Double)
     data class Point(val day: LocalDate, val value: Double, val trend: Double, val count: Int)
+    fun measurements(day: LocalDate, samples: List<Sample>): List<Sample> = samples.filter {
+        it.value.isFinite() && it.value > 0 && it.date.day() == day
+    }.sortedBy { it.date }
     fun series(samples: List<Sample>): List<Point> {
         val result = mutableListOf<Point>()
         samples.filter { it.value.isFinite() && it.value > 0 }.groupBy { it.date.day() }.toSortedMap().forEach { (day, entries) ->
@@ -21,10 +24,11 @@ object BodyTrend {
         }
         return result
     }
-    fun records(records: List<Record>, field: String, at: Double = now(), includeDemo: Boolean = false): List<Point> = series(records.filter {
+    fun recordSamples(records: List<Record>, field: String, at: Double = now(), includeDemo: Boolean = false): List<Sample> = records.filter {
         it.type == RecordType.BODY && (includeDemo || !it.demo) && it.date <= at && !it.json.isNull(field) &&
             (if(field == "weight") RecordQuality.validWeight(it) else it.json.optDouble(field) in 1.0..80.0)
-    }.map { Sample(it.date, it.json.optDouble(field)) })
+    }.map { Sample(it.date, it.json.optDouble(field)) }
+    fun records(records: List<Record>, field: String, at: Double = now(), includeDemo: Boolean = false): List<Point> = series(recordSamples(records, field, at, includeDemo))
 }
 
 /** Analysis produces versioned hints; confirmation never changes the source records. */

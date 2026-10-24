@@ -28,6 +28,11 @@ enum BodyTrend {
         var id: Date { date }
     }
 
+    static func measurements(on day: Date, in samples: [Sample], calendar: Calendar = .current) -> [Sample] {
+        samples.filter { $0.value.isFinite && $0.value > 0 && calendar.isDate($0.date, inSameDayAs: day) }
+            .sorted { $0.date < $1.date }
+    }
+
     static func series(_ samples: [Sample], calendar: Calendar = .current) -> [Point] {
         let groups = Dictionary(grouping: samples.filter { $0.value.isFinite && $0.value > 0 }) {
             calendar.startOfDay(for: $0.date)
