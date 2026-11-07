@@ -1,8 +1,10 @@
-默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载[beta.11](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.11)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
+默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载 [beta.12](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.12)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
 
 # LifeRecord Android
 
-Android 1.4.0-beta.11（2026-10-22）：重做透明、真实背景折射、高光与双层阴影，统一卡片、导航、教练输入区和弹层；Android 12 使用原生镜片带，Android 13+ 使用 AGSL，低内存和省电继续清晰回退。[发布与下载](../Docs/android-release-1.4-beta11.md) · [材质实现](../Docs/android-liquid-glass.md)。
+Android 1.4.0-beta.12（2026-11-07）精简教练指令，带图问答按本轮文字处理，身体趋势图可展开选中日期的每次测量。[发布与下载](../Docs/android-release-1.4-beta12.md)
+
+Android 1.4.0-beta.11 重做透明、背景折射、高光与双层阴影，统一卡片、导航、教练输入区和弹层。Android 12 使用原生镜片带，Android 13+ 使用 AGSL，低内存和省电时采用清晰的回退样式。[材质实现](../Docs/android-liquid-glass.md)
 
 Android 1.4.0-beta.10（2026-10-22）：目标历史每条记录支持编辑目标值、纠正普通记录生效日期；最初目标也能改数值，保存仅重算对应区间，同步防止旧快照恢复错误。[发布与下载](../Docs/android-release-1.4-beta10.md) · [功能和截图](../Docs/goal-history.md)。
 
@@ -65,7 +67,7 @@ python3 ../Tests/android-isolation.py app/build/outputs/apk/sandbox/app-sandbox.
 
 首页顺序、蓝紫主题、蛋白质/碳水/餐次配色、添加菜单、记录日历、餐次分组、照片入口、训练结束后编辑、默认收起的动作组数，以及「问 AI」先填草稿的操作已对齐 iOS。切换标签保留日期、滚动位置、趋势范围、搜索和未发送文字。详细变化与 GitHub 参考见[对齐记录](../Docs/android-ios-parity.md)。
 
-在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.11) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.11.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4/5/6/7/8/9/10 用户直接覆盖安装即可。**beta.3 及更早版本的签名不同，不能直接覆盖：先同步记录、导出备份并另外保留本机照片和对话，再卸载旧版安装。**JSON 导出目前没有安卓导入入口，恢复同步记录需使用原账号；详见[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。beta.4 后续更新使用固定证书。iOS 更新需要重新构建并安装 iOS App。
+在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.12) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.12.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4–11 用户可直接覆盖安装。beta.3 及更早版本需先同步记录、导出备份并另存本机照片和对话，再卸载旧版安装。恢复同步记录需使用原账号。[旧版本迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)
 
 照片识别、智能教练与周报需要联网并配置服务。预设和自定义接口的连接、密钥保存与常见错误见[接口设置](../Docs/api-settings.md)。
 

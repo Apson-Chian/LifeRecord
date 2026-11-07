@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用户管理 · LifeRecord</title>
+  <link rel="stylesheet" href="./admin.css?v=activity-1">
+  <script src="./admin.js?v=activity-1" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div><strong>LifeRecord</strong><span>管理控制台</span></div>
+    <button id="logout" type="button" hidden>退出登录</button>
+  </header>
+  <main>
+    <section id="login" class="panel login" hidden>
+      <p class="eyebrow">管理员入口</p>
+      <h1>用户管理</h1>
+      <p class="muted">使用独立的管理口令登录。</p>
+      <form id="login-form">
+        <label for="password">管理口令</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="primary" type="submit">登录</button>
+      </form>
+    </section>
+    <section id="workspace" hidden>
+      <p class="eyebrow">账号与访问权限</p>
+      <h1>用户管理</h1>
+      <p class="muted">管理 LifeRecord 账号及其登录会话。</p>
+      <div class="panel">
+        <form id="filters">
+          <label for="query">搜索账号
+            <input id="query" type="search" maxlength="100" placeholder="账号名、标签或用户 ID">
+          </label>
+          <label for="status">状态
+            <select id="status"><option value="all">全部</option><option value="active">正常</option><option value="disabled">已停用</option></select>
+          </label>
+          <button type="submit">搜索</button>
+        </form>
+        <div class="scroll" tabindex="0" role="region" aria-label="用户列表">
+          <table>
+            <thead><tr><th scope="col">账号</th><th scope="col">创建时间（上海）</th><th scope="col">状态</th><th scope="col">管理操作</th></tr></thead>
+            <tbody id="users"></tbody>
+          </table>
+        </div>
+        <nav class="pager" aria-label="用户列表分页">
+          <span id="count" aria-live="polite"></span>
+          <button id="previous" type="button">上一页</button>
+          <button id="next" type="button">下一页</button>
+        </nav>
+      </div>
+    </section>
+    <section id="activity" hidden aria-labelledby="activity-title">
+      <button id="activity-back" type="button">← 返回用户列表</button>
+      <h1 id="activity-title" tabindex="-1">用户活动</h1>
+      <p id="activity-account" class="muted"></p>
+      <p id="activity-status" role="status"></p>
+      <div id="activity-data" hidden>
+        <dl id="activity-summary" class="activity-summary"></dl>
+        <div class="panel">
+          <h2>最近活动</h2>
+          <p class="muted">显示功能上线后近 30 天内最新的 100 条活动，时间为上海时间。</p>
+          <div class="scroll" tabindex="0" role="region" aria-label="用户活动列表">
+            <table class="activity-table">
+              <thead><tr><th scope="col">时间</th><th scope="col">活动</th><th scope="col">客户端</th><th scope="col">结果</th></tr></thead>
+              <tbody id="activity-events"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+    <p id="notice" role="status" aria-live="polite"></p>
+  </main>
+  <dialog id="confirm">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-message"></p>
+      <div class="dialog-actions"><button value="cancel" autofocus>取消</button><button value="confirm" class="primary">确认</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

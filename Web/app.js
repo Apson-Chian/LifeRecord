@@ -88,7 +88,7 @@ async function api(path, options = {}) {
   const timeout = setTimeout(() => controller.abort(), path.startsWith('/ai/') ? 90000 : 20000);
   let response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {...options, credentials: 'same-origin', signal: controller.signal, headers: {'Content-Type': 'application/json', ...(options.headers || {})}});
+    response = await fetch(`${API_BASE}${path}`, {...options, credentials: 'same-origin', signal: controller.signal, headers: {'Content-Type': 'application/json', ...(options.headers || {}), 'X-LifeRecord-Client': 'web'}});
   } catch (error) {
     throw new Error(error.name === 'AbortError' ? '请求超时，请重试；尚未确认保存结果' : '网络连接失败，请检查连接后重试');
   } finally { clearTimeout(timeout); }

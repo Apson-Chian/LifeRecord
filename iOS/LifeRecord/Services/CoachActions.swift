@@ -75,12 +75,6 @@ enum CoachActionPolicy {
 
 /// Converts a validated agent action into the actual meal model used by the app.
 enum CoachMealRecorder {
-    static let instructions = """
-    用户描述已经吃下的食物并明确要求添加、记录或保存到餐食时，必须返回 add_meal，不能只用文字答应或仅提供营养建议。上一轮已描述食物、本轮说“帮我添加到餐食”也属于记录请求，应结合对话生成操作。
-    add_meal 必须包含 name、mealKind、calories、protein、carbs、fat、fiber、date；热量单位 kcal，营养单位 g，数值为整餐总量。来源 source 用“AI 估算”。用户没有提供精确营养时，应按已描述的食物和份量作合理估算，并在 note 说明依据和不确定性；份量未说明时可按常见一份估算并注明，不应因缺少精确克数或营养值就拒绝记录。完全不知道吃了什么时先询问。
-    餐食未指定时间时使用当前本地时间；指定昨天、午餐等信息时保留对应日期与餐次，不要因缺少精确时分而拒绝新增餐食。仅咨询、计划吃、否认吃过或明确不要记录时，不能新增。answer 只能说明估算或待执行内容，不能声称已保存，实际保存回执由 App 生成。
-    """
-
     @MainActor
     static func makeMeal(from action: AIAgentAction, id: UUID = UUID(), date: Date,
                          photoIDs: [String] = [], inputText: String, conversationID: UUID) -> MealEntry? {

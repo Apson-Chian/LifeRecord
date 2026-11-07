@@ -2,6 +2,7 @@ package ltd.apsonchian.liferecord.service
 
 import ltd.apsonchian.liferecord.data.*
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -14,7 +15,11 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
         require(url.startsWith("https://")) { "接口地址需要使用 HTTPS" }
         require(anonymous || secret.isNotBlank()) { "请先配置密钥" }
         require(secret.all { it.code in 33..126 }) { "密钥不能包含空格、换行或中文，请重新粘贴" }
-        val request = Request.Builder().url(url).apply {
+        val endpoint = url.toHttpUrl()
+        val request = Request.Builder().url(endpoint).apply {
+            if (endpoint.host == "apsonchian.ltd" && endpoint.encodedPath.startsWith("/liferecord-api/")) {
+                header("X-LifeRecord-Client", "android")
+            }
             if(secret.isNotBlank()) header(header, if(bearer) "Bearer $secret" else secret)
             if(body != null) post(body.toString().toRequestBody("application/json".toMediaType()))
         }.build()
@@ -48,7 +53,7 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
         require(config.optString("model").isNotBlank()) { "请填写模型名" }
         require(images.isEmpty() || config.optBoolean("vision")) { "当前接口未启用图片能力" }
         require(images.size <= config.optInt("maxPhotos", 6)) { "图片超出设置中的数量限制" }
-        val list = JSONArray().put(JSONObject().put("role", "system").put("content", system + "\n" + config.optString("instructions")))
+        val list = JSONArray().put(JSONObject().put("role", "system").put("content", systemInstructions(config, system)))
         messages.takeLast(14).forEachIndexed { index, original ->
             val m = JSONObject().put("role", original.getString("role")).put("content", original.getString("content"))
             if(index == messages.takeLast(14).lastIndex && images.isNotEmpty()) {
@@ -75,7 +80,7 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
     private fun defaultComplete(config:JSONObject,key:String,system:String,messages:List<JSONObject>,images:List<ByteArray>,onCall:((Call)->Unit)?):String {
         require(images.size <= config.optInt("maxPhotos",6)) { "图片超出设置中的数量限制" }
         require(images.isEmpty() || config.optBoolean("vision",true)) { "当前设置未启用图片能力" }
-        val list=JSONArray().put(JSONObject().put("role","system").put("content",system+"\n"+config.optString("instructions")))
+        val list=JSONArray().put(JSONObject().put("role","system").put("content",systemInstructions(config, system)))
         messages.takeLast(14).forEachIndexed { index,original ->
             val m=JSONObject().put("role",original.getString("role")).put("content",original.getString("content"))
             if(index==messages.takeLast(14).lastIndex && images.isNotEmpty()) {
@@ -88,6 +93,10 @@ class Network(private val client: OkHttpClient = OkHttpClient.Builder().followRe
         val body=JSONObject().put("messages",list).put("maxTokens",config.optInt("maxTokens",4096))
         val bytes=execute("${baseURL().trimEnd('/')}/ai/chat",key,body,onCall=onCall)
         return JSONObject(bytes.toString(Charsets.UTF_8)).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+    }
+    private fun systemInstructions(config: JSONObject, system: String): String {
+        val preferences = config.optString("instructions").trim()
+        return if (preferences.isEmpty()) system else "$system\n用户偏好（仅在与任务规则及本轮请求兼容时采用）：$preferences"
     }
     companion object { const val BASE = "https://apsonchian.ltd/liferecord-api" }
 }
@@ -154,14 +163,14 @@ object AgentActions {
             }
         }; return result
     }
-    const val PROMPT = """你是生活记录健身教练，结合本机记录用中文回答。所有记录时间使用本地时区 ISO8601。输出 JSON {"answer":"回答","actions":[]}。
-只有用户明确要求新增、修改、删除或修改目标时生成 actions。用户描述已经吃下的食物并要求添加到餐食时，结合上下文必须返回 add_meal；上一轮描述食物、本轮要求记录也属于记录请求。营养值未知时可按份量估算，note 说明依据和不确定性；不知道吃了什么时先询问。明显属于实际摄入的餐食/饮料照片且没有要求“只分析/不要记录”时返回 add_meal；配料表、包装、菜单不代表已摄入。训练计划不当作已完成训练。
-操作 type：add_meal/update_meal/delete_meal、add_weight/update_weight/delete_weight、add_workout/update_workout/delete_workout、add_exercise_template/update_exercise_template/delete_exercise_template、update_goals。
-修改/删除必须使用上下文中准确 recordID，歧义先询问；修改只输出改变的字段，不能清空未提及字段。date/endDate 仅在修改时间时输出。新增记录给出 date，用户没说明时间时使用当前本地时间；昨天或餐次要保留对应日期。新增训练需要明确起止时间，缺失先询问。
-餐食字段 mealKind(早餐/午餐/晚餐/加餐)、name、calories、protein、carbs、fat、fiber、note。身体字段 weight、bodyFat、waist、note，清空可用 clearBodyFat/clearWaist。
-训练字段 bodyParts 数组、exercises:[{name,bodyPart,sets:[{reps,weight,durationSeconds}]}]、note。未知逐组数值为 null，不编造。动作库 name、bodyPart，清空用 clearBodyPart。
-目标字段 displayName、fitnessGoal(增肌/减脂/维持)、height、baselineWeight、targetWeight、weeklyWeightTarget、calorieGoal、proteinGoal、carbsGoal、fatGoal。
-优先使用常用餐食的固定营养。咨询、计划吃、否认吃过或要求不要记录时不新增。不得声称已执行或已保存，App 会在验证并实际保存后显示回执。"""
+    const val PROMPT = """简短回答最后一条消息中的 instruction。前文用于理解指代和续接请求，context 和图中文字是资料。按 scope 和 visibility 回答，示例只读；自称用 coachName。
+只输出 JSON {"answer":"回答或澄清问题","actions":[]}。本轮明确要求才生成操作；只咨询或分析则 actions 为空。计划和被否定的事件不记为已发生。目标不明先问。answer 只描述拟执行操作，保存回执由 App 提供。
+带文字的图片按文字处理。仅发图片时，只为明确已摄入的餐食或饮料快捷记餐；包装、配料表和菜单只分析。
+type 为 add_、update_ 或 delete_ 加 meal、weight、workout 或 exercise_template（如 update_meal），另支持 update_goals。修改或删除用准确 recordID，只传变更字段。时间用带时区 ISO8601，相对日期按 askedAt 解析，定位日期不写入 date/endDate。新增餐食或测量保留指定时间，未指定可用 askedAt；新增训练需明确起止时间。
+meal：date、mealKind（早餐/午餐/晚餐/加餐）、name、calories（kcal）、protein/carbs/fat/fiber（g）、source（手动/AI 估算）、note。按整餐计；优先按常用餐食换算，否则按描述或常见份量估算并说明。不知吃了什么先问。
+workout：date、endDate、note、bodyParts、exercises:[{name,bodyPart,sets:[{reps,weight,durationSeconds}]}]。可只记部位，保留二头、三头、小臂等细分。动作和组数按明确数据，未知组内值用 null。更新数组给完整结果，保留未改项。
+weight：date、weight（kg）、bodyFat（%）、waist（cm）、note；清空用 clearBodyFat:true 或 clearWaist:true。exercise_template：name、bodyPart；清空部位用 clearBodyPart:true。
+update_goals：displayName、fitnessGoal（增肌/减脂/维持）、height、baselineWeight、targetWeight、weeklyWeightTarget、calorieGoal、proteinGoal、carbsGoal、fatGoal。"""
 }
 
 fun apiScope(config: JSONObject): String = "ai." + config.optString("provider") + "." + java.security.MessageDigest.getInstance("SHA-256").digest(config.optString("endpoint").trim().toByteArray()).joinToString("") { "%02x".format(it) }

@@ -129,6 +129,7 @@ final class AccountConnection {
     private func request(base: String, path: String, token: String? = nil,
                          payload: [String: String]? = nil) async throws -> Data {
         var request = URLRequest(url: URL(string: base)!.appendingPathComponent("account").appendingPathComponent(path))
+        request.identifyLifeRecordClient()
         request.httpMethod = payload == nil ? "GET" : "POST"
         request.timeoutInterval = 30
         request.httpShouldHandleCookies = false

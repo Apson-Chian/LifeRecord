@@ -35,4 +35,5 @@ with server.connect() as db:
     else:
         db.execute('UPDATE users SET disabled=1 WHERE id=?',(args.user_id,))
         db.execute('DELETE FROM sessions WHERE user_id=?',(args.user_id,))
+        db.execute('DELETE FROM admin_account_suspensions WHERE user_id=?',(args.user_id,))
         print('访问已撤销；数据库内容保留供备份/恢复。')

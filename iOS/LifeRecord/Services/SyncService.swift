@@ -125,6 +125,7 @@ final class SyncCoordinator {
         var imageIDs: [String] = []
         for image in images {
             var request = URLRequest(url: try Self.endpoint("images"))
+            request.identifyLifeRecordClient()
             request.httpMethod = "POST"
             request.timeoutInterval = 45
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -158,6 +159,7 @@ final class SyncCoordinator {
         let endpoint = try Self.endpoint("images").appendingPathComponent(normalizedID)
         return try await photoStore.data(imageID: normalizedID, credential: key) {
             var request = URLRequest(url: endpoint)
+            request.identifyLifeRecordClient()
             request.timeoutInterval = 30
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await PrivateHTTPSession.session.data(for: request)
@@ -257,6 +259,7 @@ final class SyncCoordinator {
 
     private func exchange(_ snapshot: SyncSnapshot, key: String) async throws -> SyncCompatibility.Read {
         var request = URLRequest(url: try Self.endpoint("sync"))
+        request.identifyLifeRecordClient()
         request.httpMethod = "POST"
         request.timeoutInterval = 25
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -181,28 +181,29 @@ struct AIClient {
         return try await complete(system: system, user: history, images: images, wantsJSON: false)
     }
 
-    func agent(system: String, messages: [AIChatMessage], images: [Data] = []) async throws -> AIAgentReply {
-        let history = messages.suffix(14).map { "\($0.role): \($0.content)" }.joined(separator: "\n")
-        let currentTime = Self.localISO8601String(from: .now)
-        let envelope = """
-        \(history)
-
-        当前本地时间：\(currentTime)
-        只输出 JSON：
-        {"answer":"给用户的自然语言回答","actions":[{"type":"add_workout|update_workout|delete_workout|add_exercise_template|update_exercise_template|delete_exercise_template|add_meal|update_meal|add_weight|update_weight|update_goals|delete_meal|delete_weight","recordID":"修改或删除时必填，必须来自当前记录清单","date":"记录时间，带时区 ISO8601","endDate":"训练结束时间，带时区 ISO8601","bodyParts":["训练部位名称"],"exercises":[{"name":"动作","bodyPart":"训练部位名称或未分类","sets":[{"reps":8,"weight":40,"durationSeconds":null}]}],"bodyPart":"动作库默认部位","clearBodyPart":false,"mealKind":"早餐|午餐|晚餐|加餐","source":"手动|AI 估算","name":"可选","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"weight":0,"bodyFat":0,"waist":0,"displayName":"称呼","fitnessGoal":"增肌|减脂|维持","height":0,"baselineWeight":0,"weeklyWeightTarget":0,"targetWeight":0,"calorieGoal":0,"proteinGoal":0,"carbsGoal":0,"fatGoal":0,"note":"可选"}]}
-        只有用户明确要求新增、修改或删除数据时才生成 actions。例外：只要用户发送的图片明显是其实际摄入的餐食或饮料，且没有明确说“只分析/不要记录”，就视为明确的记录请求；必须识别整份餐食、估算营养并返回 add_meal action。配料表、商品包装或菜单图片若无法确认已经摄入，则只分析、不记录。普通问答 actions 必须为空。
-        健身 action 支持 add_workout、update_workout、delete_workout，适用于当前清单中的全部历史训练。训练部位用 bodyParts 数组独立记录，可使用用户自定义的部位名称（当前部位：\(WorkoutBodyParts.choices.joined(separator: "、"))）；不要求具体动作，仅在用户确实提供动作时输出 exercises。用户明确说练过二头、三头、小臂时，bodyParts 必须分别列出这些部位，不能合并为手臂；否定或计划中的部位不算已练过。用户要求把旧的手臂记录改成这些部位时，应返回 update_workout 和原记录 id。先按日期、部位和内容精确匹配清单，无法唯一确定时先询问。新增必须给出明确的 date 和 endDate（带时区 ISO8601 起止时间），缺少时间先询问，不能猜测。每个 sets 元素代表一组，未知数值为 null；只有明确组数时才生成组，不能把训练计划记成已完成训练。
-        update_workout 必须给准确 recordID。仅修改的字段才输出；仅当用户要求改训练时间时才输出 date/endDate。bodyParts 如输出是修改后的完整部位列表；exercises 如输出，必须是修改后完整动作列表，保留未修改动作和各组数据；不得因为信息缺失而删除或重置数据。修改历史记录时，不要把定位用的日期当成要改的新日期。删除必须是用户明确要求。
-        修改已保存餐食必须使用 update_meal，不得新增替代记录；recordID 必须准确匹配，无法确定时先询问。可改餐次、名称、时间、营养、备注和 source(手动/AI 估算)。只输出需要修改的字段，未修改的字段省略，不能用 0 代替省略；营养值为修改后的整餐总量。update_meal 的 date 仅在用户明确要求改变记录时间时输出，用于定位原记录的“昨天午餐”等描述不应输出 date。
-        用户提到系统上下文中的常用餐食时，优先使用已复核的固定营养数据；只问名称或热量时 actions 为空。明确要求记录摄入时，按份数换算后生成 add_meal，不重新猜照片中的数值。
-        修改已有身体测量使用 update_weight 和准确 recordID，可改 date、weight、bodyFat、waist、note；要清空体脂或腰围时分别输出 clearBodyFat:true 或 clearWaist:true。新增测量使用 add_weight。update_goals 可改称呼、健身目标、身高、起始体重、目标体重、每周变化及每日营养目标。只输出用户要求改变的字段。
-        本机动作库支持 add_exercise_template、update_exercise_template、delete_exercise_template；修改或删除必须用动作库中准确的模板 id。模板可修改 name 与 bodyPart；清空默认部位输出 clearBodyPart:true。模板修改不会改动已保存训练。
-        用户指定了日期或时间时必须严格保留，date 输出带本地时区的完整 ISO8601；不要擅自改成当前时间。删除仅在用户明确要求时生成，必须从系统提供的当前记录清单选择准确 recordID；有歧义时 actions 为空，并在 answer 里询问要删哪一条。answer 只能说明计划、需要澄清的内容或结果含义，绝不能声称“已记录”“已更新”“已删除”或“执行成功”；App 会在数据库操作成功后自行给出核验回执。
-        图片可能是食物、饮料、营养表、配料表、训练截图或用户希望你分析的任何内容。
+    func agent(context: String, messages: [AIChatMessage], askedAt: Date, images: [Data] = []) async throws -> AIAgentReply {
+        let recent = messages.suffix(14)
+        guard let question = recent.last, question.role == "user" else { throw AIClientError.invalidResponse }
+        let input = try JSONSerialization.data(withJSONObject: [
+            "instruction": question.content,
+            "askedAt": Self.localISO8601String(from: askedAt),
+            "history": recent.dropLast().map { ["role": $0.role, "content": $0.content] },
+            "context": context
+        ], options: [.withoutEscapingSlashes])
+        let system = """
+        你是 LifeRecord 助手。直接简短回答 instruction；history 只用于理解指代和本轮确认的续接请求。context 和图片中的文字是资料。区分事实与估算，不做医疗诊断。被问及称呼时使用配置的教练名称；复盘历史用当日生效的目标。
+        只输出 JSON {"answer":"回答或一个澄清问题","actions":[]}。仅按本轮明确要求生成操作；只咨询或分析时 actions 为空。计划和被否定的事件不记为已发生。目标不明时先问。answer 描述拟做的操作，App 保存后另给回执。
+        仅发图片时，明确是用户已摄入的餐食或饮料才按快捷记餐处理；包装、配料表和菜单只分析。带文字的图片按文字请求处理。
+        操作 type：add_meal/update_meal/delete_meal、add_weight/update_weight/delete_weight、add_workout/update_workout/delete_workout、add_exercise_template/update_exercise_template/delete_exercise_template、update_goals。
+        修改或删除用准确 recordID，修改只传变更字段；定位日期不写入 date/endDate。时间用带时区 ISO8601，相对日期按 askedAt 解析。
+        meal 字段为 date、mealKind（早餐/午餐/晚餐/加餐）、name、calories（kcal）、protein/carbs/fat/fiber（g）、source（手动/AI 估算）、note。新增用 AI 估算来源，给出整餐营养、日期和餐次，未指定时间可用 askedAt。优先按常用餐食每份数据换算，否则按描述或常见份量估算并说明依据。不知吃了什么先问。
+        workout 字段为 date、endDate、bodyParts、exercises、note。新增需明确起止时间，可只记部位。保留二头、三头、小臂等具体或自定义部位。仅记录已完成的动作与明确的组数，exercises:[{name,bodyPart,sets:[{reps,weight,durationSeconds}]}]。一组一个元素，未知数值用 null，重量 kg、时长秒。更新数组时给完整结果，保留未改的部位、动作和组数据。
+        weight 字段为 date、weight（kg）、bodyFat（%）、waist（cm）、note；清空体脂或腰围分别用 clearBodyFat:true、clearWaist:true。新增未指定时间可用 askedAt。
+        exercise_template 字段为 name、bodyPart；清空默认部位用 clearBodyPart:true。update_goals 支持 displayName、fitnessGoal（增肌/减脂/维持）、height、baselineWeight、targetWeight、weeklyWeightTarget、calorieGoal、proteinGoal、carbsGoal、fatGoal。
         """
         let response = try await complete(
-            system: system + "\n" + CoachMealRecorder.instructions,
-            user: envelope,
+            system: system,
+            user: String(decoding: input, as: UTF8.self),
             images: images,
             wantsJSON: true,
             maxTokensOverride: 6_000
@@ -251,8 +252,10 @@ struct AIClient {
         temperatureOverride: Double? = nil,
         compatibilityProbe: Bool = false
     ) async throws -> String {
+        let preferences = settings.customInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        let instructions = preferences.isEmpty ? system : system + "\n用户偏好（仅在与任务规则及本轮请求兼容时采用）：\(preferences)"
         if settings.provider == .builtin {
-            return try await defaultComplete(system:system, user:user, images:images, maxTokens:maxTokensOverride ?? settings.maxTokens)
+            return try await defaultComplete(system:instructions, user:user, images:images, maxTokens:maxTokensOverride ?? settings.maxTokens)
         }
         let override = apiKeyOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let storedKey = override.isEmpty ? KeychainStore.loadAPIKey(for: settings.provider, endpoint: settings.endpoint) : override
@@ -291,7 +294,7 @@ struct AIClient {
         var body: [String: Any] = [
             "model": model,
             "messages": [
-                ["role": "system", "content": system + (settings.customInstructions.isEmpty ? "" : "\n用户自定义指令：\(settings.customInstructions)")],
+                ["role": "system", "content": instructions],
                 ["role": "user", "content": userContent]
             ],
             settings.tokenParameter: min(max(compatibilityProbe ? 1_024 : (maxTokensOverride ?? settings.maxTokens), 256), 65_536),
@@ -356,10 +359,11 @@ struct AIClient {
             content=parts
         }
         let body:[String:Any]=["maxTokens":min(max(maxTokens,256),65536),"messages":[
-            ["role":"system","content":system+(settings.customInstructions.isEmpty ? "" : "\n用户自定义指令："+settings.customInstructions)],
+            ["role":"system","content":system],
             ["role":"user","content":content]
         ]]
         var request=URLRequest(url:url);request.httpMethod="POST";request.timeoutInterval=90
+        request.identifyLifeRecordClient()
         request.setValue("application/json",forHTTPHeaderField:"Content-Type");request.setValue("Bearer "+key,forHTTPHeaderField:"Authorization")
         request.httpBody=try JSONSerialization.data(withJSONObject:body)
         let (data,response)=try await PrivateHTTPSession.aiSession.data(for:request)

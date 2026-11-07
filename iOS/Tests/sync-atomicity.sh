@@ -23,6 +23,6 @@ xcrun swiftc -module-cache-path "$test_directory/cache" \
   LifeRecord/Services/GoalHistory.swift LifeRecord/Services/AppSettings.swift LifeRecord/Services/RecordInput.swift \
   LifeRecord/Services/AIAuthentication.swift LifeRecord/Services/MealPhotoStore.swift \
   LifeRecord/Services/SyncFailureDescription.swift LifeRecord/Services/SyncModels.swift \
-  LifeRecord/Services/SyncCompatibility.swift "$test_directory/SyncService.swift" \
+  LifeRecord/Services/SyncCompatibility.swift LifeRecord/Services/LifeRecordClient.swift "$test_directory/SyncService.swift" \
   Tests/sync-atomicity.swift -o "$test_directory/check"
 "$test_directory/check"

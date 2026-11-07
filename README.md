@@ -55,7 +55,7 @@ Android 预览使用示例或合成记录。[beta.11 液态玻璃与两版系统
 
 | 平台 | 使用方式 |
 | --- | --- |
-| Android 8.0+ | [下载 beta.11](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.11) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
+| Android 8.0+ | [下载 beta.12](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.12) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
 | iOS 17+ | 使用 Xcode 构建 [iOS 工程](iOS/README.md)，目前尚未提供 TestFlight 下载 |
 | Web | [网页体验](https://apsonchian.ltd/liferecord-default/) |
 
@@ -63,7 +63,7 @@ Android 预览使用示例或合成记录。[beta.11 液态玻璃与两版系统
 
 首次使用可以直接从空白记录开始，填写自己的目标；照片识别和智能教练需要联网并配置服务。当前 iOS 源码、Android 和网页支持用户自行注册账号密码，无需管理员分配；旧同步密钥继续兼容。Android 账号客户端已包含在 beta.6，iOS 需安装新源码构建；账号后端已于 2026-10-20 部署并通过公网验收；旧密钥继续兼容。[账号与同步说明](Docs/public-beta.md)
 
-**版本升级**：beta.11 可直接覆盖 beta.4/5/6/7/8/9/10，保留本机数据；beta.3 及更早版本需先核对同步记录、另存本机内容，再卸载重装，本机对话和部分照片不参与同步。[本版更新说明](Docs/android-release-1.4-beta11.md) · [旧版本迁移](Docs/android-release-1.4-beta4.md#签名与发布状态)
+**版本升级**：beta.12 可直接覆盖 beta.4–11，保留本机数据；beta.3 及更早版本需先核对同步记录、另存本机内容，再卸载重装，本机对话和部分照片不参与同步。[本版更新说明](Docs/android-release-1.4-beta12.md) · [旧版本迁移](Docs/android-release-1.4-beta4.md#签名与发布状态)
 
 ## 技术与目录
 
@@ -95,3 +95,13 @@ iOS：使用 Xcode 打开 `iOS/LifeRecord.xcodeproj`，选择模拟器运行；�
 手机端记录保存在本机，接口与同步密钥使用系统安全存储。开启同步后，参与同步的记录与餐食照片会上传到所配置的服务器；使用智能功能时，相关文字、记录和所选图片会发送到配置的 AI 服务。聊天附件、常用餐食照片等本机内容并不全部参与同步或导出，卸载前应另行保留。
 
 项目用于日常记录与复盘，营养估算和教练建议仅供参考。
+
+### 用户管理
+
+在生产域名的 `/liferecord-api/user-admin/` 提供独立的用户后台。配置 `LIFERECORD_ADMIN_PASSWORD_FILE` 后启用，文件需对同步服务可读，内容应为独立随机管理口令（例如 32 字节随机生成的口令）。后台登录会话一小时到期，走 HTTPS 和同源认证。
+
+管理页支持按账号名、标签或 ID 搜索，按状态筛选，停用、恢复和撤销账号会话。停用会保留用户记录、阻止登录与同步，并撤销已签发的登录会话。恢复账号后可重新登录，原有独立同步密钥重新可用。已注销账号及通过命令行撤销的账号不支持在网页恢复。原有私人档案受保护。管理页只显示账号元数据，不显示记录、图片和凭据。
+
+部署时将 `Backend/user_admin.py` 和 `Backend/user_admin/` 随同步服务安装，重启服务以创建新增表并加载管理口令。测试使用临时数据库，运行 `python3 Tests/user-admin.py`。
+
+用户列表的「活动」显示现有记录数量、最近记录更新、图片上传及默认 AI 用量。登录、注册、同步、图片上传、AI 对话和 AI 规划从功能上线起记录，活动页最多显示近 30 天内最新 100 条。活动只保存账号、时间、操作分类、客户端标签和 HTTP 状态。无客户端标签时显示「未知」。账号注销时清除活动历史。
