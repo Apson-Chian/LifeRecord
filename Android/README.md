@@ -1,6 +1,13 @@
-默认 AI 服务已并入 `main`，新安装连接自己的同步账号即可使用，也支持自定义接口。当前可下载 [beta.12](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.12)。**新签名不能覆盖 beta.3，安装前请阅读[迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。**
-
 # LifeRecord Android
+
+**[直接下载最新 APK · 1.4.0-beta.13](https://github.com/Apson-Chian/LifeRecord/releases/download/android-v1.4.0-beta.13/LifeRecord-Android-1.4.0-beta.13.apk)** · [Release 与校验文件](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.13) · [本版说明](../Docs/android-release-1.4-beta13.md)
+
+2026-11-12 · build 17 · Android 8.0+。基于当前源码构建，延续 beta.12 的教练指令、身体趋势与测量明细。仓库本次新增的多 API Key 持久化与玻璃控件改动位于网页端；Android 已有的密钥存储保持原有行为。
+
+新安装连接自己的同步账号即可使用默认 AI 服务，也支持自定义接口。beta.4–12 可直接覆盖升级；beta.3 及更早版本请先阅读[签名迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)。
+
+<details>
+<summary>历史版本与功能说明</summary>
 
 Android 1.4.0-beta.12（2026-11-07）精简教练指令，带图问答按本轮文字处理，身体趋势图可展开选中日期的每次测量。[发布与下载](../Docs/android-release-1.4-beta12.md)
 
@@ -17,6 +24,8 @@ Android 1.4.0-beta.7（2026-10-21）：编辑草稿恢复、餐盘/营养成分�
 「设置 → 账号与同步」支持：用户自主注册、账号密码登录及密码修改，管理员无需分配账号，保留原同步密钥兼容；首页、周历、设置和深浅色视觉已调整。[使用与部署说明](../Docs/account-password.md)。账号与界面更新已包含在 beta.6 客户端；线上账号后端已于 2026-10-20 部署；自部署服务器需升级对应后端，旧密钥连接继续兼容。
 
 Android 1.4.0-beta.6：重做首次导览，补齐 30 天示例、训练与身体图表，并合入账号和数据兼容更新。[更新与验证](../Docs/android-release-1.4-beta6.md)。beta.4/5 可直接覆盖升级；beta.3 及更早版本需先迁移再重装。
+
+</details>
 
 设备测试现仅针对独立 `sandbox` 构建，包名 `ltd.apsonchian.liferecord.instrumented`。不要安装普通 Debug/Release 包来执行设备测试，也不要复用真实账号或已有个人数据的设备。使用新建的一次性模拟器：
 
@@ -67,7 +76,7 @@ python3 ../Tests/android-isolation.py app/build/outputs/apk/sandbox/app-sandbox.
 
 首页顺序、蓝紫主题、蛋白质/碳水/餐次配色、添加菜单、记录日历、餐次分组、照片入口、训练结束后编辑、默认收起的动作组数，以及「问 AI」先填草稿的操作已对齐 iOS。切换标签保留日期、滚动位置、趋势范围、搜索和未发送文字。详细变化与 GitHub 参考见[对齐记录](../Docs/android-ios-parity.md)。
 
-在 [Releases](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.12) 的 Assets 下载 `LifeRecord-Android-1.4.0-beta.12.apk`，在安卓文件管理器中打开并按系统提示安装。beta.4–11 用户可直接覆盖安装。beta.3 及更早版本需先同步记录、导出备份并另存本机照片和对话，再卸载旧版安装。恢复同步记录需使用原账号。[旧版本迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)
+[直接下载 `LifeRecord-Android-1.4.0-beta.13.apk`](https://github.com/Apson-Chian/LifeRecord/releases/download/android-v1.4.0-beta.13/LifeRecord-Android-1.4.0-beta.13.apk)，在安卓文件管理器中打开并按系统提示安装。beta.4–12 用户可直接覆盖安装。beta.3 及更早版本需先同步记录、导出备份并另存本机照片和对话，再卸载旧版安装。恢复同步记录需使用原账号。[旧版本迁移说明](../Docs/android-release-1.4-beta4.md#签名与发布状态)
 
 照片识别、智能教练与周报需要联网并配置服务。预设和自定义接口的连接、密钥保存与常见错误见[接口设置](../Docs/api-settings.md)。
 

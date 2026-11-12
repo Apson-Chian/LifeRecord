@@ -1,0 +1,306 @@
+:root {
+  --glass-curve: cubic-bezier(.23, 1, .32, 1);
+  --glass-down: 175ms;
+  --glass-up: 250ms;
+  --glass-press-filter: blur(1.5px) saturate(125%);
+  --glass-glint: rgba(255, 255, 255, .58);
+  --glass-pressed-rim: inset 0 1px 1px rgba(255, 255, 255, .48), inset 0 -1px 1px rgba(37, 62, 122, .16), 0 4px 10px rgba(37, 62, 122, .12);
+  --glass-button-scale: scale(1.045, .94);
+  --glass-switch-scale: scale(1.18, .94);
+  --glass-slider-rest: scale(1.14, .72);
+  --glass-slider-down: scale(1.58, 1.04);
+  --glass-neutral: #f9fbff;
+  --glass-soft: #e9efff;
+  --glass-neutral-hover: #edf2fc;
+  --glass-primary: #3d58c8;
+  --glass-primary-hover: #344db7;
+  --glass-rail: #ccd6ea;
+  --glass-rail-on: #4563db;
+  --glass-thumb: #fbfdff;
+  --glass-thumb-clear: rgba(244, 250, 255, .28);
+  --glass-rim: rgba(55, 75, 119, .16);
+}
+
+:root[data-mode="dark"] {
+  --glass-glint: rgba(202, 219, 255, .26);
+  --glass-pressed-rim: inset 0 1px 1px rgba(221, 231, 255, .28), inset 0 -1px 1px rgba(12, 17, 30, .34), 0 4px 10px rgba(0, 0, 0, .28);
+  --glass-neutral: #272e40;
+  --glass-soft: #303d61;
+  --glass-neutral-hover: #354467;
+  --glass-primary: #465ed1;
+  --glass-primary-hover: #3d55c3;
+  --glass-rail: #495670;
+  --glass-rail-on: #607bea;
+  --glass-thumb: #eef3ff;
+  --glass-thumb-clear: rgba(220, 234, 255, .26);
+  --glass-rim: rgba(184, 204, 255, .24);
+}
+
+/* Only the painted face moves. Text, focus outlines and hit areas stay fixed. */
+:root button:is(.primary-button, .secondary-button, .toolbar-button, .toolbar-icon, .date-button, .icon-button) {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 999px;
+  transform: none;
+  --glass-button-fill: var(--glass-neutral);
+}
+
+:root button.primary-button { --glass-button-fill: var(--glass-primary); color: white; }
+:root button.secondary-button { --glass-button-fill: var(--glass-soft); }
+:root[data-mode="dark"] button:is(.primary-button, .secondary-button, .toolbar-button, .toolbar-icon, .date-button, .icon-button) {
+  background: transparent;
+  border-color: transparent;
+}
+
+:is(.primary-button, .secondary-button, .toolbar-button, .toolbar-icon, .date-button, .icon-button)::before,
+.glass-segment > span::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background-color: var(--glass-button-fill);
+  box-shadow: inset 0 0 0 1px var(--glass-rim);
+  transition: transform var(--glass-up) var(--glass-curve), box-shadow var(--glass-up) var(--glass-curve), background-color var(--glass-up) var(--glass-curve);
+}
+
+@media (hover: hover) {
+  :root button.primary-button:hover:not(:disabled) { --glass-button-fill: var(--glass-primary-hover); }
+  button:is(.secondary-button, .toolbar-button, .toolbar-icon, .date-button, .icon-button):hover:not(:disabled) { --glass-button-fill: var(--glass-neutral-hover); }
+  .glass-segment:hover { --glass-button-fill: var(--glass-neutral-hover); }
+}
+
+button:is(.primary-button, .secondary-button, .toolbar-button, .toolbar-icon, .date-button, .icon-button)[data-pressed]:not(:disabled)::before,
+.glass-segment[data-pressed] > span::before {
+  transform: var(--glass-button-scale);
+  background-image: linear-gradient(155deg, var(--glass-glint), transparent 56%);
+  box-shadow: var(--glass-pressed-rim);
+  transition-duration: var(--glass-down);
+}
+
+.trends-section > .section-heading { flex-wrap: wrap; }
+.glass-segments {
+  display: flex;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--glass-rim);
+  border-radius: 999px;
+  background: var(--glass-neutral);
+}
+.glass-segment { position: relative; cursor: pointer; --glass-button-fill: transparent; }
+.glass-segment > span {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  min-width: 52px;
+  min-height: 44px;
+  padding-inline: 11px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.glass-segment > span::before { box-shadow: none; }
+.glass-segment > input:checked + span {
+  --glass-button-fill: var(--glass-soft);
+  color: var(--accent);
+}
+.glass-segment > input:checked + span::before { box-shadow: inset 0 0 0 1px var(--glass-rim); }
+
+.glass-segment > input,
+.settings-section .glass-switch > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.glass-segment > input:focus-visible + span,
+.glass-switch > input:focus-visible + .glass-switch-track {
+  outline: 3px solid #7489ed;
+  outline-offset: 2px;
+}
+
+.settings-section .glass-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.glass-switch-track {
+  position: relative;
+  flex: 0 0 46px;
+  height: 27px;
+  border-radius: 999px;
+  background: var(--glass-rail);
+  box-shadow: inset 0 0 0 1px var(--glass-rim);
+  transition: background-color var(--glass-up) var(--glass-curve);
+  --switch-offset: 0px;
+  --switch-scale: scale(1);
+}
+.glass-switch > span { pointer-events: none; }
+.glass-switch > input:checked + .glass-switch-track {
+  background: var(--glass-rail-on);
+  --switch-offset: 19px;
+}
+.glass-switch-track::before {
+  content: "";
+  position: absolute;
+  inset: 3px auto auto 3px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background-color: var(--glass-thumb);
+  box-shadow: inset 0 0 0 1px var(--glass-rim), 0 1px 3px rgba(16, 31, 64, .24);
+  transform: translateX(var(--switch-offset)) var(--switch-scale);
+  transition: transform var(--glass-up) var(--glass-curve), background-color var(--glass-up) var(--glass-curve);
+}
+.glass-switch[data-pressed] .glass-switch-track::before {
+  --switch-scale: var(--glass-switch-scale);
+  background-color: var(--glass-thumb-clear);
+  background-image: linear-gradient(155deg, var(--glass-glint), transparent 60%);
+  box-shadow: var(--glass-pressed-rim);
+  backdrop-filter: var(--glass-press-filter);
+  transition-duration: var(--glass-down);
+}
+.glass-switch:has(input:disabled) { opacity: .5; cursor: default; }
+
+.temperature-control {
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr);
+  align-items: end;
+  gap: 16px;
+}
+.glass-slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-bottom: 1px;
+  --thumb-size: 32px;
+  --track-height: 6px;
+  --thumb-scale: var(--glass-slider-rest);
+  --thumb-color: var(--glass-thumb);
+  --thumb-glint: transparent;
+  --thumb-filter: none;
+  --thumb-rim: inset 0 0 0 1px var(--glass-rim), 0 2px 6px rgba(16, 31, 64, .18);
+  --thumb-duration: var(--glass-up);
+}
+.glass-slider[data-pressed] {
+  --thumb-scale: var(--glass-slider-down);
+  --thumb-color: var(--glass-thumb-clear);
+  --thumb-glint: var(--glass-glint);
+  --thumb-filter: var(--glass-press-filter);
+  --thumb-rim: var(--glass-pressed-rim);
+  --thumb-duration: var(--glass-down);
+}
+.glass-slider::before {
+  content: "";
+  position: absolute;
+  inset-inline: calc(var(--thumb-size) / 2);
+  height: var(--track-height);
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--glass-rail-on) var(--slider-progress, 5%), var(--glass-rail) var(--slider-progress, 5%));
+  pointer-events: none;
+}
+.settings-section .glass-slider > .glass-range {
+  appearance: none;
+  position: relative;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: grab;
+  touch-action: pan-y;
+}
+.settings-section .glass-range:disabled { cursor: default; }
+.settings-section .glass-slider[data-pressed] > .glass-range { cursor: grabbing; }
+.glass-slider:has(.glass-range:disabled) { opacity: .5; }
+.glass-range::-webkit-slider-runnable-track { height: var(--track-height); background: transparent; }
+.glass-range::-moz-range-track { height: var(--track-height); background: transparent; }
+.glass-range::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  margin-top: calc((var(--track-height) - var(--thumb-size)) / 2);
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(155deg, var(--thumb-glint), transparent 60%), var(--thumb-color);
+  box-shadow: var(--thumb-rim);
+  backdrop-filter: var(--thumb-filter);
+  transform: var(--thumb-scale);
+  transition: transform var(--thumb-duration) var(--glass-curve), background-color var(--thumb-duration) var(--glass-curve);
+}
+.glass-range::-moz-range-thumb {
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(155deg, var(--thumb-glint), transparent 60%), var(--thumb-color);
+  box-shadow: var(--thumb-rim);
+  backdrop-filter: var(--thumb-filter);
+  transform: var(--thumb-scale);
+  transition: transform var(--thumb-duration) var(--glass-curve), background-color var(--thumb-duration) var(--glass-curve);
+}
+
+:root[data-glass="off"] {
+  --glass-button-scale: scale(1);
+  --glass-switch-scale: scale(1);
+  --glass-slider-down: var(--glass-slider-rest);
+  --glass-press-filter: none;
+  --glass-thumb-clear: var(--glass-thumb);
+  --glass-glint: transparent;
+  --glass-pressed-rim: inset 0 0 0 2px var(--glass-rail-on);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --glass-down: 0ms;
+    --glass-up: 0ms;
+    --glass-button-scale: scale(1);
+    --glass-switch-scale: scale(1);
+    --glass-slider-down: var(--glass-slider-rest);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
+  :root, :root[data-mode="dark"] {
+    --glass-press-filter: none;
+    --glass-thumb-clear: var(--glass-thumb);
+    --glass-glint: transparent;
+    --glass-pressed-rim: inset 0 0 0 2px var(--glass-rail-on);
+  }
+}
+@media (forced-colors: active) {
+  :root, :root[data-mode="dark"] {
+    --glass-neutral: ButtonFace;
+    --glass-soft: Highlight;
+    --glass-primary: Highlight;
+    --glass-primary-hover: Highlight;
+    --glass-neutral-hover: ButtonFace;
+    --glass-rail: Canvas;
+    --glass-rail-on: Highlight;
+    --glass-thumb: ButtonText;
+    --glass-rim: ButtonText;
+  }
+  .glass-segments, .glass-slider, .glass-switch-track { forced-color-adjust: none; }
+  .glass-segment > input:checked + span { color: HighlightText; }
+  .glass-segment > span { color: ButtonText; }
+  .glass-segment > input:focus-visible + span,
+  .glass-switch > input:focus-visible + .glass-switch-track,
+  .glass-range:focus-visible { outline-color: Highlight; }
+}

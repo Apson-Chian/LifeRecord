@@ -6,7 +6,8 @@
   <meta name="theme-color" content="#f6f7f9">
   <meta name="description" content="LifeRecord 与 Android、iOS 双向同步的饮食、营养与身体记录页面。">
   <title>LifeRecord · 今日记录</title>
-  <link rel="stylesheet" href="styles.css?v=20261107-beta12">
+  <link rel="stylesheet" href="styles.css?v=20261107-glass">
+  <link rel="stylesheet" href="glass-controls.css?v=20261107-glass">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
@@ -71,7 +72,15 @@
     </section>
 
     <section class="trends-section" id="bodyTrends">
-      <div class="section-heading"><div><h2>身体趋势</h2><p class="section-subtitle">点击图中数据点，查看测量时间与原始数值</p></div><select id="trendRange" aria-label="趋势范围"><option value="30">最近 30 天</option><option value="7">最近 7 天</option><option value="all">全部记录</option></select></div>
+      <div class="section-heading">
+        <div><h2>身体趋势</h2><p class="section-subtitle">点击图中数据点，查看测量时间与原始数值</p></div>
+        <fieldset id="trendRange" class="glass-segments">
+          <legend class="sr-only">趋势范围</legend>
+          <label class="glass-segment"><input type="radio" name="trendRange" value="30" checked><span>30 天</span></label>
+          <label class="glass-segment"><input type="radio" name="trendRange" value="7"><span>7 天</span></label>
+          <label class="glass-segment"><input type="radio" name="trendRange" value="all"><span>全部</span></label>
+        </fieldset>
+      </div>
       <div class="trend-grid"><article class="card trend-card" id="webWeightChart"></article><article class="card trend-card" id="webFatChart"></article></div>
     </section>
     <section class="home-grid">
@@ -117,7 +126,7 @@
   <dialog id="settingsDialog" class="modal settings-modal" aria-labelledby="settingsTitle">
     <div class="modal-sheet">
       <div class="modal-top"><h2 id="settingsTitle">设置与账号</h2><button type="button" class="icon-button" data-close="settingsDialog" aria-label="关闭设置">×</button></div>
-      <section class="settings-section"><h3>AI 服务</h3><p id="aiCustomIntro" class="upload-hint">兼容 Chat Completions。配置保存在本浏览器，密钥仅在当前页面内存中使用。</p>
+      <section class="settings-section"><h3>AI 服务</h3><p id="aiCustomIntro" class="upload-hint">兼容 Chat Completions。配置与 API Key 保存在本浏览器，刷新后可继续使用；退出账号时清除 Key。可将不同 Key 另存为多个命名配置。</p>
         <p id="aiDefaultNotice" hidden>使用默认 AI 服务无需填写 API Key。请求和相关健康记录由云端处理；使用你的独立账号额度，也可切换到自己的接口。</p>
         <div class="form-grid"><label>服务商<select id="aiProvider"><option value="default">默认 AI 服务</option><option value="deepseek">DeepSeek</option><option value="glm">智谱 GLM</option><option value="custom">自定义兼容接口</option></select></label><label>模型<input id="aiModel" placeholder="填写模型名称" maxlength="200"></label></div>
         <div class="form-grid"><label>已保存的接口<select id="aiSavedProfile"><option value="">选择配置</option></select></label><label>配置名称<input id="aiProfileName" maxlength="60" placeholder="例如：我的视觉接口"></label></div>
@@ -125,12 +134,22 @@
         <label id="aiEndpointLabel">完整 API 地址<input id="aiEndpoint" type="url" placeholder="https://api.example.com/v1/chat/completions" autocomplete="off"></label>
         <div class="form-grid"><label>认证方式<select id="aiAuthMode"><option value="bearer">Bearer</option><option value="api-key">api-key</option><option value="custom">自定义认证头</option></select></label><label id="aiHeaderLabel">认证头名称<input id="aiAuthHeader" placeholder="例如 X-API-Key" autocomplete="off"></label></div>
         <label>API Key<input id="aiKey" type="password" autocomplete="off" placeholder="测试者填写自己的密钥"></label>
-        <div class="form-grid"><label>最大输出 Token<input id="aiMaxTokens" type="number" min="256" max="65536" step="1" value="6000"></label><label>Token 参数<select id="aiTokenField"><option value="max_tokens">max_tokens</option><option value="max_completion_tokens">max_completion_tokens</option></select></label><label>Temperature<input id="aiTemperature" type="number" min="0" max="2" step="0.1" value="0.1"></label></div>
-        <label class="checkbox-label"><input id="aiSendTemperature" type="checkbox" checked>发送 Temperature</label><label class="checkbox-label"><input id="aiJSONMode" type="checkbox">要求 JSON 格式（服务商须支持）</label>
+        <button type="button" id="aiClearKeys" class="text-button">清除本浏览器全部 API Key</button>
+        <div class="form-grid"><label>最大输出 Token<input id="aiMaxTokens" type="number" min="256" max="65536" step="1" value="6000"></label><label>Token 参数<select id="aiTokenField"><option value="max_tokens">max_tokens</option><option value="max_completion_tokens">max_completion_tokens</option></select></label></div>
+        <div class="temperature-control">
+          <label>Temperature<input id="aiTemperature" type="number" min="0" max="2" step="0.1" value="0.1"></label>
+          <div class="glass-slider">
+            <input id="aiTemperatureSlider" class="glass-range" type="range" min="0" max="2" step="any" value="0.1" aria-label="Temperature 滑杆">
+          </div>
+        </div>
+        <label class="glass-switch"><input id="aiSendTemperature" type="checkbox" role="switch" checked><span class="glass-switch-track" aria-hidden="true"></span><span>发送 Temperature</span></label>
+        <label class="glass-switch"><input id="aiJSONMode" type="checkbox" role="switch"><span class="glass-switch-track" aria-hidden="true"></span><span>要求 JSON 格式（服务商须支持）</span></label>
         <label>额外请求参数 JSON<textarea id="aiExtraParams" rows="3" maxlength="16000" placeholder='例如 {"top_p":0.9}'>{}</textarea></label><p id="aiCustomHint" class="upload-hint">不要在额外参数中填写密钥。自定义地址仅支持公网 HTTPS 443 端口，不跟随重定向。AI 将使用当前账号的同步记录生成修改预览。</p>
         <button id="aiCheckConfig" class="secondary-button" type="button">检查地址与参数</button><p id="aiConfigStatus" role="status"></p>
       </section>
-      <section class="settings-section"><h3>外观</h3><label>主题<select id="webTheme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></section>
+      <section class="settings-section"><h3>外观</h3><label>主题<select id="webTheme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+        <label class="glass-switch"><input id="webGlassEffects" type="checkbox" role="switch" checked><span class="glass-switch-track" aria-hidden="true"></span><span>液态玻璃效果</span></label>
+      </section>
       <section class="settings-section"><h3>数据与账号</h3><p class="upload-hint">用户可自行注册账号，无需分配同步密钥。已有密钥用户可以继续连接并设置账号密码。</p><div class="settings-actions"><button class="secondary-button" id="exportButton" type="button">导出全部记录</button><button class="secondary-button" id="accountPasswordButton" type="button">设置账号 / 修改密码</button><button class="secondary-button" id="changeKeyButton" type="button">退出 / 更换账号</button><a href="privacy.html">隐私与测试说明</a></div></section>
       <section class="settings-section danger-section"><h3>注销云端账号</h3><p class="upload-hint">撤销同步凭证并删除云端记录和照片。各设备本机数据及运维备份需要另行处理，请先导出记录。</p><button id="deleteAccountButton" class="delete-record" type="button">注销云端账号</button></section>
       <button class="primary-button submit-button" type="button" data-close="settingsDialog">完成</button>
@@ -240,8 +259,9 @@
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="app.js?v=20261107-beta12"></script>
-  <script src="admin.js?v=20261107-beta12"></script>
-  <script src="settings.js?v=20261107-beta12"></script>
+  <script src="admin.js?v=20261107-glass"></script>
+  <script src="settings.js?v=20261112-api-keys"></script>
+  <script src="glass-controls.js?v=20261107-glass"></script>
   <script src="workouts.js?v=20261107-beta12"></script>
 </body>
 </html>

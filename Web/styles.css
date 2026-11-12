@@ -511,7 +511,6 @@ h2 { font-size: 16px; }
 .chart-inspector strong { display: block; font-size: 13px; margin-bottom: 5px; }
 .chart-inspector span, .chart-inspector small { display: block; font-size: 12px; color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
 .chart-note { font-size: 12px; color: var(--muted); margin: 12px 0 0; line-height: 1.7; }
-#trendRange { padding: 8px 12px; border: 1px solid var(--line); background: white; border-radius: 6px; font-size: 13px; }
 .admin-section { order: 6; margin-top: 20px; }
 .workspace-grid { order: 7; margin-top: 20px; align-items: start; grid-template-columns: minmax(300px,.85fr) minmax(0,1.15fr); }
 .workspace-grid > * { min-width: 0; }
@@ -576,8 +575,6 @@ button:disabled { cursor: default; opacity: .6; }
 .settings-section .actions button:disabled { opacity: .45; cursor: default; }
 .settings-actions { display: grid; gap: 10px; }
 .settings-actions button, .danger-section button { min-height: 44px; text-align: left; }
-.settings-section .checkbox-label { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-.settings-section .checkbox-label input { width: 20px; height: 20px; }
 .danger-section h3 { color: #bb344b; }
 .pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .pagination button { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; background: transparent; color: var(--text); }
@@ -618,7 +615,6 @@ button:disabled { opacity: .5; cursor: default; }
 :root[data-mode="dark"] kbd {background:#252a36;color:#b2bdd1;border-color:#46516b;}
 :root[data-mode="dark"] .kind-badge {background:#283355;color:#c0ccef;}
 
-:root[data-mode="dark"] #trendRange {background:#252a36;color:var(--text);border-color:var(--line);}
 :root[data-mode="dark"] .primary-button {background:#465ed1;color:white;}
 :root[data-mode="dark"] .record-day.selected {border-color:var(--accent);}
 :root[data-mode="dark"] .danger-section :is(h3,button) { color: #ff9caf; }

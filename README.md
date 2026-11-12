@@ -4,7 +4,27 @@
 
 LifeRecord 是一款本地优先的饮食与健身记录应用，提供 iOS、Android 原生客户端和网页端。从一餐、一组训练到长期体重趋势，把日常记录整理成看得懂、能回顾的数据，适合增肌、减脂或维持体重时持续使用。
 
-[安卓下载](https://github.com/Apson-Chian/LifeRecord/releases) · [网页体验](https://apsonchian.ltd/liferecord-default/) · [iOS 工程](iOS/)
+[下载最新 APK · beta.13](https://github.com/Apson-Chian/LifeRecord/releases/download/android-v1.4.0-beta.13/LifeRecord-Android-1.4.0-beta.13.apk) · [网页体验](https://apsonchian.ltd/liferecord-default/) · [本版更新](Docs/android-release-1.4-beta13.md)
+
+## 下载与上手
+
+| 平台 | 下载 / 使用 |
+| --- | --- |
+| Android 8.0+ | **[直接下载最新 APK · 1.4.0-beta.13](https://github.com/Apson-Chian/LifeRecord/releases/download/android-v1.4.0-beta.13/LifeRecord-Android-1.4.0-beta.13.apk)** · [发布说明与校验文件](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.13) · [历史版本](https://github.com/Apson-Chian/LifeRecord/releases) |
+| iOS 17+ | 使用 Xcode 构建 [iOS 工程](iOS/README.md)，目前尚未提供 TestFlight 下载 |
+| Web | [打开网页版](https://apsonchian.ltd/liferecord-default/) |
+
+1. 安装后从空白记录开始，填写自己的目标；手机端支持离线手动记录。
+2. 需要跨设备同步或默认 AI 服务时，在设置中注册或登录自己的账号，旧同步密钥继续兼容。
+3. 也可选择自己的 AI 接口。网页支持将多个 API Key 分别保存为命名配置，刷新后恢复；详细步骤见[接口设置](Docs/api-settings.md)。
+
+**覆盖升级**：beta.13 沿用 beta.4 起的固定签名，beta.4–12 可直接覆盖安装，保留本机数据。beta.3 及更早版本需先同步、导出并另存本机照片与对话，再卸载重装。[旧版本迁移说明](Docs/android-release-1.4-beta4.md#签名与发布状态)
+
+## 本次更新 · 2026-11-12
+
+- **网页多 Key 保存**：当前接口的 Key 在本浏览器持久化；多个命名配置可分别保存不同 Key，同一地址也能切换使用。支持更新、删除和一键清除，退出账号时清除 Key。
+- **网页交互**：合入玻璃按钮、开关、Temperature 滑杆与趋势范围切换，并提供关闭效果和减少动态效果的适配。
+- **Android beta.13**：基于当前源码构建并以固定证书签发，延续 beta.12 的教练指令和身体测量明细；本次多 Key 持久化改动位于网页端。[完整发布说明](Docs/android-release-1.4-beta13.md)
 
 ## 项目亮点
 
@@ -51,20 +71,6 @@ iOS 真机截图。[更多 iOS 界面](iOS/README.md#界面预览)
 
 Android 预览使用示例或合成记录。[beta.11 液态玻璃与两版系统截图](Docs/android-liquid-glass.md)。
 
-## 下载与体验
-
-| 平台 | 使用方式 |
-| --- | --- |
-| Android 8.0+ | [下载 beta.12](https://github.com/Apson-Chian/LifeRecord/releases/tag/android-v1.4.0-beta.12) · [全部版本](https://github.com/Apson-Chian/LifeRecord/releases) |
-| iOS 17+ | 使用 Xcode 构建 [iOS 工程](iOS/README.md)，目前尚未提供 TestFlight 下载 |
-| Web | [网页体验](https://apsonchian.ltd/liferecord-default/) |
-
-新安装默认使用服务器提供的 AI 服务，连接自己的独立同步账号即可使用，无需填写上游 API Key；也可以切换到自定义模型接口。已有安装保留用户原先选择的接口。
-
-首次使用可以直接从空白记录开始，填写自己的目标；照片识别和智能教练需要联网并配置服务。当前 iOS 源码、Android 和网页支持用户自行注册账号密码，无需管理员分配；旧同步密钥继续兼容。Android 账号客户端已包含在 beta.6，iOS 需安装新源码构建；账号后端已于 2026-10-20 部署并通过公网验收；旧密钥继续兼容。[账号与同步说明](Docs/public-beta.md)
-
-**版本升级**：beta.12 可直接覆盖 beta.4–11，保留本机数据；beta.3 及更早版本需先核对同步记录、另存本机内容，再卸载重装，本机对话和部分照片不参与同步。[本版更新说明](Docs/android-release-1.4-beta12.md) · [旧版本迁移](Docs/android-release-1.4-beta4.md#签名与发布状态)
-
 ## 技术与目录
 
 | 目录 | 技术与职责 |
@@ -75,7 +81,7 @@ Android 预览使用示例或合成记录。[beta.11 液态玻璃与两版系统
 | [Backend/](Backend/) | Python、SQLite；账号、记录同步与私有照片服务 |
 | [Tests/](Tests/) / [Docs/](Docs/) | 跨端回归检查、功能说明与统计口径 |
 
-项目统一在 `main` 维护，已包含默认 AI 服务。两个原生工程可独立构建。
+项目统一在 `main` 维护，已包含默认 AI 服务。两个原生工程可独立构建；APK 作为 GitHub Release 附件发布。
 
 ## 本地运行
 
@@ -92,16 +98,8 @@ iOS：使用 Xcode 打开 `iOS/LifeRecord.xcodeproj`，选择模拟器运行；�
 
 ## 数据与隐私
 
-手机端记录保存在本机，接口与同步密钥使用系统安全存储。开启同步后，参与同步的记录与餐食照片会上传到所配置的服务器；使用智能功能时，相关文字、记录和所选图片会发送到配置的 AI 服务。聊天附件、常用餐食照片等本机内容并不全部参与同步或导出，卸载前应另行保留。
+手机端记录保存在本机，接口与同步密钥使用系统安全存储。网页 API Key 保存在当前浏览器的 localStorage，不随健康记录导出或同步，可手动清除，退出账号时清除。开启同步后，参与同步的记录与餐食照片会上传到所配置的服务器；使用智能功能时，相关文字、记录和所选图片会发送到配置的 AI 服务。聊天附件、常用餐食照片等本机内容并不全部参与同步或导出，卸载前应另行保留。
 
 项目用于日常记录与复盘，营养估算和教练建议仅供参考。
 
-### 用户管理
-
-在生产域名的 `/liferecord-api/user-admin/` 提供独立的用户后台。配置 `LIFERECORD_ADMIN_PASSWORD_FILE` 后启用，文件需对同步服务可读，内容应为独立随机管理口令（例如 32 字节随机生成的口令）。后台登录会话一小时到期，走 HTTPS 和同源认证。
-
-管理页支持按账号名、标签或 ID 搜索，按状态筛选，停用、恢复和撤销账号会话。停用会保留用户记录、阻止登录与同步，并撤销已签发的登录会话。恢复账号后可重新登录，原有独立同步密钥重新可用。已注销账号及通过命令行撤销的账号不支持在网页恢复。原有私人档案受保护。管理页只显示账号元数据，不显示记录、图片和凭据。
-
-部署时将 `Backend/user_admin.py` 和 `Backend/user_admin/` 随同步服务安装，重启服务以创建新增表并加载管理口令。测试使用临时数据库，运行 `python3 Tests/user-admin.py`。
-
-用户列表的「活动」显示现有记录数量、最近记录更新、图片上传及默认 AI 用量。登录、注册、同步、图片上传、AI 对话和 AI 规划从功能上线起记录，活动页最多显示近 30 天内最新 100 条。活动只保存账号、时间、操作分类、客户端标签和 HTTP 状态。无客户端标签时显示「未知」。账号注销时清除活动历史。
+用户后台的权限、部署和活动记录说明见[用户管理后台](Docs/user-admin.md)。

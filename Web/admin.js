@@ -47,7 +47,7 @@ function renderAdmin() {
 }
 
 function renderBodyTrends() {
-  const range = $('#trendRange').value;
+  const range = $('#trendRange input:checked').value;
   const start = new Date(); start.setHours(0,0,0,0); start.setDate(start.getDate() - Number(range) + 1);
   const all = [...state.bodyMetrics].filter(x => range === 'all' || x.date >= start.getTime()/1000).sort((a,b)=>a.date-b.date);
   for (const [key, title, unit, color, container] of [['weight','体重','kg','#4563db','#webWeightChart'],['bodyFat','体脂率','%','#b45d99','#webFatChart']]) {
